@@ -1,91 +1,156 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Axzen - Shop Beyond Limits</title>
-<link rel="stylesheet" href="style.css">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Axzen.in - Local Sellers, Online Orders</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <header class="site-header">
+    <a class="brand" href="#" aria-label="Axzen home">
+      <span class="brand-mark">A</span>
+      <span>Axzen.in</span>
+    </a>
 
-<header>
-  <div class="logo">AXZEN</div>
+    <form class="search-bar" id="searchForm">
+      <input id="searchInput" type="search" placeholder="Search stores, products, categories" autocomplete="off">
+      <button type="submit">Search</button>
+    </form>
 
-  <div class="search">
-    <input type="text" placeholder="Search products, brands and stores">
-    <button>Search</button>
-  </div>
+    <nav class="main-nav" aria-label="Primary navigation">
+      <a href="#stores">Stores</a>
+      <a href="#products">Products</a>
+      <a href="#seller">Sell on Axzen</a>
+      <button class="ghost-button" type="button">Login</button>
+    </nav>
+  </header>
 
-  <nav>
-    <a href="#">Home</a>
-    <a href="#">Categories</a>
-    <a href="#">Stores</a>
-    <a href="#">Become Seller</a>
-    <button class="login-btn">Login</button>
-  </nav>
-</header>
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Marketplace for home-grown brands</p>
+        <h1>Bring local sellers online with delivery and commission split built in.</h1>
+        <p class="hero-text">Axzen connects customers with trusted sellers, boutique stores, food makers, home businesses, and startup products from one clean buying experience.</p>
+        <div class="hero-actions">
+          <a class="primary-button" href="#stores">Explore stores</a>
+          <a class="secondary-button" href="#seller">Become a seller</a>
+        </div>
+        <div class="hero-stats" aria-label="Marketplace highlights">
+          <span><strong>2 apps</strong>Buyer and seller</span>
+          <span><strong>2 web portals</strong>Marketplace and store pages</span>
+          <span><strong>Split payouts</strong>Commission ready</span>
+        </div>
+      </div>
 
-<section class="hero">
-  <div class="hero-content">
-    <h1>Shop Beyond Limits</h1>
-    <p>Discover millions of products from trusted sellers across India.</p>
-    <button>Start Shopping</button>
-  </div>
-</section>
+      <div class="hero-panel" aria-label="Axzen marketplace preview">
+        <div class="phone-preview">
+          <div class="phone-top">
+            <span></span>
+            <strong>Axzen</strong>
+            <small>Live</small>
+          </div>
+          <img src="https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=900&q=80" alt="Online shopping products arranged for delivery">
+          <div class="phone-card">
+            <span>Today deals</span>
+            <strong>427 orders ready for dispatch</strong>
+          </div>
+        </div>
+      </div>
+    </section>
 
-<section class="categories">
-  <h2>Top Categories</h2>
+    <section class="section intro-band">
+      <div>
+        <p class="eyebrow">Platform plan</p>
+        <h2>One ecosystem, separate experiences for buyers and sellers.</h2>
+      </div>
+      <div class="plan-grid">
+        <article>
+          <span>01</span>
+          <h3>Main marketplace</h3>
+          <p>Customers discover seller pages, search products, compare offers, and place orders.</p>
+        </article>
+        <article>
+          <span>02</span>
+          <h3>Seller website</h3>
+          <p>Each seller gets a clean page with products, ratings, delivery status, and offers.</p>
+        </article>
+        <article>
+          <span>03</span>
+          <h3>Mobile apps</h3>
+          <p>Buyer app for shopping and seller app for inventory, orders, payouts, and support.</p>
+        </article>
+        <article>
+          <span>04</span>
+          <h3>Operations layer</h3>
+          <p>Delivery integration, commission rules, split transactions, invoices, and analytics.</p>
+        </article>
+      </div>
+    </section>
 
-  <div class="grid">
-    <div class="card">📱 Mobiles</div>
-    <div class="card">💻 Laptops</div>
-    <div class="card">👕 Fashion</div>
-    <div class="card">🏠 Home</div>
-    <div class="card">🍎 Grocery</div>
-    <div class="card">🎧 Electronics</div>
-  </div>
-</section>
+    <section class="section" id="stores">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Seller pages</p>
+          <h2>Featured stores</h2>
+        </div>
+        <div class="carousel-controls">
+          <button type="button" class="icon-button" data-scroll="left" aria-label="Scroll stores left">&lt;</button>
+          <button type="button" class="icon-button" data-scroll="right" aria-label="Scroll stores right">&gt;</button>
+        </div>
+      </div>
+      <div class="store-rail" id="storeRail" aria-live="polite"></div>
+    </section>
 
-<section class="products">
-  <h2>Trending Products</h2>
+    <section class="section" id="products">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Amazon-style discovery</p>
+          <h2 id="productTitle">Products from Axzen sellers</h2>
+        </div>
+        <button class="filter-button active" type="button" id="clearSearch">All products</button>
+      </div>
+      <div class="product-grid" id="productGrid" aria-live="polite"></div>
+      <p class="empty-state" id="emptyState">No matching sellers or products found.</p>
+    </section>
 
-  <div class="grid">
-    <div class="product">
-      <h3>iPhone 16</h3>
-      <p>₹79,999</p>
-    </div>
+    <section class="section seller-section" id="seller">
+      <div class="seller-copy">
+        <p class="eyebrow">For sellers</p>
+        <h2>Start from home. Sell across your city.</h2>
+        <p>Upload products, receive orders, use Axzen delivery partners, and get automatic payouts after commission split.</p>
+      </div>
+      <form class="seller-form">
+        <label>
+          Business name
+          <input type="text" placeholder="Example: Lakshmi Homemade Foods">
+        </label>
+        <label>
+          Product category
+          <select>
+            <option>Food and grocery</option>
+            <option>Fashion and accessories</option>
+            <option>Electronics</option>
+            <option>Home and decor</option>
+          </select>
+        </label>
+        <label>
+          Phone number
+          <input type="tel" placeholder="+91 98765 43210">
+        </label>
+        <button type="button">Request seller onboarding</button>
+      </form>
+    </section>
+  </main>
 
-    <div class="product">
-      <h3>Samsung Galaxy</h3>
-      <p>₹59,999</p>
-    </div>
+  <footer class="site-footer">
+    <strong>Axzen.in</strong>
+    <span>Marketplace, seller pages, delivery integration, and split payouts for Indian startups.</span>
+  </footer>
 
-    <div class="product">
-      <h3>MacBook Air</h3>
-      <p>₹99,999</p>
-    </div>
-
-    <div class="product">
-      <h3>Boat Headphones</h3>
-      <p>₹1,999</p>
-    </div>
-  </div>
-</section>
-
-<section class="seller">
-  <h2>Become an Axzen Seller</h2>
-  <p>Reach thousands of customers and grow your business.</p>
-  <button>Register Now</button>
-</section>
-
-<footer>
-  <h3>AXZEN</h3>
-  <p>Marketplace for everyone.</p>
-  <p>© 2026 Axzen. All Rights Reserved.</p>
-</footer>
-
-<script src="script.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
