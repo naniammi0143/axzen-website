@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Axzen - Company Control</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="portal-page admin-page">
+  <header class="site-header">
+    <a class="brand" href="/admin" aria-label="Admin Axzen home">
+      <img class="brand-logo" src="assets/logo.png" alt="" onerror="this.hidden=true">
+      <span class="brand-mark">A</span>
+      <span>Admin Axzen</span>
+    </a>
+    <nav class="main-nav">
+      <a href="/">Customer site</a>
+      <a href="/seller">Seller site</a>
+      <a class="ghost-button" href="#login">Admin Login</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="portal-hero admin-portal">
+      <div>
+        <p class="eyebrow">Admin website - admin.axzen.in</p>
+        <h1>Company control center for Axzen marketplace operations.</h1>
+        <p>Approve sellers, control product moderation, manage delivery partners, commission rules, customer support, payout settlements, and platform analytics.</p>
+        <a class="primary-button" href="#login">Open admin control</a>
+      </div>
+      <div class="portal-preview">
+        <article><span>Pending sellers</span><strong>12</strong></article>
+        <article><span>Orders today</span><strong>326</strong></article>
+        <article><span>Payout queue</span><strong>Rs. 2.8L</strong></article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="workflow-grid">
+        <article><span>1</span><h3>Seller control</h3><p>Approve KYC, verify bank details, suspend stores, and set seller status.</p></article>
+        <article><span>2</span><h3>Product control</h3><p>Approve catalogue, reject unsafe listings, manage categories, and feature stores.</p></article>
+        <article><span>3</span><h3>Orders and delivery</h3><p>Monitor order lifecycle, assign delivery partners, and resolve disputes.</p></article>
+        <article><span>4</span><h3>Finance</h3><p>Manage commission rules, split settlement, refunds, invoices, and payout reports.</p></article>
+      </div>
+    </section>
+
+    <section class="section login-section" id="login">
+      <div class="section-heading">
+        <div><p class="eyebrow">Company access</p><h2>Login to admin portal.</h2></div>
+      </div>
+      <article class="login-card compact-login">
+        <form class="role-login-form portal-login-form" data-role="admin">
+          <label>Email<input name="email" type="email" value="admin@axzen.in" required></label>
+          <label>Password<input name="password" type="password" value="Admin@123" required></label>
+          <button type="submit">Login as admin</button>
+          <p class="login-message" aria-live="polite"></p>
+        </form>
+      </article>
+    </section>
+
+    <section class="section dashboard-section" id="dashboard" hidden>
+      <div class="dashboard-shell">
+        <aside class="dashboard-sidebar">
+          <p class="eyebrow" id="dashboardRole">Admin</p>
+          <h2 id="dashboardTitle">Welcome</h2>
+          <p id="dashboardSummary"></p>
+          <button class="secondary-button logout-button" type="button" id="logoutButton">Logout</button>
+        </aside>
+        <div class="dashboard-main">
+          <div class="dashboard-metrics" id="dashboardMetrics"></div>
+          <div class="dashboard-panels" id="dashboardPanels"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="portal.js"></script>
+</body>
+</html>

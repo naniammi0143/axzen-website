@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Seller Axzen - Seller Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="portal-page">
+  <header class="site-header">
+    <a class="brand" href="/seller" aria-label="Seller Axzen home">
+      <img class="brand-logo" src="assets/logo.png" alt="" onerror="this.hidden=true">
+      <span class="brand-mark">S</span>
+      <span>Seller Axzen</span>
+    </a>
+    <nav class="main-nav">
+      <a href="/">Customer site</a>
+      <a href="/admin">Admin</a>
+      <a class="ghost-button" href="#login">Seller Login</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="portal-hero seller-portal">
+      <div>
+        <p class="eyebrow">Seller website - seller.axzen.in</p>
+        <h1>Manage products, inventory, orders, delivery, and payouts.</h1>
+        <p>Seller Axzen gives every seller tools to publish catalogue, control stock, accept orders, hand over delivery, run offers, and track commission settlements.</p>
+        <a class="primary-button" href="#login">Open seller workspace</a>
+      </div>
+      <div class="portal-preview">
+        <article><span>Live products</span><strong>24</strong></article>
+        <article><span>Orders today</span><strong>18</strong></article>
+        <article><span>Next payout</span><strong>Rs. 18,420</strong></article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="workflow-grid">
+        <article><span>1</span><h3>Add products</h3><p>Upload images, price, tax, stock, variants, and product status.</p></article>
+        <article><span>2</span><h3>Manage orders</h3><p>Accept orders, print invoices, update packing status, and request pickup.</p></article>
+        <article><span>3</span><h3>Delivery handoff</h3><p>Mark ready for pickup, track delivery partner, and handle customer updates.</p></article>
+        <article><span>4</span><h3>Payouts</h3><p>View commission split, settlement history, refunds, and reports.</p></article>
+      </div>
+    </section>
+
+    <section class="section login-section" id="login">
+      <div class="section-heading">
+        <div><p class="eyebrow">Seller access</p><h2>Login to seller portal.</h2></div>
+      </div>
+      <article class="login-card compact-login">
+        <form class="role-login-form portal-login-form" data-role="seller">
+          <label>Email<input name="email" type="email" value="seller@axzen.in" required></label>
+          <label>Password<input name="password" type="password" value="Seller@123" required></label>
+          <button type="submit">Login as seller</button>
+          <p class="login-message" aria-live="polite"></p>
+        </form>
+      </article>
+    </section>
+
+    <section class="section dashboard-section" id="dashboard" hidden>
+      <div class="dashboard-shell">
+        <aside class="dashboard-sidebar">
+          <p class="eyebrow" id="dashboardRole">Seller</p>
+          <h2 id="dashboardTitle">Welcome</h2>
+          <p id="dashboardSummary"></p>
+          <button class="secondary-button logout-button" type="button" id="logoutButton">Logout</button>
+        </aside>
+        <div class="dashboard-main">
+          <div class="dashboard-metrics" id="dashboardMetrics"></div>
+          <div class="dashboard-panels" id="dashboardPanels"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="portal.js"></script>
+</body>
+</html>
