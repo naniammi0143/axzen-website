@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Axzen.in - Local Sellers, Online Orders</title>
+  <title>Axzen.in - Seller Commerce Platform</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -17,14 +17,14 @@
     </a>
 
     <form class="search-bar" id="searchForm">
-      <input id="searchInput" type="search" placeholder="Search stores, products, categories" autocomplete="off">
+      <input id="searchInput" type="search" placeholder="Search sellers, cities, categories" autocomplete="off">
       <button type="submit">Search</button>
     </form>
 
     <nav class="main-nav" aria-label="Primary navigation">
-      <a href="#stores">Stores</a>
-      <a href="#products">Products</a>
-      <a href="#seller">Sell on Axzen</a>
+      <a href="#stores">Seller Pages</a>
+      <a href="#platform">Platform</a>
+      <a href="#seller">Become Seller</a>
       <button class="ghost-button" type="button">Login</button>
     </nav>
   </header>
@@ -32,61 +32,83 @@
   <main>
     <section class="hero">
       <div class="hero-copy">
-        <p class="eyebrow">Marketplace for home-grown brands</p>
-        <h1>Bring local sellers online with delivery and commission split built in.</h1>
-        <p class="hero-text">Axzen connects customers with trusted sellers, boutique stores, food makers, home businesses, and startup products from one clean buying experience.</p>
+        <p class="eyebrow">Commerce infrastructure for local startups</p>
+        <h1>Launch seller pages, delivery workflows, and split payouts from one Axzen platform.</h1>
+        <p class="hero-text">Axzen helps home businesses and early-stage brands come online with a marketplace website, seller tools, customer ordering, delivery integration, and commission-based payouts.</p>
         <div class="hero-actions">
-          <a class="primary-button" href="#stores">Explore stores</a>
-          <a class="secondary-button" href="#seller">Become a seller</a>
-        </div>
-        <div class="hero-stats" aria-label="Marketplace highlights">
-          <span><strong>2 apps</strong>Buyer and seller</span>
-          <span><strong>2 web portals</strong>Marketplace and store pages</span>
-          <span><strong>Split payouts</strong>Commission ready</span>
+          <a class="primary-button" href="#seller">Start seller onboarding</a>
+          <a class="secondary-button" href="#stores">View seller pages</a>
         </div>
       </div>
 
-      <div class="hero-panel" aria-label="Axzen marketplace preview">
-        <div class="phone-preview">
-          <div class="phone-top">
+      <div class="dashboard-preview" aria-label="Axzen dashboard preview">
+        <div class="preview-top">
+          <span>Operations today</span>
+          <strong>Axzen Control</strong>
+        </div>
+        <div class="metric-grid">
+          <article>
+            <span>Seller pages</span>
+            <strong>48</strong>
+          </article>
+          <article>
+            <span>Delivery partners</span>
+            <strong>06</strong>
+          </article>
+          <article>
+            <span>Commission rules</span>
+            <strong>Live</strong>
+          </article>
+          <article>
+            <span>Payout status</span>
+            <strong>Ready</strong>
+          </article>
+        </div>
+        <div class="timeline">
+          <div>
             <span></span>
-            <strong>Axzen</strong>
-            <small>Live</small>
+            <p>Seller catalogue review</p>
+            <strong>In progress</strong>
           </div>
-          <img src="https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=900&q=80" alt="Online shopping products arranged for delivery">
-          <div class="phone-card">
-            <span>Today deals</span>
-            <strong>427 orders ready for dispatch</strong>
+          <div>
+            <span></span>
+            <p>Delivery route allocation</p>
+            <strong>Scheduled</strong>
+          </div>
+          <div>
+            <span></span>
+            <p>Commission split settlement</p>
+            <strong>Automated</strong>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="section intro-band">
+    <section class="section intro-band" id="platform">
       <div>
-        <p class="eyebrow">Platform plan</p>
-        <h2>One ecosystem, separate experiences for buyers and sellers.</h2>
+        <p class="eyebrow">Platform model</p>
+        <h2>Separate experiences for buyers, sellers, and Axzen operations.</h2>
       </div>
       <div class="plan-grid">
         <article>
           <span>01</span>
-          <h3>Main marketplace</h3>
-          <p>Customers discover seller pages, search products, compare offers, and place orders.</p>
+          <h3>Buyer marketplace</h3>
+          <p>A clean website and mobile app where customers discover sellers, search categories, and place orders.</p>
         </article>
         <article>
           <span>02</span>
-          <h3>Seller website</h3>
-          <p>Each seller gets a clean page with products, ratings, delivery status, and offers.</p>
+          <h3>Seller storefront</h3>
+          <p>Every seller gets a branded page with profile, catalogue controls, delivery settings, and performance stats.</p>
         </article>
         <article>
           <span>03</span>
-          <h3>Mobile apps</h3>
-          <p>Buyer app for shopping and seller app for inventory, orders, payouts, and support.</p>
+          <h3>Delivery integration</h3>
+          <p>Orders can be assigned to delivery partners with pickup, tracking, and status updates.</p>
         </article>
         <article>
           <span>04</span>
-          <h3>Operations layer</h3>
-          <p>Delivery integration, commission rules, split transactions, invoices, and analytics.</p>
+          <h3>Commission split</h3>
+          <p>Axzen can calculate platform commission and seller payout rules after each successful transaction.</p>
         </article>
       </div>
     </section>
@@ -94,61 +116,83 @@
     <section class="section" id="stores">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Seller pages</p>
-          <h2>Featured stores</h2>
+          <p class="eyebrow">Seller network</p>
+          <h2 id="storeTitle">Featured seller pages</h2>
         </div>
         <div class="carousel-controls">
-          <button type="button" class="icon-button" data-scroll="left" aria-label="Scroll stores left">&lt;</button>
-          <button type="button" class="icon-button" data-scroll="right" aria-label="Scroll stores right">&gt;</button>
+          <button type="button" class="icon-button" data-scroll="left" aria-label="Scroll sellers left">&lt;</button>
+          <button type="button" class="icon-button" data-scroll="right" aria-label="Scroll sellers right">&gt;</button>
         </div>
       </div>
       <div class="store-rail" id="storeRail" aria-live="polite"></div>
+      <p class="empty-state" id="emptyState">No matching sellers found.</p>
     </section>
 
-    <section class="section" id="products">
+    <section class="section workflow-section">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Amazon-style discovery</p>
-          <h2 id="productTitle">Products from Axzen sellers</h2>
+          <p class="eyebrow">How Axzen works</p>
+          <h2>From home seller to online business.</h2>
         </div>
-        <button class="filter-button active" type="button" id="clearSearch">All products</button>
       </div>
-      <div class="product-grid" id="productGrid" aria-live="polite"></div>
-      <p class="empty-state" id="emptyState">No matching sellers or products found.</p>
+      <div class="workflow-grid">
+        <article>
+          <span>1</span>
+          <h3>Seller registration</h3>
+          <p>Collect business details, city, category, documents, bank information, and commission agreement.</p>
+        </article>
+        <article>
+          <span>2</span>
+          <h3>Store setup</h3>
+          <p>Create the seller page, verify catalogue quality, set delivery zones, and prepare the storefront.</p>
+        </article>
+        <article>
+          <span>3</span>
+          <h3>Order operations</h3>
+          <p>Route orders to sellers, assign delivery, update customers, and keep Axzen support in the loop.</p>
+        </article>
+        <article>
+          <span>4</span>
+          <h3>Payout settlement</h3>
+          <p>Apply commission rules, split transaction amounts, and release seller payouts with reports.</p>
+        </article>
+      </div>
     </section>
 
     <section class="section seller-section" id="seller">
       <div class="seller-copy">
         <p class="eyebrow">For sellers</p>
-        <h2>Start from home. Sell across your city.</h2>
-        <p>Upload products, receive orders, use Axzen delivery partners, and get automatic payouts after commission split.</p>
+        <h2>Start from home. Sell with a professional online presence.</h2>
+        <p>Axzen will help sellers publish their page, manage orders, connect delivery, and receive payouts after platform commission.</p>
       </div>
-      <form class="seller-form">
+      <form class="seller-form" id="sellerForm">
         <label>
           Business name
-          <input type="text" placeholder="Example: Lakshmi Homemade Foods">
+          <input name="businessName" type="text" placeholder="Example: Lakshmi Homemade Foods" required>
         </label>
         <label>
-          Product category
-          <select>
+          Business category
+          <select name="category" required>
             <option>Food and grocery</option>
             <option>Fashion and accessories</option>
             <option>Electronics</option>
             <option>Home and decor</option>
+            <option>Services</option>
           </select>
         </label>
         <label>
           Phone number
-          <input type="tel" placeholder="+91 98765 43210">
+          <input name="phone" type="tel" placeholder="+91 98765 43210" required>
         </label>
-        <button type="button">Request seller onboarding</button>
+        <button type="submit">Request seller onboarding</button>
+        <p class="form-message" id="sellerFormMessage" aria-live="polite"></p>
       </form>
     </section>
   </main>
 
   <footer class="site-footer">
     <strong>Axzen.in</strong>
-    <span>Marketplace, seller pages, delivery integration, and split payouts for Indian startups.</span>
+    <span>Marketplace, seller websites, buyer app, seller app, delivery integration, and commission payouts.</span>
   </footer>
 
   <script src="script.js"></script>
