@@ -3,6 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    const axzenHost = window.location.hostname;
+    const axzenPath = window.location.pathname;
+
+    if (axzenHost === "admin.axzen.in" && axzenPath === "/") {
+      window.location.replace("/admin.html");
+    } else if (axzenHost === "seller.axzen.in" && axzenPath === "/") {
+      window.location.replace("/seller.html");
+    } else if (axzenHost === "api.axzen.in" && axzenPath === "/") {
+      window.location.replace("/api");
+    }
+  </script>
   <title>Axzen.in - Customer Marketplace</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
