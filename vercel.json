@@ -1,0 +1,42 @@
+{
+  "rewrites": [
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "seller.axzen.in"
+        }
+      ],
+      "destination": "/seller.html"
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "admin.axzen.in"
+        }
+      ],
+      "destination": "/admin.html"
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.axzen.in"
+        }
+      ],
+      "destination": "/api"
+    },
+    {
+      "source": "/seller",
+      "destination": "/seller.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/admin.html"
+    }
+  ]
+}
