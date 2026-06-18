@@ -1785,6 +1785,59 @@ h3 {
   letter-spacing: -0.03em;
 }
 
+.seller-register-success {
+  position: sticky;
+  top: 88px;
+  z-index: 8;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 18px;
+  align-items: center;
+  max-width: 760px;
+  margin: 0 0 18px;
+  padding: 18px 20px;
+  color: #064e3b;
+  background: rgba(236, 253, 243, 0.96);
+  border: 1px solid rgba(52, 199, 89, 0.24);
+  border-radius: 22px;
+  box-shadow: 0 22px 58px rgba(6, 78, 59, 0.16);
+  backdrop-filter: blur(18px);
+  animation: successDrop 360ms ease both;
+}
+
+.seller-register-success strong {
+  color: #052e16;
+  font-size: 22px;
+  letter-spacing: -0.03em;
+}
+
+.seller-register-success span {
+  grid-column: 1;
+  font-weight: 800;
+}
+
+.seller-register-success a {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.seller-pending-panel {
+  border-color: rgba(245, 165, 36, 0.22);
+  background: linear-gradient(135deg, rgba(255, 251, 235, 0.92), rgba(255, 255, 255, 0.9));
+}
+
+@keyframes successDrop {
+  from {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 /* Modern Apple-style refresh */
 body,
 .storefront-page,
@@ -3298,5 +3351,20 @@ h1 {
 
   .finance-filter-bar {
     grid-template-columns: 1fr;
+  }
+
+  .seller-register-success {
+    position: static;
+    grid-template-columns: 1fr;
+  }
+
+  .seller-register-success span,
+  .seller-register-success a {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .seller-register-success a {
+    width: 100%;
   }
 }

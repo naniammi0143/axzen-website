@@ -1,5 +1,6 @@
 const asyncHandler = require("../utils/asyncHandler");
 const { success } = require("../utils/apiResponse");
+const Seller = require("../models/Seller");
 
 const dashboards = {
   customer: {
@@ -65,8 +66,22 @@ const dashboards = {
 };
 
 const getDashboard = asyncHandler(async (req, res) => {
+  const seller = req.params.role === "seller" ? await Seller.findOne({ userId: req.user.id }).lean() : null;
+
   success(res, {
-    user: req.user,
+    user: {
+      ...req.user,
+      seller: seller
+        ? {
+            id: seller._id,
+            businessName: seller.businessName,
+            approvalStatus: seller.approvalStatus || "pending",
+            kycStatus: seller.kycStatus || "pending",
+            isActive: Boolean(seller.isActive),
+            status: seller.status || "inactive",
+          }
+        : null,
+    },
     dashboard: dashboards[req.params.role],
   });
 });

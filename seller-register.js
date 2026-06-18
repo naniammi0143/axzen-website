@@ -17,6 +17,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+auth.languageCode = "en";
 const form = document.querySelector("#sellerRegisterForm");
 const message = document.querySelector("#sellerRegisterMessage");
 const sendOtpButton = document.querySelector("[data-send-register-otp]");
@@ -30,11 +31,13 @@ const firebaseTokenInput = form.querySelector("[name='firebaseToken']");
 const submitButton = form.querySelector("button[type='submit']");
 const verifiedBanner = document.querySelector("#sellerVerifiedBanner");
 const verifiedName = document.querySelector("#sellerVerifiedName");
+const successDrop = document.querySelector("#sellerRegisterSuccess");
 const maxFileSize = 5 * 1024 * 1024;
 const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png"]);
 
 let confirmationResult = null;
 let recaptchaVerifier = null;
+let recaptchaWidgetId = null;
 
 function showMessage(text, isError = false) {
   message.textContent = text;
@@ -42,13 +45,49 @@ function showMessage(text, isError = false) {
   message.style.display = "block";
 }
 
-function getRecaptcha() {
+async function resetRecaptcha() {
+  if (recaptchaVerifier) {
+    recaptchaVerifier.clear();
+  }
+
+  recaptchaVerifier = null;
+  recaptchaWidgetId = null;
+  const container = document.querySelector("#recaptcha-seller-register");
+  if (container) {
+    container.innerHTML = "";
+  }
+}
+
+async function getRecaptcha() {
   if (!recaptchaVerifier) {
     recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-seller-register", {
       size: "invisible",
     });
+    recaptchaWidgetId = await recaptchaVerifier.render();
   }
   return recaptchaVerifier;
+}
+
+function otpErrorMessage(error) {
+  const code = error?.code || "";
+
+  if (code.includes("invalid-phone-number")) {
+    return "Mobile number is invalid. Enter a valid 10 digit number.";
+  }
+
+  if (code.includes("too-many-requests")) {
+    return "Too many OTP attempts. Please wait and try again.";
+  }
+
+  if (code.includes("captcha-check-failed")) {
+    return "reCAPTCHA verification failed. Refresh the page and try again.";
+  }
+
+  if (code.includes("unauthorized-domain") || code.includes("invalid-app-credential")) {
+    return "OTP is blocked for this domain. Add seller.axzen.in and axzen.in in Firebase Authentication Authorized domains.";
+  }
+
+  return error?.message || "Unable to send OTP. Please try again.";
 }
 
 function normalizedPhone() {
@@ -115,13 +154,17 @@ sendOtpButton.addEventListener("click", async () => {
   sendOtpButton.textContent = "Sending OTP...";
 
   try {
-    confirmationResult = await signInWithPhoneNumber(auth, `+91${normalizedPhone()}`, getRecaptcha());
+    confirmationResult = await signInWithPhoneNumber(auth, `+91${normalizedPhone()}`, await getRecaptcha());
     mobileInput.readOnly = true;
     otpField.hidden = false;
     verifyOtpButton.hidden = false;
     showMessage(`OTP sent to +91${normalizedPhone()}.`);
   } catch (error) {
-    showMessage(error.message || "Unable to send OTP.", true);
+    if (window.grecaptcha && recaptchaWidgetId !== null) {
+      window.grecaptcha.reset(recaptchaWidgetId);
+    }
+    await resetRecaptcha();
+    showMessage(otpErrorMessage(error), true);
     sendOtpButton.disabled = false;
     sendOtpButton.textContent = "Send OTP";
   }
@@ -189,7 +232,9 @@ form.addEventListener("submit", async (event) => {
     sendOtpButton.textContent = "Send OTP";
     firebaseTokenInput.value = "";
     confirmationResult = null;
-    showMessage("Registration submitted successfully. Your account is waiting for admin approval.");
+    successDrop.hidden = false;
+    successDrop.scrollIntoView({ behavior: "smooth", block: "center" });
+    showMessage("Wait for admin approval.");
   } catch (error) {
     showMessage(error.message, true);
   } finally {

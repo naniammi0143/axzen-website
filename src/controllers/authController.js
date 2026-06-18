@@ -22,18 +22,23 @@ function signToken(user) {
 
 async function ensureRoleProfile(user) {
   if (user.role === "seller") {
-    await Seller.updateOne(
-      { userId: user._id },
-      {
-        $setOnInsert: {
-          userId: user._id,
-          businessName: `${user.name || "Seller"} Store`,
-          phone: user.phone,
-          commissionBps: 1200,
-        },
-      },
-      { upsert: true }
-    );
+    const seller = await Seller.findOne({ userId: user._id });
+
+    if (!seller) {
+      return Seller.create({
+        userId: user._id,
+        businessName: `${user.name || "Seller"} Store`,
+        phone: user.phone,
+        commissionBps: 1200,
+        approvalStatus: "pending",
+        kycStatus: "pending",
+        status: "inactive",
+        isActive: false,
+        payoutEnabled: false,
+      });
+    }
+
+    return seller;
   }
 
   if (["admin", "superadmin", "support", "finance", "delivery_manager"].includes(user.role)) {
@@ -76,16 +81,16 @@ const phoneLogin = asyncHandler(async (req, res) => {
         phone,
         role,
         firebaseUid: decoded.uid,
-        status: "active",
       },
       $setOnInsert: {
         name: name || `${role.charAt(0).toUpperCase()}${role.slice(1)} User`,
+        status: role === "seller" ? "pending" : "active",
       },
     },
     { new: true, upsert: true }
   );
 
-  await ensureRoleProfile(user);
+  const roleProfile = await ensureRoleProfile(user);
 
   success(res, {
     token: signToken(user),
@@ -94,6 +99,17 @@ const phoneLogin = asyncHandler(async (req, res) => {
       name: user.name,
       phone: user.phone,
       role: user.role,
+      seller:
+        user.role === "seller" && roleProfile
+          ? {
+              id: roleProfile._id,
+              businessName: roleProfile.businessName,
+              approvalStatus: roleProfile.approvalStatus || "pending",
+              kycStatus: roleProfile.kycStatus || "pending",
+              isActive: Boolean(roleProfile.isActive),
+              status: roleProfile.status || "inactive",
+            }
+          : undefined,
     },
   });
 });

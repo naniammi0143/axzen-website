@@ -101,6 +101,51 @@ function renderDashboard(payload) {
     return;
   }
 
+  if (
+    user.role === "seller" &&
+    (!user.seller || !user.seller.isActive || user.seller.approvalStatus !== "approved" || user.seller.kycStatus !== "approved")
+  ) {
+    const sellerStatus = user.seller || {};
+    dashboardRole.textContent = "Seller approval status";
+    dashboardTitle.textContent = sellerStatus.businessName || "Registration under review";
+    dashboardSummary.textContent = "Your seller account is waiting for Axzen admin approval. You can open the seller panel after approval is complete.";
+    dashboardMetrics.innerHTML = [
+      ["Approval", sellerStatus.approvalStatus || "pending"],
+      ["KYC", sellerStatus.kycStatus || "pending"],
+      ["Account", sellerStatus.status || "inactive"],
+      ["Products", "Locked"],
+    ]
+      .map(
+        ([label, value]) => `
+          <article>
+            <span>${label}</span>
+            <strong>${value}</strong>
+          </article>
+        `
+      )
+      .join("");
+    dashboardPanels.innerHTML = `
+      <article class="dashboard-panel seller-pending-panel">
+        <h3>Waiting for admin approval</h3>
+        <ul>
+          <li><strong>Registration submitted</strong><span>Saved with pending approval</span></li>
+          <li><strong>KYC review</strong><span>Admin team checks seller documents</span></li>
+          <li><strong>Seller panel</strong><span>Opens after approval</span></li>
+        </ul>
+      </article>
+    `;
+
+    if (protectedContent) {
+      protectedContent.hidden = true;
+    }
+
+    if (dashboardSection) {
+      dashboardSection.hidden = false;
+      dashboardSection.scrollIntoView({ behavior: "smooth" });
+    }
+    return;
+  }
+
   dashboardRole.textContent = `${user.role} dashboard`;
   dashboardTitle.textContent = dashboard.title;
   dashboardSummary.textContent = dashboard.summary;
@@ -175,6 +220,11 @@ async function createPhoneSession(role, phone, firebaseToken) {
   localStorage.setItem("axzenToken", result.token);
   localStorage.setItem("axzenRole", result.user.role);
   localStorage.setItem("axzenPhone", result.user.phone);
+  if (result.user.seller) {
+    localStorage.setItem("axzenSellerStatus", JSON.stringify(result.user.seller));
+  } else {
+    localStorage.removeItem("axzenSellerStatus");
+  }
   await loadDashboard(result.user.role, result.token);
 }
 
@@ -259,6 +309,7 @@ if (logoutButton) {
     localStorage.removeItem("axzenToken");
     localStorage.removeItem("axzenRole");
     localStorage.removeItem("axzenPhone");
+    localStorage.removeItem("axzenSellerStatus");
     document.body.classList.remove("admin-session-active");
 
     if (dashboardSection) {
@@ -286,6 +337,7 @@ if (savedToken && savedRole && savedRole === pageRole) {
     localStorage.removeItem("axzenToken");
     localStorage.removeItem("axzenRole");
     localStorage.removeItem("axzenPhone");
+    localStorage.removeItem("axzenSellerStatus");
     updateLoginNavigation(false);
   });
 }
