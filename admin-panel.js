@@ -419,6 +419,23 @@
     }
   }
 
+  async function openInvoice(id) {
+    try {
+      const data = await api(`/api/orders/${encodeURIComponent(id)}/invoice`);
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        toast("Please allow popups to print the invoice.", true);
+        return;
+      }
+      printWindow.document.open();
+      printWindow.document.write(data.invoiceHtml);
+      printWindow.document.close();
+      printWindow.focus();
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+
   function financeFilters(data = {}) {
     const sellers = data.sellers || [];
     return `
@@ -597,7 +614,8 @@
             { label: "Order status", render: (row) => statusBadge(row.status) },
             { label: "Payment", render: (row) => statusBadge(row.paymentStatus) },
             { label: "Tracking", render: (row) => escapeHtml(row.trackingId || "-") },
-            { label: "Amount", render: (row) => rupees(row.finance?.totalPaise) },
+            { label: "Invoice", render: (row) => escapeHtml(row.invoiceNumber || `INV-${row.orderId}`) },
+            { label: "Amount", render: (row) => rupees(row.customerPaid || row.finance?.totalPaise) },
           ],
           data.items,
           (row) => `
@@ -846,7 +864,7 @@
       if (action === "product-block") return patch(`/api/admin/products/${id}`, { status: "blocked" });
       if (action === "order-next") return patch(`/api/admin/orders/${id}`, { status: target.dataset.status });
       if (action === "order-cancel") return patch(`/api/admin/orders/${id}`, { status: "cancelled" });
-      if (action === "order-invoice") return patch(`/api/admin/orders/${id}`, { invoiceNumber: `INV-${target.dataset.order || Date.now()}` });
+      if (action === "order-invoice") return openInvoice(id || target.dataset.order);
       if (action === "customer-toggle") return patch(`/api/admin/customers/${id}`, { status: target.dataset.status });
       if (action === "settlement-paid") return patch(`/api/admin/settlements/${id}`, { status: "paid" });
       if (action === "settlement-hold") return patch(`/api/admin/settlements/${id}`, { status: "hold" });

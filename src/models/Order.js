@@ -24,6 +24,8 @@ const orderSchema = new mongoose.Schema(
     payoutDate: { type: Date, default: null },
     transactionId: { type: String, trim: true, default: "" },
     paymentMethod: { type: String, trim: true, default: "" },
+    invoiceNumber: { type: String, trim: true, default: "" },
+    invoiceDate: { type: Date, default: null },
     deliveryStatus: { type: String, enum: ["created", "assigned", "picked", "delivered"], default: "created" },
     finance: { type: Object, required: true },
     shippingAddress: { type: Object, default: null },

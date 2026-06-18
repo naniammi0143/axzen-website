@@ -3761,6 +3761,77 @@ h1 {
   font-weight: 750;
 }
 
+.order-invoice-panel {
+  grid-column: 1 / -1;
+}
+
+.order-invoice-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.order-invoice-heading h3 {
+  margin: 4px 0 0;
+}
+
+.order-invoice-heading > span {
+  padding: 7px 11px;
+  color: #0f172a;
+  background: #f1f5f9;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.order-invoice-list {
+  display: grid;
+  gap: 10px;
+}
+
+.order-invoice-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(140px, 0.8fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  background: rgba(248, 250, 252, 0.92);
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: 16px;
+}
+
+.order-invoice-card strong,
+.order-invoice-card b {
+  display: block;
+  color: #111827;
+}
+
+.order-invoice-card span,
+.order-invoice-card small {
+  display: block;
+  margin-top: 3px;
+  color: #6b7280;
+  font-weight: 750;
+}
+
+.order-invoice-card button {
+  min-height: 38px;
+  padding: 0 14px;
+  color: #fff;
+  background: #0f172a;
+  border: 0;
+  border-radius: 999px;
+  font-weight: 900;
+}
+
+.order-invoice-empty {
+  margin: 0;
+  color: #6b7280;
+  font-weight: 750;
+}
+
 .status-badge {
   min-height: 24px;
   font-size: 11px;
@@ -3877,5 +3948,14 @@ h1 {
 
   .seller-order-row {
     grid-template-columns: 1fr;
+  }
+
+  .order-invoice-heading,
+  .order-invoice-card {
+    grid-template-columns: 1fr;
+  }
+
+  .order-invoice-card button {
+    width: 100%;
   }
 }

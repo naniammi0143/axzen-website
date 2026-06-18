@@ -63,6 +63,105 @@ function formatPhoneNumber(value) {
   return `+91${trimmed.replace(/\D/g, "")}`;
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function rupees(paise) {
+  return `Rs. ${((Number(paise) || 0) / 100).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function orderTotal(order) {
+  return order.customerPaid || order.finance?.customerPaidPaise || order.finance?.totalPaise || 0;
+}
+
+async function openOrderInvoice(orderId) {
+  const token = localStorage.getItem("axzenToken");
+  const response = await fetch(`/api/orders/${encodeURIComponent(orderId)}/invoice`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "Unable to open invoice.");
+  }
+
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    throw new Error("Please allow popups to print the invoice.");
+  }
+  printWindow.document.open();
+  printWindow.document.write(result.invoiceHtml);
+  printWindow.document.close();
+  printWindow.focus();
+}
+
+function renderOrderInvoicePanel(orders = [], role = "customer") {
+  return `
+    <article class="dashboard-panel order-invoice-panel" id="orderInvoicePanel">
+      <div class="order-invoice-heading">
+        <div>
+          <p class="eyebrow">${role === "seller" ? "Seller orders" : "Customer orders"}</p>
+          <h3>Invoices and bills</h3>
+        </div>
+        <span>${orders.length} orders</span>
+      </div>
+      ${
+        orders.length
+          ? `<div class="order-invoice-list">
+              ${orders
+                .map(
+                  (order) => `
+                    <div class="order-invoice-card">
+                      <div>
+                        <strong>${escapeHtml(order.invoiceNumber || `INV-${order.orderId}`)}</strong>
+                        <span>${escapeHtml(order.orderId)}</span>
+                      </div>
+                      <div>
+                        <small>${escapeHtml(order.sellerName || "Axzen seller")}</small>
+                        <b>${rupees(orderTotal(order))}</b>
+                      </div>
+                      <button type="button" data-print-invoice="${escapeHtml(order._id || order.orderId)}">Print invoice</button>
+                    </div>
+                  `
+                )
+                .join("")}
+            </div>`
+          : `<p class="order-invoice-empty">No orders yet. Your printable invoices will appear here after orders are placed.</p>`
+      }
+    </article>
+  `;
+}
+
+async function loadRoleOrders(role) {
+  if (!["customer", "seller"].includes(role) || !dashboardPanels) return;
+  const token = localStorage.getItem("axzenToken");
+  const endpoint = role === "seller" ? "/api/orders/seller" : "/api/orders/customer";
+  try {
+    const response = await fetch(endpoint, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Unable to load orders.");
+    document.querySelector("#orderInvoicePanel")?.remove();
+    dashboardPanels.insertAdjacentHTML("beforeend", renderOrderInvoicePanel(result.orders || [], role));
+  } catch (error) {
+    document.querySelector("#orderInvoicePanel")?.remove();
+    dashboardPanels.insertAdjacentHTML("beforeend", renderOrderInvoicePanel([], role));
+  }
+}
+
 function getRecaptcha(form) {
   const role = form.dataset.role;
   const containerId = `recaptcha-${role}`;
@@ -190,6 +289,8 @@ function renderDashboard(payload) {
     protectedContent.hidden = false;
   }
 
+  loadRoleOrders(user.role);
+
   if (dashboardSection) {
     dashboardSection.hidden = false;
     dashboardSection.scrollIntoView({ behavior: "smooth" });
@@ -314,6 +415,22 @@ phoneForms.forEach((form) => {
       verifyButton.textContent = "Verify and continue";
     }
   });
+});
+
+document.addEventListener("click", async (event) => {
+  const invoiceButton = event.target.closest("[data-print-invoice]");
+  if (!invoiceButton) return;
+  invoiceButton.disabled = true;
+  const originalText = invoiceButton.textContent;
+  invoiceButton.textContent = "Opening...";
+  try {
+    await openOrderInvoice(invoiceButton.dataset.printInvoice);
+  } catch (error) {
+    alert(error.message || "Unable to open invoice.");
+  } finally {
+    invoiceButton.disabled = false;
+    invoiceButton.textContent = originalText;
+  }
 });
 
 if (logoutButton) {
