@@ -34,6 +34,19 @@
     audit: "/api/admin/audit-logs",
   };
 
+  const viewPermissions = {
+    dashboard: "dashboard",
+    sellers: "sellers",
+    products: "products",
+    orders: "orders",
+    payments: "finance",
+    customers: "customers",
+    delivery: "delivery",
+    employees: "employees",
+    reports: "reports",
+    audit: "audit",
+  };
+
   function qs(selector, root = document) {
     return root.querySelector(selector);
   }
@@ -428,7 +441,13 @@
     try {
       const data = await api(`/api/orders/${encodeURIComponent(id)}/invoice`);
       const modal = ensureReportDrawer("invoice", "Invoice");
-      qs(".report-drawer-body", modal).innerHTML = `<iframe class="invoice-frame" title="Invoice ${escapeHtml(data.invoiceNumber)}"></iframe>`;
+      qs(".report-drawer-body", modal).innerHTML = `
+        <div class="invoice-preview-actions">
+          <strong>${escapeHtml(data.invoiceNumber || "Invoice")}</strong>
+          <button type="button" data-print-current-invoice>Print invoice</button>
+        </div>
+        <iframe class="invoice-frame" title="Invoice ${escapeHtml(data.invoiceNumber)}"></iframe>
+      `;
       qs(".invoice-frame", modal).srcdoc = data.invoiceHtml;
       openReportDrawer(modal);
     } catch (error) {
@@ -474,7 +493,7 @@
     `;
     document.body.appendChild(drawer);
     drawer.addEventListener("click", (event) => {
-      if (event.target === drawer || event.target.closest("[data-report-drawer-close]")) closeReportDrawers();
+      if (event.target === drawer || event.target.closest("[data-report-drawer-close]")) closeReportDrawer(drawer);
     });
     return drawer;
   }
@@ -484,8 +503,20 @@
     document.body.classList.add("seller-detail-open");
   }
 
+  function closeReportDrawer(drawer) {
+    drawer?.classList.remove("show");
+    if (!qs(".seller-detail-overlay.show") && !qs(".report-drawer-overlay.show")) {
+      document.body.classList.remove("seller-detail-open");
+    }
+  }
+
+  function closeTopReportDrawer() {
+    const openDrawers = qsa(".report-drawer-overlay.show");
+    closeReportDrawer(openDrawers.at(-1));
+  }
+
   function closeReportDrawers() {
-    qsa(".report-drawer-overlay").forEach((drawer) => drawer.classList.remove("show"));
+    qsa(".report-drawer-overlay.show").forEach((drawer) => drawer.classList.remove("show"));
     if (!qs(".seller-detail-overlay.show")) document.body.classList.remove("seller-detail-open");
   }
 
@@ -804,19 +835,92 @@
   }
 
   function renderEmployees(data) {
-    qs('[data-view-panel="employees"]').innerHTML = panel(
-      "Employee and admin roles",
-      table(
-        [
-          { label: "Name", render: (row) => `<strong>${escapeHtml(row.name)}</strong><small>${escapeHtml(row.phone)}</small>` },
-          { label: "Role", render: (row) => statusBadge(row.role) },
-          { label: "Status", render: (row) => statusBadge(row.status) },
-          { label: "Created", render: (row) => new Date(row.createdAt).toLocaleDateString() },
-        ],
-        data.items,
-        (row) => `<button data-action="employee-block" data-id="${row._id}">Block</button>`
-      )
-    );
+    const roleNames = Object.keys(data.roleMatrix || {});
+    qs('[data-view-panel="employees"]').innerHTML = `
+      <section class="employee-page">
+        <header class="employee-hero">
+          <div>
+            <span class="eyebrow">Employee Access Control</span>
+            <h2>Employees, roles and activities</h2>
+            <p>Create employees, set passwords, assign marketplace roles, and control what they can access.</p>
+          </div>
+          <div class="employee-count-card">
+            <span>Total employees</span>
+            <strong>${escapeHtml(data.total || data.items?.length || 0)}</strong>
+            <small>Super Admin controlled</small>
+          </div>
+        </header>
+
+        <section class="employee-layout">
+          <article class="admin-panel employee-create-panel">
+            <div class="panel-heading">
+              <h2>Add employee</h2>
+              <small>Password is stored securely</small>
+            </div>
+            <form class="employee-form" data-employee-create>
+              <label>Name<input name="name" required placeholder="Employee full name"></label>
+              <label>Phone<input name="phone" required placeholder="+91 98765 43210"></label>
+              <label>Email<input name="email" type="email" placeholder="employee@axzen.in"></label>
+              <label>Password<input name="password" type="password" required minlength="8" placeholder="Minimum 8 characters"></label>
+              <label>Role
+                <select name="displayRole" required>
+                  ${roleNames.map((role) => `<option value="${escapeHtml(role)}">${escapeHtml(role)}</option>`).join("")}
+                </select>
+              </label>
+              <button type="submit">Add Employee</button>
+            </form>
+          </article>
+
+          <article class="admin-panel employee-role-panel">
+            <div class="panel-heading">
+              <h2>Role access matrix</h2>
+              <small>Who can access what</small>
+            </div>
+            <div class="employee-role-grid">
+              ${roleNames
+                .map((role) => {
+                  const config = data.roleMatrix[role] || {};
+                  return `
+                    <article>
+                      <strong>${escapeHtml(role)}</strong>
+                      <div class="employee-chip-row">
+                        ${(config.permissions || []).map((permission) => `<span>${escapeHtml(permission === "*" ? "All access" : permission)}</span>`).join("")}
+                      </div>
+                      <small>${escapeHtml((config.activityNotes || []).join(" • "))}</small>
+                    </article>
+                  `;
+                })
+                .join("")}
+            </div>
+          </article>
+        </section>
+
+        <article class="admin-panel employee-list-panel">
+          <div class="panel-heading">
+            <h2>Employee list</h2>
+            <small>Manage status and roles</small>
+          </div>
+          ${table(
+            [
+              { label: "Employee", render: (row) => `<strong>${escapeHtml(row.name)}</strong><small>${escapeHtml([row.phone, row.email].filter(Boolean).join(" / "))}</small>` },
+              { label: "Professional Role", render: (row) => `<strong>${escapeHtml(row.displayRole)}</strong><small>${escapeHtml(row.role)} system role</small>` },
+              { label: "Access", render: (row) => `<div class="employee-chip-row">${(row.permissions || []).map((permission) => `<span>${escapeHtml(permission === "*" ? "All access" : permission)}</span>`).join("")}</div>` },
+              { label: "Activities", render: (row) => `<small>${escapeHtml((row.activityNotes || []).join(", ") || "-")}</small>` },
+              { label: "Status", render: (row) => statusBadge(row.status) },
+              { label: "Created", render: (row) => new Date(row.createdAt).toLocaleDateString() },
+            ],
+            data.items,
+            (row) => `
+              <select data-employee-role="${row._id}">
+                ${roleNames.map((role) => `<option value="${escapeHtml(role)}" ${role === row.displayRole ? "selected" : ""}>${escapeHtml(role)}</option>`).join("")}
+              </select>
+              <button data-action="employee-role-update" data-id="${row._id}">Update role</button>
+              <button data-action="employee-toggle" data-id="${row._id}" data-status="${row.status === "blocked" ? "active" : "blocked"}">${row.status === "blocked" ? "Activate" : "Block"}</button>
+            `
+          )}
+        </article>
+      </section>
+    `;
   }
 
   const reportTypes = [
@@ -1054,11 +1158,22 @@
     });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
+        if (qs(".report-drawer-overlay.show")) {
+          closeTopReportDrawer();
+          return;
+        }
         closeSellerDetail();
-        closeReportDrawers();
       }
     });
     document.addEventListener("click", async (event) => {
+      const invoicePrint = event.target.closest("[data-print-current-invoice]");
+      if (invoicePrint) {
+        const frame = qs("#reportDrawer-invoice .invoice-frame");
+        frame?.contentWindow?.focus();
+        frame?.contentWindow?.print();
+        return;
+      }
+
       const reportTypeButton = event.target.closest("[data-report-type]");
       if (reportTypeButton) {
         state.reportType = reportTypeButton.dataset.reportType;
@@ -1163,10 +1278,30 @@
       if (action === "settlement-hold") return patch(`/api/admin/settlements/${id}`, { status: "hold" });
       if (action === "delivery-next") return patch(`/api/admin/deliveries/${id}`, { status: "out_for_delivery" });
       if (action === "delivery-failed") return patch(`/api/admin/deliveries/${id}`, { status: "failed", failedReason: "Marked failed by admin" });
+      if (action === "employee-role-update") {
+        const select = qs(`[data-employee-role="${id}"]`);
+        return patch(`/api/admin/employees/${id}`, { displayRole: select?.value });
+      }
+      if (action === "employee-toggle") return patch(`/api/admin/employees/${id}`, { status: target.dataset.status });
       if (action === "employee-block") return patch(`/api/admin/employees/${id}`, { status: "blocked" });
     });
 
     document.addEventListener("submit", async (event) => {
+      const employeeForm = event.target.closest("[data-employee-create]");
+      if (employeeForm) {
+        event.preventDefault();
+        const payload = Object.fromEntries(new FormData(employeeForm).entries());
+        try {
+          await api("/api/admin/employees", { method: "POST", body: JSON.stringify(payload) });
+          toast("Employee added successfully.");
+          employeeForm.reset();
+          await loadView("employees");
+        } catch (error) {
+          toast(error.message, true);
+        }
+        return;
+      }
+
       const reportForm = event.target.closest("[data-report-filters]");
       if (reportForm) {
         event.preventDefault();
@@ -1195,7 +1330,14 @@
     init({ token, user }) {
       state.token = token;
       state.user = user;
-      qs("#adminRoleLabel").textContent = `${user.role.replaceAll("_", " ")} access`;
+      const permissions = user.admin?.permissions || [];
+      const hasAccess = (view) => permissions.includes("*") || permissions.includes(viewPermissions[view]);
+      qs("#adminRoleLabel").textContent = `${(user.admin?.displayRole || user.role).replaceAll("_", " ")} access`;
+      qsa("[data-admin-view]").forEach((button) => {
+        if (permissions.length && !hasAccess(button.dataset.adminView)) {
+          button.setAttribute("hidden", "hidden");
+        }
+      });
       if (!["superadmin", "finance"].includes(user.role)) {
         qs('[data-admin-view="payments"]')?.setAttribute("hidden", "hidden");
       }

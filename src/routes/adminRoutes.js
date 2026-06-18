@@ -3,6 +3,7 @@ const {
   adminOverview,
   approveProduct,
   approveSeller,
+  createEmployee,
   exportCsv,
   financeSummary,
   listAuditLogs,
@@ -73,6 +74,7 @@ router.get("/deliveries", authorizeAdminAccess("delivery"), listDeliveries);
 router.patch("/deliveries/:orderId", authorizeAdminAccess("delivery"), updateDelivery);
 
 router.get("/employees", authorizeAdminAccess("employees"), listEmployees);
+router.post("/employees", authorizeAdminAccess("employees"), createEmployee);
 router.patch("/employees/:id", authorizeAdminAccess("employees"), updateEmployee);
 
 router.get("/reports", authorizeAdminAccess("reports"), reports);

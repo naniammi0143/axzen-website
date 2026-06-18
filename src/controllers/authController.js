@@ -7,6 +7,8 @@ const env = require("../config/env");
 const asyncHandler = require("../utils/asyncHandler");
 const { success } = require("../utils/apiResponse");
 
+const adminRoles = ["admin", "superadmin", "support", "finance", "delivery_manager"];
+
 function signToken(user) {
   return jwt.sign(
     {
@@ -41,12 +43,22 @@ async function ensureRoleProfile(user) {
     return seller;
   }
 
-  if (["admin", "superadmin", "support", "finance", "delivery_manager"].includes(user.role)) {
-    await AdminUser.updateOne(
+  if (adminRoles.includes(user.role)) {
+    return AdminUser.findOneAndUpdate(
       { userId: user._id },
       {
         $setOnInsert: {
           userId: user._id,
+          displayRole:
+            user.role === "superadmin"
+              ? "Super Admin"
+              : user.role === "finance"
+                ? "Finance Executive"
+                : user.role === "support"
+                  ? "Support Executive"
+                  : user.role === "delivery_manager"
+                    ? "Shipping Executive"
+                    : "Operations Manager",
           permissions:
             user.role === "superadmin"
               ? ["*"]
@@ -59,7 +71,7 @@ async function ensureRoleProfile(user) {
                     : ["sellers", "products", "orders"],
         },
       },
-      { upsert: true }
+      { new: true, upsert: true }
     );
   }
 }
@@ -74,12 +86,13 @@ const phoneLogin = asyncHandler(async (req, res) => {
     return;
   }
 
-  const user = await User.findOneAndUpdate(
-    { phone, role },
+  let user = role === "admin" ? await User.findOne({ phone, role: { $in: adminRoles } }) : null;
+  user = await User.findOneAndUpdate(
+    { phone, role: user?.role || role },
     {
       $set: {
         phone,
-        role,
+        role: user?.role || role,
         firebaseUid: decoded.uid,
       },
       $setOnInsert: {
@@ -99,6 +112,14 @@ const phoneLogin = asyncHandler(async (req, res) => {
       name: user.name,
       phone: user.phone,
       role: user.role,
+      admin:
+        adminRoles.includes(user.role) && roleProfile
+          ? {
+              displayRole: roleProfile.displayRole,
+              permissions: roleProfile.permissions || [],
+              activityNotes: roleProfile.activityNotes || [],
+            }
+          : undefined,
       seller:
         user.role === "seller" && roleProfile
           ? {

@@ -10,9 +10,52 @@ const User = require("../models/User");
 const asyncHandler = require("../utils/asyncHandler");
 const { success } = require("../utils/apiResponse");
 const { formatRupees, getPaymentChargePercent } = require("../utils/money");
+const { hashPassword } = require("../utils/password");
 
 const orderStatuses = ["pending", "confirmed", "packed", "shipped", "out_for_delivery", "delivered", "cancelled", "returned"];
 const productStatuses = ["pending_approval", "approved", "active", "rejected", "blocked", "inactive"];
+const employeeRoles = {
+  "Super Admin": {
+    systemRole: "superadmin",
+    permissions: ["*"],
+    activityNotes: ["Full company control", "Employee and audit access", "All reports and finance"],
+  },
+  "Operations Manager": {
+    systemRole: "admin",
+    permissions: ["dashboard", "sellers", "products", "orders", "customers", "delivery", "reports"],
+    activityNotes: ["Daily operations", "Seller/product/order control", "Marketplace reports"],
+  },
+  "Seller Executive": {
+    systemRole: "support",
+    permissions: ["dashboard", "sellers"],
+    activityNotes: ["Seller onboarding", "KYC follow-up", "Seller status checks"],
+  },
+  "Product Executive": {
+    systemRole: "support",
+    permissions: ["dashboard", "products"],
+    activityNotes: ["Product approvals", "Catalogue checks", "Stock review"],
+  },
+  "Order Executive": {
+    systemRole: "support",
+    permissions: ["dashboard", "orders", "customers"],
+    activityNotes: ["Order support", "Customer order lookup", "Cancel/return coordination"],
+  },
+  "Support Executive": {
+    systemRole: "support",
+    permissions: ["dashboard", "customers", "orders"],
+    activityNotes: ["Customer support", "Issue tracking", "Order assistance"],
+  },
+  "Finance Executive": {
+    systemRole: "finance",
+    permissions: ["dashboard", "finance", "reports"],
+    activityNotes: ["Payment reports", "Commission and payout review", "Finance exports"],
+  },
+  "Shipping Executive": {
+    systemRole: "delivery_manager",
+    permissions: ["dashboard", "delivery", "orders"],
+    activityNotes: ["Shipment tracking", "Delivery labels", "Courier updates"],
+  },
+};
 
 function startOfToday() {
   const date = new Date();
@@ -733,17 +776,90 @@ const listEmployees = asyncHandler(async (req, res) => {
   const filter = { role: { $in: roles } };
   const search = textRegex(req.query.search);
   if (search) filter.$or = [{ name: search }, { phone: search }, { email: search }, { role: search }];
-  success(res, await paged(User, filter, req.query));
+  const pageData = await paged(User, filter, req.query);
+  const profiles = await AdminUser.find({ userId: { $in: pageData.items.map((employee) => employee._id) } }).lean();
+  const profileMap = new Map(profiles.map((profile) => [String(profile.userId), profile]));
+  success(res, {
+    ...pageData,
+    roleMatrix: employeeRoles,
+    items: pageData.items.map((employee) => {
+      const profile = profileMap.get(String(employee._id)) || {};
+      return {
+        ...employee,
+        displayRole: profile.displayRole || (employee.role === "superadmin" ? "Super Admin" : "Operations Manager"),
+        permissions: profile.permissions || [],
+        activityNotes: profile.activityNotes || [],
+      };
+    }),
+  });
+});
+
+const createEmployee = asyncHandler(async (req, res) => {
+  const displayRole = req.body.displayRole || "Support Executive";
+  const roleConfig = employeeRoles[displayRole];
+  if (!roleConfig) {
+    res.status(400).json({ ok: false, message: "Invalid employee role." });
+    return;
+  }
+
+  if (!req.body.name || !req.body.phone || !req.body.password) {
+    res.status(400).json({ ok: false, message: "Name, phone and password are required." });
+    return;
+  }
+
+  if (String(req.body.password).length < 8) {
+    res.status(400).json({ ok: false, message: "Password must be at least 8 characters." });
+    return;
+  }
+
+  const phone = String(req.body.phone).trim();
+  const email = req.body.email ? String(req.body.email).trim().toLowerCase() : undefined;
+  const employee = await User.create({
+    name: String(req.body.name).trim(),
+    phone,
+    email,
+    role: roleConfig.systemRole,
+    status: req.body.status || "active",
+    passwordHash: hashPassword(req.body.password),
+  });
+
+  const profile = await AdminUser.create({
+    userId: employee._id,
+    displayRole,
+    permissions: roleConfig.permissions,
+    activityNotes: roleConfig.activityNotes,
+    createdBy: req.user?.id || null,
+  });
+
+  await audit(req, "employee.create", "employee", employee._id, { displayRole, permissions: profile.permissions });
+  success(res, { employee: { ...employee.toObject(), displayRole, permissions: profile.permissions, activityNotes: profile.activityNotes } }, 201);
 });
 
 const updateEmployee = asyncHandler(async (req, res) => {
-  const roles = ["admin", "support", "finance", "delivery_manager"];
   const update = {};
-  if (roles.includes(req.body.role)) update.role = req.body.role;
+  let roleConfig = null;
+  if (req.body.displayRole) {
+    roleConfig = employeeRoles[req.body.displayRole];
+    if (!roleConfig) {
+      res.status(400).json({ ok: false, message: "Invalid employee role." });
+      return;
+    }
+    update.role = roleConfig.systemRole;
+  }
   if (["active", "blocked", "pending"].includes(req.body.status)) update.status = req.body.status;
   if (req.body.name) update.name = req.body.name;
+  if (req.body.email !== undefined) update.email = req.body.email ? String(req.body.email).trim().toLowerCase() : undefined;
+  if (req.body.password) update.passwordHash = hashPassword(req.body.password);
   const employee = await User.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
-  await AdminUser.updateOne({ userId: req.params.id }, { $setOnInsert: { userId: req.params.id } }, { upsert: true });
+  if (!employee) {
+    res.status(404).json({ ok: false, message: "Employee not found." });
+    return;
+  }
+  const profileUpdate = { $setOnInsert: { userId: req.params.id } };
+  if (roleConfig) {
+    profileUpdate.$set = { displayRole: req.body.displayRole, permissions: roleConfig.permissions, activityNotes: roleConfig.activityNotes };
+  }
+  await AdminUser.updateOne({ userId: req.params.id }, profileUpdate, { upsert: true });
   await audit(req, "employee.update", "employee", req.params.id, update);
   success(res, { employee });
 });
@@ -1051,6 +1167,7 @@ module.exports = {
   adminOverview,
   approveProduct,
   approveSeller,
+  createEmployee,
   exportCsv,
   financeSummary,
   customerDetail,

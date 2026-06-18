@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const env = require("../config/env");
+const AdminUser = require("../models/AdminUser");
 
 function authenticate(req, res, next) {
   const header = req.headers.authorization || "";
@@ -43,15 +44,27 @@ const adminAccess = {
 };
 
 function authorizeAdminAccess(area) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     const allowed = adminAccess[area] || [];
 
-    if (!req.user || !allowed.includes(req.user.role)) {
+    if (!req.user) {
       res.status(403).json({ ok: false, message: "This admin section is not allowed for your role." });
       return;
     }
 
-    next();
+    const profile = await AdminUser.findOne({ userId: req.user.id }).select("permissions").lean();
+    const permissions = profile?.permissions || [];
+    if (permissions.includes("*") || permissions.includes(area)) {
+      next();
+      return;
+    }
+
+    if (!profile && allowed.includes(req.user.role)) {
+      next();
+      return;
+    }
+
+    res.status(403).json({ ok: false, message: "This admin section is not allowed for your role." });
   };
 }
 
