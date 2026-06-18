@@ -17,8 +17,16 @@ const {
   paymentCommissionReport,
   rejectProduct,
   rejectSeller,
+  reportCustomers,
+  reportPayments,
+  reportProducts,
+  reportReturns,
+  reportSales,
+  reportSellers,
+  reportShipments,
   reports,
   sellerDetail,
+  customerDetail,
   updateCustomer,
   updateDelivery,
   updateEmployee,
@@ -51,6 +59,7 @@ router.get("/orders", authorizeAdminAccess("orders"), listOrders);
 router.patch("/orders/:id", authorizeAdminAccess("orders"), updateOrder);
 
 router.get("/customers", authorizeAdminAccess("customers"), listCustomers);
+router.get("/customers/:id/detail", authorizeAdminAccess("customers"), customerDetail);
 router.patch("/customers/:id", authorizeAdminAccess("customers"), updateCustomer);
 
 router.get("/payments", authorizeAdminAccess("finance"), listPayments);
@@ -67,6 +76,13 @@ router.get("/employees", authorizeAdminAccess("employees"), listEmployees);
 router.patch("/employees/:id", authorizeAdminAccess("employees"), updateEmployee);
 
 router.get("/reports", authorizeAdminAccess("reports"), reports);
+router.get("/reports/sales", authorizeAdminAccess("reports"), reportSales);
+router.get("/reports/sellers", authorizeAdminAccess("reports"), reportSellers);
+router.get("/reports/products", authorizeAdminAccess("reports"), reportProducts);
+router.get("/reports/payments", authorizeAdminAccess("reports"), reportPayments);
+router.get("/reports/shipments", authorizeAdminAccess("reports"), reportShipments);
+router.get("/reports/returns", authorizeAdminAccess("reports"), reportReturns);
+router.get("/reports/customers", authorizeAdminAccess("reports"), reportCustomers);
 router.get("/reports/export/:type", authorizeAdminAccess("reports"), exportCsv);
 
 router.get("/audit-logs", authorizeAdminAccess("audit"), listAuditLogs);

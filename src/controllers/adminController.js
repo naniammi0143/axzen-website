@@ -91,6 +91,16 @@ function buildOrderFinanceFilter(query) {
   return filter;
 }
 
+function buildReportFilter(query = {}) {
+  const filter = buildOrderFinanceFilter({
+    ...query,
+    dateFrom: query.startDate || query.dateFrom,
+    dateTo: query.endDate || query.dateTo,
+    orderStatus: query.orderStatus || query.status,
+  });
+  return filter;
+}
+
 function cleanInt(value, fallback = 20, max = 100) {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed < 1) return fallback;
@@ -123,6 +133,131 @@ async function paged(Model, filter, query, sort = { createdAt: -1 }, populate = 
   if (populate) find.populate(populate);
   const [items, total] = await Promise.all([find.lean(), Model.countDocuments(filter)]);
   return { items, page, limit, total, totalPages: Math.ceil(total / limit) || 1 };
+}
+
+function csvValue(value) {
+  if (value && typeof value === "object") return JSON.stringify(value);
+  return value ?? "";
+}
+
+async function sendCsv(req, res, filename, rows) {
+  await audit(req, "report.export", "report", filename, { rows: rows.length });
+  const keys = Object.keys(rows[0] || { empty: "" });
+  const csv = [keys.join(","), ...rows.map((row) => keys.map((key) => JSON.stringify(csvValue(row[key]))).join(","))].join("\n");
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", `attachment; filename=${filename}.csv`);
+  res.send(csv);
+}
+
+function comparisonText() {
+  return "Live filtered data";
+}
+
+function sumRows(rows, field) {
+  return rows.reduce((total, row) => total + (Number(row[field]) || 0), 0);
+}
+
+function reportCard(title, value, hint = comparisonText()) {
+  return { title, value, hint };
+}
+
+function dateKey(date) {
+  return new Date(date).toISOString().slice(0, 10);
+}
+
+function monthKey(date) {
+  return new Date(date).toISOString().slice(0, 7);
+}
+
+function statusCounts(rows) {
+  return Object.entries(
+    rows.reduce((counts, row) => {
+      counts[row.status || "unknown"] = (counts[row.status || "unknown"] || 0) + 1;
+      return counts;
+    }, {})
+  ).map(([label, value]) => ({ label, value }));
+}
+
+function groupMoney(rows, keyField, moneyField) {
+  const grouped = rows.reduce((totals, row) => {
+    const key = row[keyField] || "Unknown";
+    totals[key] = (totals[key] || 0) + (Number(row[moneyField]) || 0);
+    return totals;
+  }, {});
+  return Object.entries(grouped)
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10);
+}
+
+function orderProductRows(orders) {
+  const products = new Map();
+  orders.forEach((order) => {
+    (order.items || []).forEach((item) => {
+      const key = item.sku || item.productId || item.title || item.name || "Unknown";
+      const quantity = Number(item.quantity || item.qty || 1);
+      const price = Number(item.pricePaise || item.price || item.unitPricePaise || 0);
+      const current = products.get(key) || {
+        product: item.title || item.name || "Product",
+        sku: item.sku || key,
+        sellerName: order.sellerName,
+        quantitySold: 0,
+        revenue: 0,
+        returnCount: 0,
+      };
+      current.quantitySold += quantity;
+      current.revenue += price * quantity;
+      if (order.status === "returned") current.returnCount += quantity;
+      products.set(key, current);
+    });
+  });
+  return [...products.values()].sort((a, b) => b.revenue - a.revenue);
+}
+
+async function reportOrders(req) {
+  const filter = buildReportFilter(req.query);
+  const page = cleanInt(req.query.page, 1, 5000);
+  const limit = cleanInt(req.query.limit, 25, 200);
+  const skip = (page - 1) * limit;
+  const search = textRegex(req.query.search);
+  if (search) filter.$or = [{ orderId: search }, { sellerName: search }, { transactionId: search }];
+  const [allOrders, pageOrders, total, sellers] = await Promise.all([
+    Order.find(filter).sort({ createdAt: -1 }).limit(5000).populate("customerId", "name email phone status createdAt").populate("sellerId", "businessName city pincode").lean(),
+    Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).populate("customerId", "name email phone status createdAt").populate("sellerId", "businessName city pincode").lean(),
+    Order.countDocuments(filter),
+    Seller.find().sort({ businessName: 1 }).select("businessName").lean(),
+  ]);
+  return {
+    allRows: allOrders.map(orderFinanceRow),
+    pageRows: pageOrders.map(orderFinanceRow),
+    page,
+    limit,
+    total,
+    totalPages: Math.ceil(total / limit) || 1,
+    sellers,
+  };
+}
+
+function reportEnvelope(type, cards, rows, charts, pageData = {}) {
+  return {
+    type,
+    cards,
+    rows,
+    charts,
+    page: pageData.page || 1,
+    limit: pageData.limit || rows.length,
+    total: pageData.total ?? rows.length,
+    totalPages: pageData.totalPages || 1,
+    sellers: pageData.sellers || [],
+  };
+}
+
+function allowReport(req, res, type) {
+  if (req.user?.role === "finance" && type !== "payments") {
+    res.status(403).json({ ok: false, message: "Finance role can access payment reports only." });
+    return false;
+  }
+  return true;
 }
 
 async function revenueSum(filter = {}) {
@@ -429,6 +564,27 @@ const listCustomers = asyncHandler(async (req, res) => {
   success(res, await paged(User, filter, req.query));
 });
 
+const customerDetail = asyncHandler(async (req, res) => {
+  const customer = await User.findOne({ _id: req.params.id, role: "customer" }).lean();
+  if (!customer) {
+    res.status(404).json({ ok: false, message: "Customer not found." });
+    return;
+  }
+  const orders = (await Order.find({ customerId: customer._id }).sort({ createdAt: -1 }).limit(200).populate("sellerId", "businessName").lean()).map(orderFinanceRow);
+  const paidOrders = orders.filter((order) => order.paymentStatus === "paid" && !["cancelled", "returned"].includes(order.status));
+  const cancelledReturned = orders.filter((order) => ["cancelled", "returned"].includes(order.status));
+  success(res, {
+    customer,
+    summary: {
+      totalOrders: orders.length,
+      totalSpent: asMoney(sumRows(paidOrders, "customerPaid")),
+      cancelledReturns: cancelledReturned.length,
+      lastOrderDate: orders[0]?.createdAt || null,
+    },
+    orders,
+  });
+});
+
 const updateCustomer = asyncHandler(async (req, res) => {
   const update = {};
   if (["active", "blocked", "pending"].includes(req.body.status)) update.status = req.body.status;
@@ -626,6 +782,246 @@ const reports = asyncHandler(async (req, res) => {
   success(res, { sellerWise, productWise, returns });
 });
 
+const reportSales = asyncHandler(async (req, res) => {
+  if (!allowReport(req, res, "sales")) return;
+  const { allRows, pageRows, ...pageData } = await reportOrders(req);
+  const revenueRows = allRows.filter((row) => row.paymentStatus === "paid" && !["cancelled", "returned"].includes(row.status));
+  const cancelledRows = allRows.filter((row) => row.status === "cancelled");
+  const returnedRows = allRows.filter((row) => row.status === "returned");
+  const totalSales = sumRows(revenueRows, "customerPaid");
+  const refundTotal = sumRows([...cancelledRows, ...returnedRows], "customerPaid");
+  const cards = [
+    reportCard("Total Sales", formatRupees(totalSales)),
+    reportCard("Total Orders", allRows.length),
+    reportCard("Net Revenue", formatRupees(Math.max(totalSales - refundTotal, 0))),
+    reportCard("Cancelled Orders", cancelledRows.length),
+    reportCard("Returned Orders", returnedRows.length),
+    reportCard("Average Order Value", formatRupees(revenueRows.length ? Math.round(totalSales / revenueRows.length) : 0)),
+  ];
+  const rows = pageRows.map((row) => ({
+    orderId: row.orderId,
+    sellerName: row.sellerName,
+    customer: row.customerId?.name || row.customerId?.phone || "Customer",
+    customerPaid: row.customerPaid,
+    netSales: ["cancelled", "returned"].includes(row.status) ? 0 : row.customerPaid,
+    status: row.status,
+    paymentStatus: row.paymentStatus,
+    date: row.createdAt,
+    _id: row._id,
+  }));
+  const charts = {
+    primary: groupMoney(revenueRows, "createdAt", "customerPaid").map((item) => item),
+    dailySales: Object.entries(revenueRows.reduce((totals, row) => ({ ...totals, [dateKey(row.createdAt)]: (totals[dateKey(row.createdAt)] || 0) + row.customerPaid }), {})).map(([label, value]) => ({ label, value })),
+    monthlyRevenue: Object.entries(revenueRows.reduce((totals, row) => ({ ...totals, [monthKey(row.createdAt)]: (totals[monthKey(row.createdAt)] || 0) + row.customerPaid }), {})).map(([label, value]) => ({ label, value })),
+    secondary: statusCounts(allRows),
+  };
+  if (req.query.export === "true") return sendCsv(req, res, "axzen-sales-report", rows);
+  success(res, reportEnvelope("sales", cards, rows, charts, pageData));
+});
+
+const reportSellers = asyncHandler(async (req, res) => {
+  if (!allowReport(req, res, "sellers")) return;
+  const { allRows } = await reportOrders(req);
+  const grouped = new Map();
+  allRows.forEach((row) => {
+    const key = String(row.sellerId?._id || row.sellerId || row.sellerName);
+    const item = grouped.get(key) || {
+      sellerName: row.sellerName,
+      totalOrders: 0,
+      totalSales: 0,
+      platformCommission: 0,
+      payoutPending: 0,
+      payoutPaid: 0,
+      cancelledReturned: 0,
+      performance: "Good",
+    };
+    item.totalOrders += 1;
+    if (row.paymentStatus === "paid" && !["cancelled", "returned"].includes(row.status)) item.totalSales += row.customerPaid;
+    item.platformCommission += ["cancelled", "returned"].includes(row.status) ? 0 : row.commissionAmount;
+    item.payoutPending += row.payoutStatus === "pending" ? row.sellerPayout : 0;
+    item.payoutPaid += row.payoutStatus === "paid" ? row.sellerPayout : 0;
+    if (["cancelled", "returned"].includes(row.status)) item.cancelledReturned += 1;
+    grouped.set(key, item);
+  });
+  const rows = [...grouped.values()].sort((a, b) => b.totalSales - a.totalSales);
+  const cards = [
+    reportCard("Sellers", rows.length),
+    reportCard("Seller Sales", formatRupees(sumRows(rows, "totalSales"))),
+    reportCard("Platform Commission", formatRupees(sumRows(rows, "platformCommission"))),
+    reportCard("Payout Pending", formatRupees(sumRows(rows, "payoutPending"))),
+    reportCard("Payout Paid", formatRupees(sumRows(rows, "payoutPaid"))),
+  ];
+  if (req.query.export === "true") return sendCsv(req, res, "axzen-seller-report", rows);
+  success(res, reportEnvelope("sellers", cards, rows, { primary: rows.slice(0, 8).map((row) => ({ label: row.sellerName, value: row.totalSales })), secondary: rows.slice(0, 8).map((row) => ({ label: row.sellerName, value: row.totalOrders })) }));
+});
+
+const reportProducts = asyncHandler(async (req, res) => {
+  if (!allowReport(req, res, "products")) return;
+  const { allRows } = await reportOrders(req);
+  let rows = orderProductRows(allRows);
+  const skus = rows.map((row) => row.sku).filter(Boolean);
+  const products = await Product.find({ sku: { $in: skus } }).select("sku title sellerName stock category").lean();
+  const productMap = new Map(products.map((product) => [product.sku, product]));
+  rows = rows.map((row) => ({
+    ...row,
+    product: productMap.get(row.sku)?.title || row.product,
+    sellerName: productMap.get(row.sku)?.sellerName || row.sellerName,
+    currentStock: productMap.get(row.sku)?.stock ?? "-",
+    category: productMap.get(row.sku)?.category || "-",
+    lowStock: Number(productMap.get(row.sku)?.stock ?? 99) <= 5 ? "Yes" : "No",
+  }));
+  const cards = [
+    reportCard("Products Sold", rows.length),
+    reportCard("Quantity Sold", sumRows(rows, "quantitySold")),
+    reportCard("Product Revenue", formatRupees(sumRows(rows, "revenue"))),
+    reportCard("Low Stock Alerts", rows.filter((row) => row.lowStock === "Yes").length),
+    reportCard("Returns", sumRows(rows, "returnCount")),
+  ];
+  if (req.query.export === "true") return sendCsv(req, res, "axzen-product-report", rows);
+  success(res, reportEnvelope("products", cards, rows, { primary: rows.slice(0, 8).map((row) => ({ label: row.product, value: row.revenue })), secondary: rows.slice(0, 8).map((row) => ({ label: row.product, value: row.quantitySold })) }));
+});
+
+const reportPayments = asyncHandler(async (req, res) => {
+  if (!allowReport(req, res, "payments")) return;
+  const { allRows, pageRows, ...pageData } = await reportOrders(req);
+  const rows = pageRows.map((row) => {
+    const actualShippingCost = Number(row.finance?.actualShippingCostPaise || row.actualShippingCost || 0);
+    const gatewayGst = Math.round((row.paymentCharge || 0) * 0.18);
+    return {
+      orderId: row.orderId,
+      sellerName: row.sellerName,
+      customerPaid: row.customerPaid,
+      productTotal: row.productTotal,
+      deliveryCharge: row.deliveryCharge,
+      actualShippingCost,
+      deliveryMargin: row.deliveryCharge - actualShippingCost,
+      platformCommission: row.commissionAmount,
+      gatewayCharge: row.paymentCharge,
+      gatewayGst,
+      netSettlement: Math.max(row.sellerPayout - gatewayGst, 0),
+      sellerPayout: row.sellerPayout,
+      paymentStatus: row.paymentStatus,
+      payoutStatus: row.payoutStatus,
+      transactionId: row.transactionId,
+      paymentMethod: row.paymentMethod,
+      date: row.createdAt,
+      _id: row._id,
+    };
+  });
+  const cards = [
+    reportCard("Customer Paid", formatRupees(sumRows(allRows, "customerPaid"))),
+    reportCard("Platform Commission", formatRupees(sumRows(allRows, "commissionAmount"))),
+    reportCard("Gateway Charges", formatRupees(sumRows(allRows, "paymentCharge"))),
+    reportCard("Seller Payout", formatRupees(sumRows(allRows, "sellerPayout"))),
+    reportCard("Delivery Charges", formatRupees(sumRows(allRows, "deliveryCharge"))),
+  ];
+  if (req.query.export === "true") return sendCsv(req, res, "axzen-payment-report", rows);
+  success(res, reportEnvelope("payments", cards, rows, { primary: groupMoney(allRows, "paymentMethod", "customerPaid"), secondary: statusCounts(allRows) }, pageData));
+});
+
+const reportShipments = asyncHandler(async (req, res) => {
+  if (!allowReport(req, res, "shipments")) return;
+  const { allRows, pageRows, ...pageData } = await reportOrders(req);
+  const deliveries = await Delivery.find({ orderId: { $in: pageRows.map((row) => row.orderId) } }).lean();
+  const deliveryMap = new Map(deliveries.map((delivery) => [delivery.orderId, delivery]));
+  const rows = pageRows.map((row) => {
+    const delivery = deliveryMap.get(row.orderId) || {};
+    const actualShippingCost = Number(row.finance?.actualShippingCostPaise || 0);
+    return {
+      orderId: row.orderId,
+      sellerName: row.sellerName,
+      customerPincode: row.shippingAddress?.pincode || "-",
+      pickupPincode: row.sellerId?.pincode || "-",
+      courierPartner: delivery.partnerName || "-",
+      awbNumber: delivery.trackingNumber || "-",
+      shipmentStatus: delivery.status || row.deliveryStatus || "created",
+      actualShippingCost,
+      customerDeliveryCharge: row.deliveryCharge,
+      deliveryMargin: row.deliveryCharge - actualShippingCost,
+      expectedDeliveryDate: row.finance?.expectedDeliveryDate || "",
+      deliveredDate: delivery.status === "delivered" ? delivery.updatedAt : "",
+      rtoCancelReason: delivery.failedReason || row.failedDeliveryReason || "",
+      _id: row._id,
+    };
+  });
+  const cards = [
+    reportCard("Shipments", allRows.length),
+    reportCard("Delivered", allRows.filter((row) => row.deliveryStatus === "delivered" || row.status === "delivered").length),
+    reportCard("In Transit", allRows.filter((row) => ["packed", "shipped", "out_for_delivery"].includes(row.status)).length),
+    reportCard("Delivery Charges", formatRupees(sumRows(allRows, "deliveryCharge"))),
+    reportCard("Delivery Margin", formatRupees(sumRows(rows, "deliveryMargin"))),
+  ];
+  if (req.query.export === "true") return sendCsv(req, res, "axzen-shipment-report", rows);
+  success(res, reportEnvelope("shipments", cards, rows, { primary: statusCounts(allRows), secondary: groupMoney(allRows, "sellerName", "deliveryCharge") }, pageData));
+});
+
+const reportReturns = asyncHandler(async (req, res) => {
+  if (!allowReport(req, res, "returns")) return;
+  req.query.status = req.query.status || "";
+  const { allRows } = await reportOrders(req);
+  const returnRows = allRows.filter((row) => ["cancelled", "returned"].includes(row.status));
+  const rows = returnRows.map((row) => ({
+    orderId: row.orderId,
+    sellerName: row.sellerName,
+    product: (row.items || []).map((item) => item.title || item.name || "Product").join(", "),
+    customer: row.customerId?.name || row.customerId?.phone || "Customer",
+    reason: row.failedDeliveryReason || row.finance?.refundReason || "-",
+    refundAmount: row.customerPaid,
+    refundStatus: row.paymentStatus === "refunded" ? "refunded" : "pending",
+    returnPickupStatus: row.deliveryStatus || "-",
+    lossAmount: row.commissionAmount + row.paymentCharge,
+    status: row.status,
+    _id: row._id,
+  }));
+  const cards = [
+    reportCard("Returns/Cancels", rows.length),
+    reportCard("Refund Amount", formatRupees(sumRows(rows, "refundAmount"))),
+    reportCard("Loss Amount", formatRupees(sumRows(rows, "lossAmount"))),
+    reportCard("Refunded", rows.filter((row) => row.refundStatus === "refunded").length),
+  ];
+  if (req.query.export === "true") return sendCsv(req, res, "axzen-return-report", rows);
+  success(res, reportEnvelope("returns", cards, rows, { primary: statusCounts(returnRows), secondary: groupMoney(returnRows, "sellerName", "customerPaid") }));
+});
+
+const reportCustomers = asyncHandler(async (req, res) => {
+  if (!allowReport(req, res, "customers")) return;
+  const search = textRegex(req.query.search);
+  const customerFilter = { role: "customer" };
+  if (req.query.status) customerFilter.status = req.query.status;
+  if (search) customerFilter.$or = [{ name: search }, { phone: search }, { email: search }];
+  const customers = await User.find(customerFilter).sort({ createdAt: -1 }).limit(500).lean();
+  const orders = (await Order.find({ customerId: { $in: customers.map((customer) => customer._id) } }).sort({ createdAt: -1 }).limit(5000).lean()).map(orderFinanceRow);
+  const grouped = new Map(customers.map((customer) => [String(customer._id), {
+    _id: customer._id,
+    name: customer.name || "Customer",
+    contact: [customer.phone, customer.email].filter(Boolean).join(" / "),
+    totalOrders: 0,
+    totalSpent: 0,
+    lastOrderDate: "",
+    cancelReturnCount: 0,
+    status: customer.status,
+    signupDate: customer.createdAt,
+  }]));
+  orders.forEach((order) => {
+    const item = grouped.get(String(order.customerId));
+    if (!item) return;
+    item.totalOrders += 1;
+    if (order.paymentStatus === "paid" && !["cancelled", "returned"].includes(order.status)) item.totalSpent += order.customerPaid;
+    if (!item.lastOrderDate || new Date(order.createdAt) > new Date(item.lastOrderDate)) item.lastOrderDate = order.createdAt;
+    if (["cancelled", "returned"].includes(order.status)) item.cancelReturnCount += 1;
+  });
+  const rows = [...grouped.values()];
+  const cards = [
+    reportCard("Customers", rows.length),
+    reportCard("Total Orders", sumRows(rows, "totalOrders")),
+    reportCard("Total Spent", formatRupees(sumRows(rows, "totalSpent"))),
+    reportCard("Cancel/Returns", sumRows(rows, "cancelReturnCount")),
+    reportCard("Active Customers", rows.filter((row) => row.status === "active").length),
+  ];
+  if (req.query.export === "true") return sendCsv(req, res, "axzen-customer-report", rows);
+  success(res, reportEnvelope("customers", cards, rows, { primary: rows.slice(0, 8).map((row) => ({ label: row.name, value: row.totalSpent })), secondary: rows.slice(0, 8).map((row) => ({ label: row.name, value: row.totalOrders })) }));
+});
+
 const exportCsv = asyncHandler(async (req, res) => {
   const type = req.params.type;
   if (type === "finance" && !["superadmin", "finance"].includes(req.user?.role)) {
@@ -657,6 +1053,7 @@ module.exports = {
   approveSeller,
   exportCsv,
   financeSummary,
+  customerDetail,
   listAuditLogs,
   listCustomers,
   listDeliveries,
@@ -671,6 +1068,13 @@ module.exports = {
   productStatuses,
   rejectProduct,
   rejectSeller,
+  reportCustomers,
+  reportPayments,
+  reportProducts,
+  reportReturns,
+  reportSales,
+  reportSellers,
+  reportShipments,
   reports,
   sellerDetail,
   updateCustomer,

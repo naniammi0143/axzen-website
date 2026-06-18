@@ -5,6 +5,9 @@
     view: "dashboard",
     search: "",
     cache: {},
+    reportType: "sales",
+    reportQuery: "",
+    reportRows: [],
   };
 
   const titles = {
@@ -97,10 +100,10 @@
           <tbody>
             ${rows
               .map(
-                (row) => `
+                (row, index) => `
                   <tr>
                     ${columns.map((col) => `<td>${col.render ? col.render(row) : escapeHtml(row[col.key])}</td>`).join("")}
-                    ${actions ? `<td><div class="row-actions">${actions(row)}</div></td>` : ""}
+                    ${actions ? `<td><div class="row-actions">${actions(row, index)}</div></td>` : ""}
                   </tr>
                 `
               )
@@ -424,15 +427,10 @@
   async function openInvoice(id) {
     try {
       const data = await api(`/api/orders/${encodeURIComponent(id)}/invoice`);
-      const printWindow = window.open("", "_blank");
-      if (!printWindow) {
-        toast("Please allow popups to print the invoice.", true);
-        return;
-      }
-      printWindow.document.open();
-      printWindow.document.write(data.invoiceHtml);
-      printWindow.document.close();
-      printWindow.focus();
+      const modal = ensureReportDrawer("invoice", "Invoice");
+      qs(".report-drawer-body", modal).innerHTML = `<iframe class="invoice-frame" title="Invoice ${escapeHtml(data.invoiceNumber)}"></iframe>`;
+      qs(".invoice-frame", modal).srcdoc = data.invoiceHtml;
+      openReportDrawer(modal);
     } catch (error) {
       toast(error.message, true);
     }
@@ -451,6 +449,81 @@
       printWindow.document.close();
       printWindow.focus();
     } catch (error) {
+      toast(error.message, true);
+    }
+  }
+
+  function ensureReportDrawer(id, title) {
+    const nodeId = `reportDrawer-${id}`;
+    let drawer = qs(`#${nodeId}`);
+    if (drawer) {
+      qs(".report-drawer-title", drawer).textContent = title;
+      return drawer;
+    }
+    drawer = document.createElement("div");
+    drawer.id = nodeId;
+    drawer.className = "report-drawer-overlay";
+    drawer.innerHTML = `
+      <aside class="report-drawer" role="dialog" aria-modal="true">
+        <div class="report-drawer-head">
+          <h2 class="report-drawer-title">${escapeHtml(title)}</h2>
+          <button type="button" data-report-drawer-close>Close</button>
+        </div>
+        <div class="report-drawer-body">${emptyState("Loading...")}</div>
+      </aside>
+    `;
+    document.body.appendChild(drawer);
+    drawer.addEventListener("click", (event) => {
+      if (event.target === drawer || event.target.closest("[data-report-drawer-close]")) closeReportDrawers();
+    });
+    return drawer;
+  }
+
+  function openReportDrawer(drawer) {
+    drawer.classList.add("show");
+    document.body.classList.add("seller-detail-open");
+  }
+
+  function closeReportDrawers() {
+    qsa(".report-drawer-overlay").forEach((drawer) => drawer.classList.remove("show"));
+    if (!qs(".seller-detail-overlay.show")) document.body.classList.remove("seller-detail-open");
+  }
+
+  async function openCustomerDetail(id) {
+    const drawer = ensureReportDrawer("customer", "Customer details");
+    qs(".report-drawer-body", drawer).innerHTML = emptyState("Loading customer details...");
+    openReportDrawer(drawer);
+    try {
+      const data = await api(`/api/admin/customers/${id}/detail`);
+      const customer = data.customer || {};
+      const summary = data.summary || {};
+      qs(".report-drawer-body", drawer).innerHTML = `
+        <section class="customer-detail-hero">
+          <h3>${escapeHtml(customer.name || "Customer")}</h3>
+          <p>${escapeHtml([customer.phone, customer.email].filter(Boolean).join(" / ") || "No contact added")}</p>
+          <div class="report-detail-grid">
+            ${sellerMetric("Signup date", dateValue(customer.createdAt), "Joined Axzen")}
+            ${sellerMetric("Total orders", summary.totalOrders || 0, "All time")}
+            ${sellerMetric("Total spent", moneyText(summary.totalSpent), "Paid orders")}
+            ${sellerMetric("Cancel/Returns", summary.cancelledReturns || 0, "Issue count")}
+          </div>
+        </section>
+        <h3 class="drawer-section-title">Order history</h3>
+        ${table(
+          [
+            { label: "Order", render: (row) => escapeHtml(row.orderId) },
+            { label: "Seller", render: (row) => escapeHtml(row.sellerName) },
+            { label: "Amount", render: (row) => rupees(row.customerPaid) },
+            { label: "Status", render: (row) => statusBadge(row.status) },
+            { label: "Payment", render: (row) => statusBadge(row.paymentStatus) },
+            { label: "Date", render: (row) => dateValue(row.createdAt) },
+          ],
+          data.orders || [],
+          (row) => `<button data-action="order-invoice" data-id="${row._id}" data-order="${escapeHtml(row.orderId)}">Invoice</button>`
+        )}
+      `;
+    } catch (error) {
+      qs(".report-drawer-body", drawer).innerHTML = emptyState(error.message);
       toast(error.message, true);
     }
   }
@@ -704,7 +777,10 @@
           { label: "Joined", render: (row) => new Date(row.createdAt).toLocaleDateString() },
         ],
         data.items,
-        (row) => `<button data-action="customer-toggle" data-id="${row._id}" data-status="${row.status === "blocked" ? "active" : "blocked"}">${row.status === "blocked" ? "Unblock" : "Block"}</button>`
+        (row) => `
+          <button data-action="customer-view" data-id="${row._id}">View details</button>
+          <button data-action="customer-toggle" data-id="${row._id}" data-status="${row.status === "blocked" ? "active" : "blocked"}">${row.status === "blocked" ? "Unblock" : "Block"}</button>
+        `
       )
     );
   }
@@ -743,37 +819,172 @@
     );
   }
 
+  const reportTypes = [
+    ["sales", "Sales"],
+    ["sellers", "Sellers"],
+    ["products", "Products"],
+    ["payments", "Payments"],
+    ["shipments", "Shipments"],
+    ["returns", "Returns"],
+    ["customers", "Customers"],
+  ];
+
+  const moneyColumns = new Set([
+    "customerPaid",
+    "netSales",
+    "totalSales",
+    "platformCommission",
+    "payoutPending",
+    "payoutPaid",
+    "revenue",
+    "productTotal",
+    "deliveryCharge",
+    "actualShippingCost",
+    "deliveryMargin",
+    "gatewayCharge",
+    "gatewayGst",
+    "netSettlement",
+    "sellerPayout",
+    "customerDeliveryCharge",
+    "refundAmount",
+    "lossAmount",
+    "totalSpent",
+  ]);
+
+  const reportColumns = {
+    sales: ["orderId", "sellerName", "customer", "customerPaid", "netSales", "status", "paymentStatus", "date"],
+    sellers: ["sellerName", "totalOrders", "totalSales", "platformCommission", "payoutPending", "payoutPaid", "cancelledReturned", "performance"],
+    products: ["product", "sku", "sellerName", "quantitySold", "revenue", "currentStock", "lowStock", "returnCount"],
+    payments: ["orderId", "sellerName", "customerPaid", "productTotal", "deliveryCharge", "platformCommission", "gatewayCharge", "sellerPayout", "paymentStatus", "payoutStatus", "date"],
+    shipments: ["orderId", "sellerName", "customerPincode", "pickupPincode", "courierPartner", "awbNumber", "shipmentStatus", "actualShippingCost", "customerDeliveryCharge", "deliveryMargin"],
+    returns: ["orderId", "sellerName", "product", "customer", "reason", "refundAmount", "refundStatus", "returnPickupStatus", "lossAmount"],
+    customers: ["name", "contact", "totalOrders", "totalSpent", "lastOrderDate", "cancelReturnCount", "status", "signupDate"],
+  };
+
+  function labelize(key) {
+    return key.replace(/([A-Z])/g, " $1").replace(/^./, (char) => char.toUpperCase());
+  }
+
+  function reportCell(row, key) {
+    if (moneyColumns.has(key)) return rupees(row[key]);
+    if (key.toLowerCase().includes("status")) return statusBadge(row[key] || "-");
+    if (key.toLowerCase().includes("date")) return escapeHtml(dateValue(row[key]));
+    return escapeHtml(row[key] ?? "-");
+  }
+
+  function reportTabs(active) {
+    const visibleTypes = state.user?.role === "finance" ? reportTypes.filter(([key]) => key === "payments") : reportTypes;
+    return `
+      <div class="report-tabs" role="tablist">
+        ${visibleTypes.map(([key, label]) => `<button type="button" class="${key === active ? "active" : ""}" data-report-type="${key}">${label}</button>`).join("")}
+      </div>
+      <select class="report-type-select" data-report-select>
+        ${visibleTypes.map(([key, label]) => `<option value="${key}" ${key === active ? "selected" : ""}>${label}</option>`).join("")}
+      </select>
+    `;
+  }
+
+  function reportFilters(data) {
+    const sellers = data.sellers || [];
+    return `
+      <form class="report-filter-panel" data-report-filters>
+        <input type="search" name="search" placeholder="Search orders, sellers, customers" value="${escapeHtml(new URLSearchParams(state.reportQuery).get("search") || "")}">
+        <select name="sellerId">
+          <option value="">All sellers</option>
+          ${sellers.map((seller) => `<option value="${escapeHtml(seller._id)}">${escapeHtml(seller.businessName)}</option>`).join("")}
+        </select>
+        <select name="status">
+          <option value="">Order status</option>
+          ${["placed", "pending", "confirmed", "packed", "shipped", "out_for_delivery", "delivered", "cancelled", "returned"].map((status) => `<option value="${status}">${status.replaceAll("_", " ")}</option>`).join("")}
+        </select>
+        <select name="paymentStatus">
+          <option value="">Payment status</option>
+          ${["pending", "paid", "failed", "refunded"].map((status) => `<option value="${status}">${status}</option>`).join("")}
+        </select>
+        <select name="payoutStatus">
+          <option value="">Payout status</option>
+          ${["pending", "paid", "failed"].map((status) => `<option value="${status}">${status}</option>`).join("")}
+        </select>
+        <input type="date" name="startDate">
+        <input type="date" name="endDate">
+        <button type="submit">Apply Filter</button>
+        <button type="button" class="secondary-button" data-report-clear>Clear</button>
+      </form>
+    `;
+  }
+
+  function reportCharts(data) {
+    const primary = data.charts?.dailySales || data.charts?.primary || [];
+    const secondary = data.charts?.secondary || data.charts?.monthlyRevenue || [];
+    return `
+      <section class="report-chart-grid">
+        <article class="report-chart-card">
+          <div><span>Trend</span><strong>Daily Sales / Revenue</strong></div>
+          ${chartBars(primary, "label", "value")}
+        </article>
+        <article class="report-chart-card">
+          <div><span>Breakdown</span><strong>Orders by status / top performers</strong></div>
+          ${chartBars(secondary, "label", "value")}
+        </article>
+      </section>
+    `;
+  }
+
   function renderReports(data) {
-    qs('[data-view-panel="reports"]').innerHTML =
-      `<div class="report-actions">
-        <button type="button" data-export="orders">Export orders CSV</button>
-        <button type="button" data-export="sellers">Export sellers CSV</button>
-        <button type="button" data-export="products">Export products CSV</button>
-      </div>` +
-      panel(
-        "Seller-wise sales",
-        table(
-          [
-            { label: "Seller", render: (row) => escapeHtml(row._id || "Unknown") },
-            { label: "Orders", render: (row) => escapeHtml(row.orders) },
-            { label: "Revenue", render: (row) => rupees(row.revenuePaise) },
-          ],
-          data.sellerWise
-        )
-      ) +
-      panel(
-        "Product-wise stock and price",
-        table(
-          [
-            { label: "SKU", render: (row) => escapeHtml(row.sku) },
-            { label: "Product", render: (row) => escapeHtml(row.title) },
-            { label: "Category", render: (row) => escapeHtml(row.category) },
-            { label: "Stock", render: (row) => escapeHtml(row.stock) },
-            { label: "Status", render: (row) => statusBadge(row.status) },
-          ],
-          data.productWise
-        )
-      );
+    state.reportRows = data.rows || [];
+    const columns = reportColumns[data.type] || reportColumns.sales;
+    qs('[data-view-panel="reports"]').innerHTML = `
+      <section class="reports-page">
+        <header class="reports-header">
+          <div>
+            <h2>Reports & Analytics</h2>
+            <p>Track sales, payments, sellers, products, shipments and customer performance</p>
+          </div>
+          <div class="reports-header-actions">
+            <button type="button" data-report-export>Export CSV</button>
+            <button type="button" class="secondary-button" data-report-refresh>Refresh</button>
+          </div>
+        </header>
+        ${reportTabs(data.type || state.reportType)}
+        <section class="report-summary-grid">
+          ${(data.cards || []).map((item) => `<article><span>${escapeHtml(item.title)}</span><strong>${escapeHtml(item.value)}</strong><small>${escapeHtml(item.hint || "")}</small></article>`).join("")}
+        </section>
+        ${reportFilters(data)}
+        ${reportCharts(data)}
+        <article class="admin-panel report-table-panel">
+          <div class="panel-heading">
+            <h2>${escapeHtml(reportTypes.find(([key]) => key === data.type)?.[1] || "Report")} Report</h2>
+            <small>${escapeHtml(data.total || 0)} records</small>
+          </div>
+          ${table(
+            columns.map((key) => ({ label: labelize(key), render: (row) => reportCell(row, key) })),
+            data.rows || [],
+            (row, index) => `<button data-action="report-detail" data-index="${index}">View Details</button>${row.orderId && row._id ? ` <button data-action="order-invoice" data-id="${row._id}">Invoice</button>` : ""}`
+          )}
+          <div class="report-pagination">
+            <button type="button" data-report-page="${Math.max((data.page || 1) - 1, 1)}">Prev</button>
+            <span>Page ${escapeHtml(data.page || 1)} of ${escapeHtml(data.totalPages || 1)}</span>
+            <button type="button" data-report-page="${Math.min((data.page || 1) + 1, data.totalPages || 1)}">Next</button>
+          </div>
+        </article>
+      </section>
+    `;
+  }
+
+  function openReportDetail(index) {
+    const row = state.reportRows[Number(index)];
+    if (!row) return;
+    if (state.reportType === "customers" && row._id) return openCustomerDetail(row._id);
+    const drawer = ensureReportDrawer("reportDetail", "Report details");
+    qs(".report-drawer-body", drawer).innerHTML = `
+      <div class="report-detail-grid">
+        ${Object.entries(row)
+          .filter(([key]) => !["_id"].includes(key))
+          .map(([key, value]) => sellerProfileChip(labelize(key), moneyColumns.has(key) ? rupees(value) : key.toLowerCase().includes("date") ? dateValue(value) : value))
+          .join("")}
+      </div>
+    `;
+    openReportDrawer(drawer);
   }
 
   function renderAudit(data) {
@@ -802,7 +1013,10 @@
       if (view === "payments") {
         return renderPayments(await api(`/api/admin/finance/report?${state.financeQuery || ""}`));
       }
-      if (view === "reports") return renderReports(await api("/api/admin/reports"));
+      if (view === "reports") {
+        const query = state.reportQuery ? `?${state.reportQuery}` : "";
+        return renderReports(await api(`/api/admin/reports/${state.reportType}${query}`));
+      }
       const data = await listView(view, state.filterQuery || "");
       const renderers = { sellers: renderSellers, products: renderProducts, orders: renderOrders, customers: renderCustomers, delivery: renderDelivery, employees: renderEmployees, audit: renderAudit };
       renderers[view]?.(data);
@@ -831,10 +1045,64 @@
       window.clearTimeout(state.searchTimer);
       state.searchTimer = window.setTimeout(() => loadView(), 350);
     });
+    document.addEventListener("change", async (event) => {
+      const reportSelect = event.target.closest("[data-report-select]");
+      if (!reportSelect) return;
+      state.reportType = reportSelect.value;
+      state.reportQuery = "";
+      await loadView("reports");
+    });
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") closeSellerDetail();
+      if (event.key === "Escape") {
+        closeSellerDetail();
+        closeReportDrawers();
+      }
     });
     document.addEventListener("click", async (event) => {
+      const reportTypeButton = event.target.closest("[data-report-type]");
+      if (reportTypeButton) {
+        state.reportType = reportTypeButton.dataset.reportType;
+        state.reportQuery = "";
+        await loadView("reports");
+        return;
+      }
+
+      const reportExport = event.target.closest("[data-report-export]");
+      if (reportExport) {
+        const query = new URLSearchParams(state.reportQuery);
+        query.set("export", "true");
+        const response = await fetch(`/api/admin/reports/${state.reportType}?${query.toString()}`, {
+          headers: { Authorization: `Bearer ${state.token}` },
+        });
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `axzen-${state.reportType}-report.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      const reportRefresh = event.target.closest("[data-report-refresh]");
+      if (reportRefresh) return loadView("reports");
+
+      const reportClear = event.target.closest("[data-report-clear]");
+      if (reportClear) {
+        state.reportQuery = "";
+        await loadView("reports");
+        return;
+      }
+
+      const reportPage = event.target.closest("[data-report-page]");
+      if (reportPage) {
+        const query = new URLSearchParams(state.reportQuery);
+        query.set("page", reportPage.dataset.reportPage);
+        state.reportQuery = query.toString();
+        await loadView("reports");
+        return;
+      }
+
       const refreshButton = event.target.closest("[data-refresh-view]");
       if (refreshButton) {
         const panelNode = qs(`[data-view-panel="${refreshButton.dataset.refreshView}"]`);
@@ -888,6 +1156,8 @@
       if (action === "order-cancel") return patch(`/api/admin/orders/${id}`, { status: "cancelled" });
       if (action === "order-invoice") return openInvoice(id || target.dataset.order);
       if (action === "order-label") return openDeliveryLabel(id || target.dataset.order);
+      if (action === "customer-view") return openCustomerDetail(id);
+      if (action === "report-detail") return openReportDetail(target.dataset.index);
       if (action === "customer-toggle") return patch(`/api/admin/customers/${id}`, { status: target.dataset.status });
       if (action === "settlement-paid") return patch(`/api/admin/settlements/${id}`, { status: "paid" });
       if (action === "settlement-hold") return patch(`/api/admin/settlements/${id}`, { status: "hold" });
@@ -897,6 +1167,18 @@
     });
 
     document.addEventListener("submit", async (event) => {
+      const reportForm = event.target.closest("[data-report-filters]");
+      if (reportForm) {
+        event.preventDefault();
+        const params = new URLSearchParams(new FormData(reportForm));
+        [...params.entries()].forEach(([key, value]) => {
+          if (!value) params.delete(key);
+        });
+        state.reportQuery = params.toString();
+        await loadView("reports");
+        return;
+      }
+
       const form = event.target.closest("[data-finance-filters]");
       if (!form) return;
       event.preventDefault();
@@ -916,6 +1198,12 @@
       qs("#adminRoleLabel").textContent = `${user.role.replaceAll("_", " ")} access`;
       if (!["superadmin", "finance"].includes(user.role)) {
         qs('[data-admin-view="payments"]')?.setAttribute("hidden", "hidden");
+      }
+      if (user.role === "finance") {
+        state.reportType = "payments";
+      }
+      if (!["superadmin", "admin", "finance"].includes(user.role)) {
+        qs('[data-admin-view="reports"]')?.setAttribute("hidden", "hidden");
       }
       bindEvents();
       loadView("dashboard");
