@@ -2,6 +2,7 @@ const fs = require("fs/promises");
 const path = require("path");
 const User = require("../models/User");
 const Seller = require("../models/Seller");
+const { verifyFirebaseToken } = require("../config/firebase");
 const asyncHandler = require("../utils/asyncHandler");
 const { success } = require("../utils/apiResponse");
 const { hashPassword } = require("../utils/password");
@@ -34,6 +35,7 @@ function validateRegistration(body, files) {
     "accountHolderName",
     "accountNumber",
     "ifsc",
+    "firebaseToken",
   ];
 
   const missing = required.filter((field) => !clean(body[field]));
@@ -100,6 +102,12 @@ const registerSeller = asyncHandler(async (req, res) => {
 
   const phone = normalizePhone(req.body.mobile);
   const email = clean(req.body.email).toLowerCase();
+  const decoded = await verifyFirebaseToken(req.body.firebaseToken);
+
+  if (decoded.phone_number !== phone) {
+    res.status(400).json({ ok: false, message: "Verified OTP mobile does not match registration mobile." });
+    return;
+  }
 
   const duplicateUser = await User.findOne({
     $or: [{ phone }, { email }],
@@ -123,6 +131,7 @@ const registerSeller = asyncHandler(async (req, res) => {
     name: clean(req.body.fullName),
     email,
     phone,
+    firebaseUid: decoded.uid,
     passwordHash: hashPassword(req.body.password),
     role: "seller",
     status: "pending",

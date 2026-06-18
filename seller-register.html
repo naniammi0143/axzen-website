@@ -7,12 +7,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body class="portal-page seller-register-page">
   <header class="site-header">
     <a class="brand" href="/seller" aria-label="Seller Axzen home">
-      <img class="brand-logo" src="assets/logo.png" alt="Axzen" onerror="this.hidden=true">
+      <img class="brand-logo" src="/assets/logo.png" alt="Axzen" onerror="this.hidden=true">
       <span class="brand-mark">S</span>
       <span class="sr-only">Seller Axzen</span>
     </a>
@@ -27,39 +27,57 @@
       <div>
         <p class="eyebrow">Seller registration</p>
         <h1>Register as Seller on Axzen</h1>
-        <p>Submit your store, KYC, pickup, and bank details. Your seller account stays pending until the Axzen admin team approves it.</p>
+        <p>Start with mobile OTP verification. After your contact is verified, complete store, KYC, pickup, and bank details for admin approval.</p>
       </div>
     </section>
 
     <section class="section seller-register-section">
       <form class="seller-register-form" id="sellerRegisterForm" enctype="multipart/form-data" novalidate>
-        <div class="form-block">
+        <div class="form-block seller-otp-block">
           <div class="form-block-heading">
-            <p class="eyebrow">Account</p>
-            <h2>Seller details</h2>
+            <p class="eyebrow">Step 1</p>
+            <h2>Verify seller contact</h2>
           </div>
-          <label>Seller full name<input name="fullName" type="text" required></label>
           <label>Mobile number<input name="mobile" type="tel" inputmode="numeric" maxlength="10" required></label>
+          <label>Seller company name<input name="storeName" type="text" required></label>
+          <label>Business type<input name="businessType" type="text" placeholder="Proprietorship, Pvt Ltd, Home business" required></label>
+          <label>Contact person name<input name="fullName" type="text" required></label>
+          <div id="recaptcha-seller-register" class="recaptcha-box"></div>
+          <button class="secondary-button" type="button" data-send-register-otp>Send OTP</button>
+          <label class="otp-field" hidden>OTP<input name="otp" type="text" inputmode="numeric" placeholder="Enter OTP"></label>
+          <button class="primary-button" type="button" data-verify-register-otp hidden>Verify OTP</button>
+        </div>
+
+        <div class="seller-verified-banner" id="sellerVerifiedBanner" hidden>
+          <span>Verified seller contact</span>
+          <strong id="sellerVerifiedName">Seller</strong>
+          <small>Complete the remaining details below for admin approval.</small>
+        </div>
+
+        <div class="form-block" data-after-otp hidden>
+          <div class="form-block-heading">
+            <p class="eyebrow">Step 2</p>
+            <h2>Account login</h2>
+          </div>
           <label>Email<input name="email" type="email" required></label>
           <label>Password<input name="password" type="password" minlength="8" required></label>
           <label>Confirm password<input name="confirmPassword" type="password" minlength="8" required></label>
+          <input name="firebaseToken" type="hidden" required>
         </div>
 
-        <div class="form-block">
+        <div class="form-block" data-after-otp hidden>
           <div class="form-block-heading">
-            <p class="eyebrow">Business</p>
-            <h2>Store and KYC</h2>
+            <p class="eyebrow">Step 3</p>
+            <h2>KYC</h2>
           </div>
-          <label>Store name<input name="storeName" type="text" required></label>
-          <label>Business type<input name="businessType" type="text" placeholder="Proprietorship, Pvt Ltd, Home business" required></label>
           <label>GST number optional<input name="gstNumber" type="text"></label>
           <label>PAN number<input name="panNumber" type="text" maxlength="10" required></label>
           <label>Aadhaar number optional<input name="aadhaarNumber" type="text" inputmode="numeric" maxlength="12"></label>
         </div>
 
-        <div class="form-block">
+        <div class="form-block" data-after-otp hidden>
           <div class="form-block-heading">
-            <p class="eyebrow">Pickup</p>
+            <p class="eyebrow">Step 4</p>
             <h2>Address</h2>
           </div>
           <label class="full-row">Pickup address<textarea name="pickupAddress" rows="4" required></textarea></label>
@@ -68,9 +86,9 @@
           <label>Pincode<input name="pincode" type="text" inputmode="numeric" maxlength="6" required></label>
         </div>
 
-        <div class="form-block">
+        <div class="form-block" data-after-otp hidden>
           <div class="form-block-heading">
-            <p class="eyebrow">Payouts</p>
+            <p class="eyebrow">Step 5</p>
             <h2>Bank details</h2>
           </div>
           <label>Bank account holder name<input name="accountHolderName" type="text" required></label>
@@ -79,9 +97,9 @@
           <label>UPI ID optional<input name="upiId" type="text"></label>
         </div>
 
-        <div class="form-block">
+        <div class="form-block" data-after-otp hidden>
           <div class="form-block-heading">
-            <p class="eyebrow">Documents</p>
+            <p class="eyebrow">Step 6</p>
             <h2>KYC upload</h2>
           </div>
           <label>Upload PAN document<input name="panDocument" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required></label>
@@ -89,11 +107,11 @@
         </div>
 
         <p class="form-message" id="sellerRegisterMessage" aria-live="polite"></p>
-        <button class="primary-button seller-register-submit" type="submit">Submit seller registration</button>
+        <button class="primary-button seller-register-submit" type="submit" disabled>Submit seller registration</button>
       </form>
     </section>
   </main>
 
-  <script src="seller-register.js"></script>
+  <script type="module" src="/seller-register.js"></script>
 </body>
 </html>

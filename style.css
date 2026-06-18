@@ -1751,6 +1751,40 @@ h3 {
   justify-self: start;
 }
 
+.seller-otp-block {
+  border-color: rgba(0, 113, 227, 0.2);
+  box-shadow: 0 24px 70px rgba(0, 113, 227, 0.1);
+}
+
+.seller-otp-block .secondary-button,
+.seller-otp-block .primary-button {
+  align-self: end;
+  min-height: 48px;
+}
+
+.seller-verified-banner {
+  display: grid;
+  gap: 4px;
+  padding: 18px 22px;
+  color: #064e3b;
+  background: linear-gradient(135deg, #ecfdf3, #e8f3ff);
+  border: 1px solid rgba(52, 199, 89, 0.18);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+}
+
+.seller-verified-banner span,
+.seller-verified-banner small {
+  color: #047857;
+  font-weight: 800;
+}
+
+.seller-verified-banner strong {
+  color: #111827;
+  font-size: 24px;
+  letter-spacing: -0.03em;
+}
+
 /* Modern Apple-style refresh */
 body,
 .storefront-page,
