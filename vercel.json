@@ -32,6 +32,17 @@
       ],
       "destination": "/api",
       "permanent": false
+    },
+    {
+      "source": "/register",
+      "has": [
+        {
+          "type": "host",
+          "value": "seller.axzen.in"
+        }
+      ],
+      "destination": "/seller-register.html",
+      "permanent": false
     }
   ],
   "rewrites": [
@@ -46,6 +57,14 @@
     {
       "source": "/seller",
       "destination": "/seller.html"
+    },
+    {
+      "source": "/seller/register",
+      "destination": "/seller-register.html"
+    },
+    {
+      "source": "/register",
+      "destination": "/seller-register.html"
     },
     {
       "source": "/admin",
