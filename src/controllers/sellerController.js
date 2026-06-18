@@ -108,6 +108,8 @@ function buildSellerUpdate(req, phone, email) {
     status: "inactive",
     isActive: false,
     payoutEnabled: false,
+    codEnabled: req.body.codEnabled !== "false",
+    onlinePaymentEnabled: req.body.onlinePaymentEnabled !== "false",
     bankDetails: {
       accountHolderName: clean(req.body.accountHolderName),
       accountNumber: clean(req.body.accountNumber),
@@ -124,15 +126,20 @@ const getProfile = asyncHandler(async (req, res) => {
 });
 
 const updateProfile = asyncHandler(async (req, res) => {
+  const update = {
+    phone: req.user.phone,
+  };
+
+  if (req.body.businessName !== undefined) update.businessName = req.body.businessName;
+  if (req.body.category !== undefined) update.category = req.body.category;
+  if (req.body.city !== undefined) update.city = req.body.city;
+  if (req.body.codEnabled !== undefined) update.codEnabled = Boolean(req.body.codEnabled);
+  if (req.body.onlinePaymentEnabled !== undefined) update.onlinePaymentEnabled = Boolean(req.body.onlinePaymentEnabled);
+
   const seller = await Seller.findOneAndUpdate(
     { userId: req.user.id },
     {
-      $set: {
-        businessName: req.body.businessName,
-        category: req.body.category,
-        city: req.body.city,
-        phone: req.user.phone,
-      },
+      $set: update,
     },
     { new: true, upsert: true }
   );

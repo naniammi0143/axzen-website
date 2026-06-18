@@ -105,7 +105,95 @@ async function openOrderInvoice(orderId) {
   printWindow.focus();
 }
 
+async function openDeliveryLabel(orderId) {
+  const token = localStorage.getItem("axzenToken");
+  const response = await fetch(`/api/orders/${encodeURIComponent(orderId)}/delivery-label`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "Unable to open delivery label.");
+  }
+
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    throw new Error("Please allow popups to print the delivery label.");
+  }
+  printWindow.document.open();
+  printWindow.document.write(result.labelHtml);
+  printWindow.document.close();
+  printWindow.focus();
+}
+
+function renderSellerPaymentSettings(seller = {}) {
+  return `
+    <article class="dashboard-panel seller-payment-settings">
+      <div class="order-invoice-heading">
+        <div>
+          <p class="eyebrow">Seller Payment Agent</p>
+          <h3>Payment options</h3>
+        </div>
+        <span>${seller.codEnabled ? "COD on" : "COD off"}</span>
+      </div>
+      <div class="seller-payment-toggle-grid">
+        <button type="button" data-seller-setting="codEnabled" data-value="${seller.codEnabled ? "false" : "true"}">
+          <span>Cash on Delivery</span>
+          <strong>${seller.codEnabled ? "Enabled" : "Disabled"}</strong>
+          <small>Seller can allow or stop COD orders.</small>
+        </button>
+        <button type="button" data-seller-setting="onlinePaymentEnabled" data-value="${seller.onlinePaymentEnabled ? "false" : "true"}">
+          <span>Online Payment</span>
+          <strong>${seller.onlinePaymentEnabled ? "Enabled" : "Disabled"}</strong>
+          <small>Ready for Razorpay/payment gateway integration.</small>
+        </button>
+      </div>
+    </article>
+  `;
+}
+
 function renderOrderInvoicePanel(orders = [], role = "customer") {
+  if (role === "seller") {
+    return `
+      <article class="dashboard-panel order-invoice-panel seller-payout-panel" id="orderInvoicePanel">
+        <div class="order-invoice-heading">
+          <div>
+            <p class="eyebrow">Seller orders</p>
+            <h3>Order payout details</h3>
+          </div>
+          <span>${orders.length} orders</span>
+        </div>
+        ${
+          orders.length
+            ? `<div class="seller-payout-list">
+                ${orders
+                  .map(
+                    (order) => `
+                      <div class="seller-payout-card">
+                        <div class="seller-payout-title">
+                          <strong>${escapeHtml(order.orderId)}</strong>
+                          <span>${escapeHtml(order.status || "placed")} | payout ${escapeHtml(order.payoutStatus || "pending")}</span>
+                        </div>
+                        <div class="seller-payout-breakup">
+                          <span><small>Product total</small><b>${rupees(order.productTotal)}</b></span>
+                          <span><small>Platform fee</small><b>- ${rupees(order.platformFee)}</b></span>
+                          <span><small>Online payment charge</small><b>- ${rupees(order.paymentCharge)}</b></span>
+                          <span class="net"><small>Seller payout</small><b>${rupees(order.sellerPayout)}</b></span>
+                        </div>
+                        <button class="seller-label-button" type="button" data-print-label="${escapeHtml(order._id || order.orderId)}">Print delivery label</button>
+                      </div>
+                    `
+                  )
+                  .join("")}
+              </div>`
+            : `<p class="order-invoice-empty">No seller orders yet. Order payout details will appear here after customers place orders.</p>`
+        }
+      </article>
+    `;
+  }
+
   return `
     <article class="dashboard-panel order-invoice-panel" id="orderInvoicePanel">
       <div class="order-invoice-heading">
@@ -147,19 +235,51 @@ async function loadRoleOrders(role) {
   const token = localStorage.getItem("axzenToken");
   const endpoint = role === "seller" ? "/api/orders/seller" : "/api/orders/customer";
   try {
-    const response = await fetch(endpoint, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.message || "Unable to load orders.");
+    const [ordersResponse, sellerResponse] = await Promise.all([
+      fetch(endpoint, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }),
+      role === "seller"
+        ? fetch("/api/sellers/me", {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          })
+        : Promise.resolve(null),
+    ]);
+    const result = await ordersResponse.json();
+    const sellerResult = sellerResponse ? await sellerResponse.json() : null;
+    if (!ordersResponse.ok) throw new Error(result.message || "Unable to load orders.");
     document.querySelector("#orderInvoicePanel")?.remove();
+    document.querySelector(".seller-payment-settings")?.remove();
+    if (role === "seller") {
+      dashboardPanels.insertAdjacentHTML("beforeend", renderSellerPaymentSettings(sellerResult?.seller || {}));
+    }
     dashboardPanels.insertAdjacentHTML("beforeend", renderOrderInvoicePanel(result.orders || [], role));
   } catch (error) {
     document.querySelector("#orderInvoicePanel")?.remove();
+    document.querySelector(".seller-payment-settings")?.remove();
     dashboardPanels.insertAdjacentHTML("beforeend", renderOrderInvoicePanel([], role));
   }
+}
+
+async function updateSellerSetting(key, value) {
+  const token = localStorage.getItem("axzenToken");
+  const response = await fetch("/api/sellers/me", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ [key]: value === "true" }),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.message || "Unable to update seller settings.");
+  }
+  await loadRoleOrders("seller");
 }
 
 function getRecaptcha(form) {
@@ -419,7 +539,36 @@ phoneForms.forEach((form) => {
 
 document.addEventListener("click", async (event) => {
   const invoiceButton = event.target.closest("[data-print-invoice]");
-  if (!invoiceButton) return;
+  const labelButton = event.target.closest("[data-print-label]");
+  const settingButton = event.target.closest("[data-seller-setting]");
+  if (!invoiceButton && !labelButton && !settingButton) return;
+
+  if (settingButton) {
+    settingButton.disabled = true;
+    try {
+      await updateSellerSetting(settingButton.dataset.sellerSetting, settingButton.dataset.value);
+    } catch (error) {
+      alert(error.message || "Unable to update seller settings.");
+      settingButton.disabled = false;
+    }
+    return;
+  }
+
+  if (labelButton) {
+    labelButton.disabled = true;
+    const originalText = labelButton.textContent;
+    labelButton.textContent = "Opening...";
+    try {
+      await openDeliveryLabel(labelButton.dataset.printLabel);
+    } catch (error) {
+      alert(error.message || "Unable to open delivery label.");
+    } finally {
+      labelButton.disabled = false;
+      labelButton.textContent = originalText;
+    }
+    return;
+  }
+
   invoiceButton.disabled = true;
   const originalText = invoiceButton.textContent;
   invoiceButton.textContent = "Opening...";

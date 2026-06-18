@@ -326,6 +326,8 @@
             ${sellerProfileChip("Bank holder", bank.accountHolderName)}
             ${sellerProfileChip("IFSC", bank.ifsc)}
             ${sellerProfileChip("UPI", bank.upiId || "Optional / not added")}
+            ${sellerProfileChip("COD", seller.codEnabled ? "Enabled" : "Disabled")}
+            ${sellerProfileChip("Online payment", seller.onlinePaymentEnabled ? "Enabled" : "Disabled")}
           </div>
         </article>
 
@@ -429,6 +431,23 @@
       }
       printWindow.document.open();
       printWindow.document.write(data.invoiceHtml);
+      printWindow.document.close();
+      printWindow.focus();
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+
+  async function openDeliveryLabel(id) {
+    try {
+      const data = await api(`/api/orders/${encodeURIComponent(id)}/delivery-label`);
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        toast("Please allow popups to print the delivery label.", true);
+        return;
+      }
+      printWindow.document.open();
+      printWindow.document.write(data.labelHtml);
       printWindow.document.close();
       printWindow.focus();
     } catch (error) {
@@ -622,6 +641,7 @@
             <button data-action="order-next" data-id="${row._id}" data-status="${nextOrderStatus(row.status)}">Next</button>
             <button data-action="order-cancel" data-id="${row._id}">Cancel</button>
             <button data-action="order-invoice" data-id="${row._id}" data-order="${escapeHtml(row.orderId)}">Invoice</button>
+            <button data-action="order-label" data-id="${row._id}" data-order="${escapeHtml(row.orderId)}">Label</button>
           `
         )
     );
@@ -639,6 +659,7 @@
       `<div class="admin-stats">
         ${card("Total Customer Payments", summary.customerPayments?.formatted || "Rs. 0", "Product + delivery")}
         ${card("Platform Commission", summary.platformCommission?.formatted || "Rs. 0", "Product total only")}
+        ${card("Online Payment Charges", summary.onlinePaymentCharges?.formatted || "Rs. 0", "Deducted before payout")}
         ${card("Payout Pending", summary.sellerPayoutPending?.formatted || "Rs. 0", "Seller queue")}
         ${card("Payout Paid", summary.sellerPayoutPaid?.formatted || "Rs. 0", "Completed")}
         ${card("Delivery Charges", summary.deliveryCharges?.formatted || "Rs. 0", "Separate from commission")}
@@ -655,6 +676,7 @@
             { label: "Customer Paid", render: (row) => rupees(row.customerPaid) },
             { label: "Commission", render: (row) => `${escapeHtml(row.commissionType)} ${escapeHtml(row.commissionValue)}` },
             { label: "Commission Amount", render: (row) => rupees(row.commissionAmount) },
+            { label: "Payment Charge", render: (row) => rupees(row.paymentCharge) },
             { label: "Seller Payout", render: (row) => rupees(row.sellerPayout) },
             { label: "Payment", render: (row) => statusBadge(row.paymentStatus) },
             { label: "Payout", render: (row) => statusBadge(row.payoutStatus) },
@@ -865,6 +887,7 @@
       if (action === "order-next") return patch(`/api/admin/orders/${id}`, { status: target.dataset.status });
       if (action === "order-cancel") return patch(`/api/admin/orders/${id}`, { status: "cancelled" });
       if (action === "order-invoice") return openInvoice(id || target.dataset.order);
+      if (action === "order-label") return openDeliveryLabel(id || target.dataset.order);
       if (action === "customer-toggle") return patch(`/api/admin/customers/${id}`, { status: target.dataset.status });
       if (action === "settlement-paid") return patch(`/api/admin/settlements/${id}`, { status: "paid" });
       if (action === "settlement-hold") return patch(`/api/admin/settlements/${id}`, { status: "hold" });

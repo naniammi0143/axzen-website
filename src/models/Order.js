@@ -18,6 +18,8 @@ const orderSchema = new mongoose.Schema(
     commissionType: { type: String, enum: ["percentage", "fixed"], default: "percentage" },
     commissionValue: { type: Number, min: 0, default: 0 },
     commissionAmount: { type: Number, min: 0, default: 0 },
+    paymentCharge: { type: Number, min: 0, default: 0 },
+    paymentChargePercent: { type: Number, min: 0, default: 0 },
     sellerPayout: { type: Number, min: 0, default: 0 },
     paymentStatus: { type: String, enum: ["pending", "paid", "failed", "refunded"], default: "pending" },
     payoutStatus: { type: String, enum: ["pending", "paid", "failed"], default: "pending" },

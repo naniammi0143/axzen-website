@@ -33,6 +33,8 @@ const sellerSchema = new mongoose.Schema(
       upiId: { type: String, trim: true, default: "" },
     },
     payoutEnabled: { type: Boolean, default: true },
+    codEnabled: { type: Boolean, default: true },
+    onlinePaymentEnabled: { type: Boolean, default: true },
     kycDocuments: [
       {
         type: { type: String, enum: ["pan", "kyc"], required: true },

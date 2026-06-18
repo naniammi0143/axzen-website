@@ -3832,6 +3832,120 @@ h1 {
   font-weight: 750;
 }
 
+.seller-payout-list {
+  display: grid;
+  gap: 12px;
+}
+
+.seller-payment-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.seller-payment-toggle-grid button {
+  display: grid;
+  gap: 7px;
+  padding: 16px;
+  text-align: left;
+  color: #111827;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), #fff);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+}
+
+.seller-payment-toggle-grid span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.seller-payment-toggle-grid strong {
+  font-size: 20px;
+}
+
+.seller-payment-toggle-grid small {
+  color: #64748b;
+  font-weight: 750;
+}
+
+.seller-payout-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  background: rgba(248, 250, 252, 0.95);
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: 18px;
+}
+
+.seller-payout-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.seller-payout-title strong {
+  color: #111827;
+  font-size: 17px;
+}
+
+.seller-payout-title span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.seller-payout-breakup {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.seller-payout-breakup span {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 14px;
+}
+
+.seller-payout-breakup small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.seller-payout-breakup b {
+  color: #111827;
+  font-size: 15px;
+}
+
+.seller-payout-breakup .net {
+  color: #fff;
+  background: #0f172a;
+}
+
+.seller-payout-breakup .net small,
+.seller-payout-breakup .net b {
+  color: #fff;
+}
+
+.seller-label-button {
+  width: max-content;
+  min-height: 38px;
+  padding: 0 15px;
+  color: #fff;
+  background: #0071e3;
+  border: 0;
+  border-radius: 999px;
+  font-weight: 900;
+}
+
 .status-badge {
   min-height: 24px;
   font-size: 11px;
@@ -3956,6 +4070,20 @@ h1 {
   }
 
   .order-invoice-card button {
+    width: 100%;
+  }
+
+  .seller-payout-title,
+  .seller-payout-breakup,
+  .seller-payment-toggle-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .seller-payout-title {
+    display: grid;
+  }
+
+  .seller-label-button {
     width: 100%;
   }
 }

@@ -32,6 +32,9 @@ MONGO_URI=mongodb+srv://USERNAME:PASSWORD@CLUSTER.mongodb.net/axzen?retryWrites=
 JWT_SECRET=change-this-long-random-secret
 FIREBASE_PROJECT_ID=axzen-c70e1
 FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"axzen-c70e1"}
+RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxxx
+RAZORPAY_KEY_SECRET=keep-this-secret-in-vercel-env
+PAYMENT_CHARGE_PERCENT=2
 CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
 CLOUDINARY_API_SECRET=
@@ -71,6 +74,10 @@ Error:
 - `POST /api/orders`
 - `GET /api/orders/customer`
 - `GET /api/orders/seller`
+- `POST /api/orders/razorpay/order`
+- `POST /api/orders/razorpay/verify`
+- `GET /api/orders/:id/invoice`
+- `GET /api/orders/:id/delivery-label`
 - `GET /api/sellers/me`
 - `PUT /api/sellers/me`
 - `PATCH /api/admin/sellers/:id/approve`
@@ -94,3 +101,15 @@ Compatibility endpoints currently used by the frontend:
 - Admin routes use role middleware.
 - Auth route has rate limiting.
 - Money is stored in integer paise, not floating point rupees.
+- Keep payment gateway secrets only in environment variables. Do not commit Razorpay key secrets to the repo.
+
+## Order Workflow
+
+1. Customer places order with seller-enabled payment method.
+2. Seller can enable/disable Cash on Delivery and online payments from seller dashboard.
+3. COD orders are created with `paymentStatus=pending`.
+4. Online/Razorpay orders can create a Razorpay checkout order and verify signature after payment.
+5. Seller payout is calculated as `Product Total - Platform Fee - Online Payment Charge`.
+6. Customer invoice is visible to customer and admin only.
+7. Seller sees payout breakup and delivery label, not customer invoice.
+8. Admin can print invoice and delivery label from Order Management.

@@ -9,7 +9,7 @@ const Settlement = require("../models/Settlement");
 const User = require("../models/User");
 const asyncHandler = require("../utils/asyncHandler");
 const { success } = require("../utils/apiResponse");
-const { formatRupees } = require("../utils/money");
+const { formatRupees, getPaymentChargePercent } = require("../utils/money");
 
 const orderStatuses = ["pending", "confirmed", "packed", "shipped", "out_for_delivery", "delivered", "cancelled", "returned"];
 const productStatuses = ["pending_approval", "approved", "active", "rejected", "blocked", "inactive"];
@@ -45,7 +45,10 @@ function orderFinanceRow(order) {
   const deliveryCharge = orderFinanceValue(order, "deliveryCharge", "deliveryChargePaise") || orderFinanceValue(order, "deliveryCharge", "deliveryFeePaise");
   const customerPaid = orderFinanceValue(order, "customerPaid", "customerPaidPaise") || orderFinanceValue(order, "customerPaid", "totalPaise");
   const commissionAmount = orderFinanceValue(order, "commissionAmount", "commissionAmountPaise") || orderFinanceValue(order, "commissionAmount", "commissionPaise");
-  const sellerPayout = orderFinanceValue(order, "sellerPayout", "sellerPayoutPaise") || orderFinanceValue(order, "sellerPayout", "sellerEarningsPaise");
+  const savedPaymentCharge = orderFinanceValue(order, "paymentCharge", "paymentChargePaise") || orderFinanceValue(order, "paymentCharge", "onlinePaymentChargePaise");
+  const paymentCharge = savedPaymentCharge || Math.min(Math.round((productTotal * getPaymentChargePercent()) / 100), Math.max(productTotal - commissionAmount, 0));
+  const savedSellerPayout = savedPaymentCharge ? orderFinanceValue(order, "sellerPayout", "sellerPayoutPaise") || orderFinanceValue(order, "sellerPayout", "sellerEarningsPaise") : 0;
+  const sellerPayout = Math.max(savedSellerPayout || productTotal - commissionAmount - paymentCharge, 0);
 
   return {
     ...order,
@@ -55,6 +58,7 @@ function orderFinanceRow(order) {
     commissionType: order.commissionType || order.finance?.commissionType || "percentage",
     commissionValue: Number(order.commissionValue ?? order.finance?.commissionValue ?? ((order.finance?.commissionBps || 0) / 100)),
     commissionAmount,
+    paymentCharge,
     sellerPayout,
     payoutStatus: order.payoutStatus || "pending",
     transactionId: order.transactionId || "",
@@ -285,6 +289,8 @@ const updateSeller = asyncHandler(async (req, res) => {
     "commissionValue",
     "bankDetails",
     "payoutEnabled",
+    "codEnabled",
+    "onlinePaymentEnabled",
     "storeDetails",
     "pickupAddress",
   ];
@@ -449,12 +455,13 @@ const paymentCommissionReport = asyncHandler(async (req, res) => {
     Seller.find().sort({ businessName: 1 }).select("businessName").lean(),
   ]);
 
-  const allRows = await Order.find(filter).select("finance productTotal deliveryCharge customerPaid commissionAmount sellerPayout payoutStatus paymentStatus").lean();
+  const allRows = await Order.find(filter).select("finance productTotal deliveryCharge customerPaid commissionAmount paymentCharge sellerPayout payoutStatus paymentStatus").lean();
   const summary = allRows.reduce(
     (totals, order) => {
       const row = orderFinanceRow(order);
       totals.customerPayments += row.paymentStatus === "refunded" ? 0 : row.customerPaid;
       totals.platformCommission += row.paymentStatus === "refunded" ? 0 : row.commissionAmount;
+      totals.onlinePaymentCharges += row.paymentStatus === "refunded" ? 0 : row.paymentCharge;
       totals.sellerPayoutPending += row.payoutStatus === "pending" && row.paymentStatus !== "refunded" ? row.sellerPayout : 0;
       totals.sellerPayoutPaid += row.payoutStatus === "paid" ? row.sellerPayout : 0;
       totals.deliveryCharges += row.paymentStatus === "refunded" ? 0 : row.deliveryCharge;
@@ -463,6 +470,7 @@ const paymentCommissionReport = asyncHandler(async (req, res) => {
     {
       customerPayments: 0,
       platformCommission: 0,
+      onlinePaymentCharges: 0,
       sellerPayoutPending: 0,
       sellerPayoutPaid: 0,
       deliveryCharges: 0,

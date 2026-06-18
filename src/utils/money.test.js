@@ -11,7 +11,9 @@ test("calculates percentage commission on product total only", () => {
   assert.equal(finance.deliveryChargePaise, 5000);
   assert.equal(finance.customerPaidPaise, 105000);
   assert.equal(finance.commissionAmountPaise, 10000);
-  assert.equal(finance.sellerPayoutPaise, 90000);
+  assert.equal(finance.paymentChargePaise, 2000);
+  assert.equal(finance.sellerPayoutBeforePaymentChargePaise, 90000);
+  assert.equal(finance.sellerPayoutPaise, 88000);
 });
 
 test("calculates fixed commission and prevents negative payout", () => {

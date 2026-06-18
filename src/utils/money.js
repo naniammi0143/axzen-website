@@ -35,6 +35,11 @@ function calculateCommission(productTotalPaise, commission = {}) {
   };
 }
 
+function getPaymentChargePercent(defaultPercent = 2) {
+  const configured = Number(process.env.PAYMENT_CHARGE_PERCENT ?? process.env.DEFAULT_PAYMENT_CHARGE_PERCENT ?? defaultPercent);
+  return Number.isFinite(configured) && configured >= 0 ? configured : defaultPercent;
+}
+
 function getSellerCommission(seller, defaultCommission = {}) {
   if (seller?.commissionType && seller.commissionValue !== undefined && seller.commissionValue !== null) {
     return {
@@ -60,6 +65,9 @@ function calculateOrderFinance(items, commission = {}, deliveryChargePaise = 400
   const productTotalPaise = items.reduce((total, item) => total + item.pricePaise * item.quantity, 0);
   const safeDeliveryChargePaise = Math.max(Number(deliveryChargePaise) || 0, 0);
   const calculated = calculateCommission(productTotalPaise, commission);
+  const paymentChargePercent = getPaymentChargePercent();
+  const paymentChargePaise = Math.min(Math.round((productTotalPaise * paymentChargePercent) / 100), calculated.sellerPayoutPaise);
+  const netSellerPayoutPaise = Math.max(calculated.sellerPayoutPaise - paymentChargePaise, 0);
   const customerPaidPaise = productTotalPaise + safeDeliveryChargePaise;
 
   return {
@@ -74,13 +82,18 @@ function calculateOrderFinance(items, commission = {}, deliveryChargePaise = 400
     commissionValue: calculated.commissionValue,
     commissionAmountPaise: calculated.commissionAmountPaise,
     commissionPaise: calculated.commissionAmountPaise,
-    sellerPayoutPaise: calculated.sellerPayoutPaise,
-    sellerEarningsPaise: calculated.sellerPayoutPaise,
+    paymentChargePercent,
+    paymentChargePaise,
+    onlinePaymentChargePaise: paymentChargePaise,
+    sellerPayoutBeforePaymentChargePaise: calculated.sellerPayoutPaise,
+    sellerPayoutPaise: netSellerPayoutPaise,
+    sellerEarningsPaise: netSellerPayoutPaise,
   };
 }
 
 module.exports = {
   calculateCommission,
+  getPaymentChargePercent,
   toPaise,
   formatRupees,
   calculateOrderFinance,
