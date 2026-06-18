@@ -24,9 +24,9 @@
 <body class="storefront-page">
   <header class="commerce-header">
     <a class="brand commerce-brand" href="/" aria-label="Axzen home">
-      <img class="brand-logo" src="assets/logo.png" alt="" onerror="this.hidden=true">
+      <img class="brand-logo" src="assets/logo.png" alt="Axzen" onerror="this.hidden=true">
       <span class="brand-mark">A</span>
-      <span>Axzen.in</span>
+      <span class="sr-only">Axzen.in</span>
     </a>
 
     <form class="commerce-search">
@@ -165,16 +165,27 @@
       </div>
     </section>
 
-    <section class="section login-section" id="login">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">Customer account</p>
-          <h2>Login to manage orders and addresses.</h2>
+    <section class="section login-section customer-login-section" id="login">
+      <div class="customer-login-copy">
+        <p class="eyebrow">Customer account</p>
+        <h2>Login once. Track every order from one place.</h2>
+        <p>Use phone OTP to open your Axzen account, manage addresses, view cart details, and follow delivery updates securely.</p>
+        <div class="auth-highlights" aria-label="Customer account features">
+          <span>Secure OTP</span>
+          <span>Order tracking</span>
+          <span>Saved addresses</span>
         </div>
       </div>
       <article class="login-card compact-login">
+        <div class="login-card-heading">
+          <span class="login-icon">C</span>
+          <div>
+            <p class="eyebrow">Customer login</p>
+            <h2>Verify your phone</h2>
+          </div>
+        </div>
         <form class="role-login-form firebase-phone-form" data-role="customer">
-          <label>Phone number<input name="phone" type="tel" placeholder="+91 98765 43210" required></label>
+          <label>Phone number<input name="phone" type="tel" placeholder="+91 98765 43210" required autocomplete="tel"></label>
           <div id="recaptcha-customer" class="recaptcha-box"></div>
           <button type="button" data-send-otp>Send OTP</button>
           <label class="otp-field" hidden>OTP<input name="otp" type="text" inputmode="numeric" placeholder="Enter OTP"></label>

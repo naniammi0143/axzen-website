@@ -27,6 +27,12 @@ const dashboardMetrics = document.querySelector("#dashboardMetrics");
 const dashboardPanels = document.querySelector("#dashboardPanels");
 const logoutButton = document.querySelector("#logoutButton");
 const protectedContent = document.querySelector("#protectedContent");
+const loginSection = document.querySelector("#login");
+const loginNavLinks = document.querySelectorAll("a[href='#login']");
+
+loginNavLinks.forEach((link) => {
+  link.dataset.loginLabel = link.textContent;
+});
 
 const confirmationResults = new Map();
 const recaptchaVerifiers = new Map();
@@ -36,6 +42,15 @@ function setLoginMessage(form, message, isError = false) {
   messageElement.textContent = message;
   messageElement.classList.toggle("error", isError);
   messageElement.style.display = "block";
+}
+
+function updateLoginNavigation(isLoggedIn) {
+  const dashboardTarget = dashboardSection ? "#dashboard" : "#protectedContent";
+
+  loginNavLinks.forEach((link) => {
+    link.textContent = isLoggedIn ? "Dashboard" : link.dataset.loginLabel || "Login";
+    link.setAttribute("href", isLoggedIn ? dashboardTarget : "#login");
+  });
 }
 
 function formatPhoneNumber(value) {
@@ -66,12 +81,12 @@ function getRecaptcha(form) {
 function renderDashboard(payload) {
   const { user, dashboard } = payload;
 
-  if (document.body.classList.contains("admin-page") && window.AxzenAdminPanel) {
-    const loginSection = document.querySelector("#login");
-    if (loginSection) {
-      loginSection.hidden = true;
-    }
+  if (loginSection) {
+    loginSection.hidden = true;
+  }
+  updateLoginNavigation(true);
 
+  if (document.body.classList.contains("admin-page") && window.AxzenAdminPanel) {
     if (protectedContent) {
       protectedContent.hidden = false;
     }
@@ -251,11 +266,11 @@ if (logoutButton) {
       protectedContent.hidden = true;
     }
 
-    const loginSection = document.querySelector(".login-section");
     if (loginSection) {
       loginSection.hidden = false;
       loginSection.scrollIntoView({ behavior: "smooth" });
     }
+    updateLoginNavigation(false);
   });
 }
 
@@ -268,5 +283,6 @@ if (savedToken && savedRole && savedRole === pageRole) {
     localStorage.removeItem("axzenToken");
     localStorage.removeItem("axzenRole");
     localStorage.removeItem("axzenPhone");
+    updateLoginNavigation(false);
   });
 }
