@@ -207,6 +207,71 @@ const listSellers = asyncHandler(async (req, res) => {
   success(res, await paged(Seller, filter, req.query));
 });
 
+const sellerDetail = asyncHandler(async (req, res) => {
+  const seller = await Seller.findById(req.params.id).populate("userId", "name email phone status role createdAt").lean();
+  if (!seller) {
+    res.status(404).json({ ok: false, message: "Seller not found." });
+    return;
+  }
+
+  const [orders, products] = await Promise.all([
+    Order.find({ sellerId: seller._id }).sort({ createdAt: -1 }).limit(500).lean(),
+    Product.find({ sellerId: seller._id }).sort({ updatedAt: -1 }).limit(500).lean(),
+  ]);
+
+  const financeRows = orders.map(orderFinanceRow);
+  const deliveredOrders = financeRows.filter((order) => order.status === "delivered");
+  const activeOrders = financeRows.filter((order) => !["cancelled", "returned", "delivered"].includes(order.status));
+  const readyOrders = financeRows.filter((order) => ["confirmed", "packed"].includes(order.status));
+  const shipmentReadyOrders = financeRows.filter((order) => order.status === "packed");
+  const pendingOrders = financeRows.filter((order) => ["placed", "pending", "accepted"].includes(order.status));
+  const paidPayoutOrders = financeRows.filter((order) => order.payoutStatus === "paid");
+  const pendingPayoutOrders = financeRows.filter((order) => order.payoutStatus !== "paid" && !["cancelled", "returned"].includes(order.status));
+
+  const sum = (rows, field) => rows.reduce((total, row) => total + (Number(row[field]) || 0), 0);
+  const statusCounts = financeRows.reduce((counts, order) => {
+    counts[order.status] = (counts[order.status] || 0) + 1;
+    return counts;
+  }, {});
+
+  const productSummary = products.reduce(
+    (summary, product) => {
+      summary.total += 1;
+      if (["active", "approved"].includes(product.status)) summary.active += 1;
+      if (product.status === "pending_approval") summary.pending += 1;
+      if (Number(product.stock) <= 5) summary.lowStock += 1;
+      return summary;
+    },
+    { total: 0, active: 0, pending: 0, lowStock: 0 }
+  );
+
+  success(res, {
+    seller,
+    summary: {
+      totalOrders: financeRows.length,
+      deliveredOrders: deliveredOrders.length,
+      activeOrders: activeOrders.length,
+      pendingOrders: pendingOrders.length,
+      readyOrders: readyOrders.length,
+      shipmentReadyOrders: shipmentReadyOrders.length,
+      cancelledOrders: statusCounts.cancelled || 0,
+      returnedOrders: statusCounts.returned || 0,
+      totalCustomerPaid: asMoney(sum(financeRows, "customerPaid")),
+      deliveredCustomerPaid: asMoney(sum(deliveredOrders, "customerPaid")),
+      totalCommission: asMoney(sum(financeRows, "commissionAmount")),
+      totalSellerPayout: asMoney(sum(financeRows, "sellerPayout")),
+      sellerPayoutPaid: asMoney(sum(paidPayoutOrders, "sellerPayout")),
+      sellerPayoutPending: asMoney(sum(pendingPayoutOrders, "sellerPayout")),
+      productSummary,
+      statusCounts,
+    },
+    recentOrders: financeRows.slice(0, 8),
+    readyOrders: readyOrders.slice(0, 8),
+    shipmentReadyOrders: shipmentReadyOrders.slice(0, 8),
+    lowStockProducts: products.filter((product) => Number(product.stock) <= 5).slice(0, 8),
+  });
+});
+
 const updateSeller = asyncHandler(async (req, res) => {
   const allowed = [
     "kycStatus",
@@ -599,6 +664,7 @@ module.exports = {
   rejectProduct,
   rejectSeller,
   reports,
+  sellerDetail,
   updateCustomer,
   updateDelivery,
   updateEmployee,

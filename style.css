@@ -1826,6 +1826,185 @@ h3 {
   background: linear-gradient(135deg, rgba(255, 251, 235, 0.92), rgba(255, 255, 255, 0.9));
 }
 
+.seller-pending-panel {
+  display: grid;
+  gap: 22px;
+  grid-column: 1 / -1;
+  padding: clamp(22px, 3vw, 34px);
+  background:
+    radial-gradient(circle at 92% 0%, rgba(0, 113, 227, 0.12), transparent 24%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
+}
+
+.seller-pending-header {
+  display: grid;
+  gap: 10px;
+  max-width: 720px;
+}
+
+.seller-pending-header h3 {
+  margin: 0;
+  font-size: clamp(28px, 3vw, 42px);
+  line-height: 1.02;
+  letter-spacing: -0.045em;
+}
+
+.seller-pending-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.status-pill {
+  width: max-content;
+  padding: 8px 12px;
+  color: #075985;
+  background: #e0f2fe;
+  border: 1px solid rgba(14, 165, 233, 0.2);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.seller-status-card {
+  position: relative;
+  min-height: 128px;
+  overflow: hidden;
+}
+
+.seller-status-card::after {
+  position: absolute;
+  right: -24px;
+  top: -24px;
+  width: 76px;
+  height: 76px;
+  background: rgba(0, 113, 227, 0.09);
+  border-radius: 999px;
+  content: "";
+}
+
+.seller-status-card small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.seller-approval-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.seller-approval-steps article {
+  display: grid;
+  gap: 8px;
+  min-height: 140px;
+  padding: 18px;
+  background: rgba(245, 245, 247, 0.82);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 18px;
+}
+
+.seller-approval-steps article span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  color: var(--muted);
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  font-weight: 900;
+}
+
+.seller-approval-steps article.done span {
+  color: #fff;
+  background: #34c759;
+}
+
+.seller-approval-steps article.active {
+  border-color: rgba(0, 113, 227, 0.22);
+  background: #e8f3ff;
+}
+
+.seller-approval-steps article.active span {
+  color: #fff;
+  background: #0071e3;
+}
+
+.seller-approval-steps strong {
+  color: var(--ink);
+}
+
+.seller-approval-steps small {
+  color: var(--muted);
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.seller-pending-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.seller-pending-actions .logout-button {
+  width: auto;
+  margin-top: 0;
+}
+
+.portal-page .dashboard-section {
+  min-height: calc(100vh - 76px);
+  display: grid;
+  align-items: start;
+  padding-top: clamp(70px, 9vw, 120px);
+  background:
+    radial-gradient(circle at 12% 8%, rgba(0, 113, 227, 0.14), transparent 30vw),
+    radial-gradient(circle at 92% 24%, rgba(245, 165, 36, 0.12), transparent 28vw),
+    #f5f5f7;
+}
+
+.portal-page .dashboard-shell {
+  width: min(1320px, 100%);
+  margin: 0 auto;
+}
+
+.portal-page .dashboard-sidebar {
+  border-radius: 26px;
+}
+
+.portal-page .dashboard-sidebar h2 {
+  overflow-wrap: anywhere;
+}
+
+.portal-page .dashboard-main {
+  border-radius: 26px;
+}
+
+@media (max-width: 900px) {
+  .seller-approval-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .portal-page .dashboard-section {
+    padding-top: 36px;
+  }
+
+  .seller-approval-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .seller-pending-actions,
+  .seller-pending-actions a,
+  .seller-pending-actions button {
+    width: 100%;
+  }
+}
+
 @keyframes successDrop {
   from {
     opacity: 0;
@@ -3286,6 +3465,302 @@ h1 {
   background: rgba(0, 113, 227, 0.045);
 }
 
+.seller-detail-open {
+  overflow: hidden;
+}
+
+.seller-detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: none;
+  place-items: center;
+  padding: 24px;
+  background: rgba(8, 13, 24, 0.42);
+  backdrop-filter: blur(14px);
+}
+
+.seller-detail-overlay.show {
+  display: grid;
+}
+
+.seller-detail-modal {
+  position: relative;
+  width: min(1180px, 100%);
+  max-height: min(86vh, 880px);
+  overflow: auto;
+  padding: 22px;
+  color: #111827;
+  background:
+    radial-gradient(circle at 14% 0%, rgba(0, 113, 227, 0.13), transparent 32%),
+    radial-gradient(circle at 92% 14%, rgba(52, 199, 89, 0.1), transparent 28%),
+    rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 28px;
+  box-shadow: 0 34px 90px rgba(15, 23, 42, 0.24);
+}
+
+.seller-detail-close {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  float: right;
+  min-height: 40px;
+  padding: 0 16px;
+  color: #111827;
+  font-weight: 900;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.1);
+}
+
+.seller-detail-content {
+  display: grid;
+  gap: 18px;
+  clear: both;
+}
+
+.seller-detail-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+  gap: 18px;
+  align-items: stretch;
+  padding: 22px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 24px;
+}
+
+.seller-detail-hero h2 {
+  max-width: 760px;
+  margin: 5px 0;
+  font-size: clamp(28px, 3vw, 46px);
+  line-height: 0.98;
+  letter-spacing: 0;
+}
+
+.seller-detail-hero p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.seller-detail-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.seller-detail-score {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 20px;
+  background: #101827;
+  border-radius: 22px;
+  color: #fff;
+}
+
+.seller-detail-score span,
+.seller-detail-score small,
+.seller-agent-heading span,
+.seller-detail-metric span {
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.seller-detail-score span,
+.seller-detail-score small {
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.seller-detail-score strong {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.seller-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.seller-detail-metric {
+  display: grid;
+  gap: 8px;
+  min-height: 116px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 20px;
+}
+
+.seller-detail-metric strong {
+  font-size: 22px;
+  line-height: 1.05;
+}
+
+.seller-detail-metric small {
+  color: #7a828f;
+  font-weight: 750;
+}
+
+.seller-agent-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.seller-agent-card {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 260px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 22px;
+  box-shadow: 0 16px 44px rgba(15, 23, 42, 0.06);
+}
+
+.seller-agent-card.wide {
+  grid-column: span 2;
+}
+
+.seller-agent-heading {
+  display: grid;
+  gap: 4px;
+}
+
+.seller-agent-heading strong {
+  font-size: 18px;
+}
+
+.seller-profile-chip-grid,
+.seller-status-pills,
+.seller-license-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.seller-profile-chip {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 13px 14px;
+  text-align: left;
+  color: #111827;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 16px;
+}
+
+.seller-profile-chip span {
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.seller-profile-chip strong {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.seller-license-button {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 15px;
+  text-align: left;
+  color: #111827;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: 18px;
+}
+
+.seller-license-button.available {
+  background: linear-gradient(180deg, rgba(236, 253, 245, 0.95), rgba(255, 255, 255, 0.95));
+  border-color: rgba(34, 197, 94, 0.22);
+}
+
+.seller-license-button.missing {
+  background: linear-gradient(180deg, rgba(254, 242, 242, 0.9), rgba(255, 255, 255, 0.95));
+  border-color: rgba(239, 68, 68, 0.18);
+}
+
+.seller-license-button span {
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.seller-license-button strong {
+  overflow-wrap: anywhere;
+  font-size: 15px;
+}
+
+.seller-license-button small {
+  width: max-content;
+  padding: 4px 8px;
+  color: #14532d;
+  background: rgba(34, 197, 94, 0.12);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.seller-license-button.missing small {
+  color: #991b1b;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.seller-mini-stack,
+.seller-order-list,
+.seller-product-list {
+  display: grid;
+  gap: 10px;
+}
+
+.seller-order-row,
+.seller-product-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 12px;
+  text-align: left;
+  color: #111827;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 16px;
+}
+
+.seller-product-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.seller-order-row strong,
+.seller-product-row strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.seller-order-row small,
+.seller-product-row small {
+  color: #7a828f;
+  font-weight: 750;
+}
+
 .status-badge {
   min-height: 24px;
   font-size: 11px;
@@ -3319,6 +3794,14 @@ h1 {
 
   .finance-filter-bar {
     grid-template-columns: repeat(2, minmax(160px, 1fr));
+  }
+
+  .seller-detail-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .seller-agent-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .admin-actions::before {
@@ -3366,5 +3849,33 @@ h1 {
 
   .seller-register-success a {
     width: 100%;
+  }
+
+  .seller-detail-overlay {
+    align-items: stretch;
+    padding: 10px;
+  }
+
+  .seller-detail-modal {
+    max-height: calc(100vh - 20px);
+    padding: 14px;
+    border-radius: 22px;
+  }
+
+  .seller-detail-hero,
+  .seller-detail-grid,
+  .seller-agent-grid,
+  .seller-profile-chip-grid,
+  .seller-status-pills,
+  .seller-license-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .seller-agent-card.wide {
+    grid-column: span 1;
+  }
+
+  .seller-order-row {
+    grid-template-columns: 1fr;
   }
 }

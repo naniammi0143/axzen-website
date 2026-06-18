@@ -110,30 +110,42 @@ function renderDashboard(payload) {
     dashboardTitle.textContent = sellerStatus.businessName || "Registration under review";
     dashboardSummary.textContent = "Your seller account is waiting for Axzen admin approval. You can open the seller panel after approval is complete.";
     dashboardMetrics.innerHTML = [
-      ["Approval", sellerStatus.approvalStatus || "pending"],
-      ["KYC", sellerStatus.kycStatus || "pending"],
-      ["Account", sellerStatus.status || "inactive"],
-      ["Products", "Locked"],
+      ["Approval", sellerStatus.approvalStatus || "pending", "Under review"],
+      ["KYC", sellerStatus.kycStatus || "pending", "Document check"],
+      ["Account", sellerStatus.status || "inactive", "Activates after approval"],
+      ["Products", "Locked", "Unlocks after approval"],
     ]
       .map(
-        ([label, value]) => `
-          <article>
+        ([label, value, hint]) => `
+          <article class="seller-status-card">
             <span>${label}</span>
             <strong>${value}</strong>
+            <small>${hint}</small>
           </article>
         `
       )
       .join("");
     dashboardPanels.innerHTML = `
       <article class="dashboard-panel seller-pending-panel">
-        <h3>Waiting for admin approval</h3>
-        <ul>
-          <li><strong>Registration submitted</strong><span>Saved with pending approval</span></li>
-          <li><strong>KYC review</strong><span>Admin team checks seller documents</span></li>
-          <li><strong>Seller panel</strong><span>Opens after approval</span></li>
-        </ul>
+        <div class="seller-pending-header">
+          <span class="status-pill">Waiting for admin approval</span>
+          <h3>We are reviewing your seller account</h3>
+          <p>Your store is saved. Axzen team will verify KYC and activate your seller panel after approval.</p>
+        </div>
+        <div class="seller-approval-steps">
+          <article class="done"><span>1</span><strong>Registration submitted</strong><small>Seller profile saved</small></article>
+          <article class="${sellerStatus.kycStatus === "approved" ? "done" : "active"}"><span>2</span><strong>KYC review</strong><small>Documents under verification</small></article>
+          <article><span>3</span><strong>Admin approval</strong><small>Account activation pending</small></article>
+          <article><span>4</span><strong>Seller panel</strong><small>Products unlock after approval</small></article>
+        </div>
+        <div class="seller-pending-actions">
+          <a class="primary-button" href="/seller/register">Update registration</a>
+          <button class="secondary-button logout-button" type="button" id="sellerPendingLogout">Logout</button>
+        </div>
       </article>
     `;
+
+    dashboardPanels.querySelector("#sellerPendingLogout")?.addEventListener("click", () => logoutButton?.click());
 
     if (protectedContent) {
       protectedContent.hidden = true;

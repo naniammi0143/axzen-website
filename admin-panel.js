@@ -149,6 +149,276 @@
     return value ? new Date(value).toLocaleDateString() : "-";
   }
 
+  function moneyText(value) {
+    if (value && typeof value === "object" && value.formatted) return value.formatted;
+    return rupees(value);
+  }
+
+  function sellerMetric(label, value, hint = "") {
+    return `
+      <article class="seller-detail-metric">
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(value)}</strong>
+        ${hint ? `<small>${escapeHtml(hint)}</small>` : ""}
+      </article>
+    `;
+  }
+
+  function sellerProfileChip(label, value) {
+    return `
+      <button class="seller-profile-chip" type="button">
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(value || "-")}</strong>
+      </button>
+    `;
+  }
+
+  function sellerLicenseButton(label, value, status = "available") {
+    return `
+      <button class="seller-license-button ${escapeHtml(status)}" type="button">
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(value || "Not added")}</strong>
+        <small>${escapeHtml(status === "available" ? "Available" : "Missing")}</small>
+      </button>
+    `;
+  }
+
+  function sellerDocumentButtons(documents = []) {
+    if (!documents.length) return sellerLicenseButton("Uploaded KYC files", "No documents uploaded", "missing");
+    return documents
+      .map((document) =>
+        sellerLicenseButton(
+          `${document.type || "KYC"} document`,
+          document.originalName || document.fileName || "Uploaded file",
+          "available"
+        )
+      )
+      .join("");
+  }
+
+  function sellerOrderRows(rows = []) {
+    if (!rows.length) return emptyState("No matching orders yet.");
+    return `
+      <div class="seller-order-list">
+        ${rows
+          .map(
+            (order) => `
+              <button class="seller-order-row" type="button" data-action="order-view" data-order="${escapeHtml(order.orderId)}">
+                <span>
+                  <strong>${escapeHtml(order.orderId)}</strong>
+                  <small>${escapeHtml(dateValue(order.createdAt))}</small>
+                </span>
+                ${statusBadge(order.status)}
+                <b>${escapeHtml(moneyText(order.customerPaid))}</b>
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+    `;
+  }
+
+  function sellerProductRows(rows = []) {
+    if (!rows.length) return emptyState("No low-stock products.");
+    return `
+      <div class="seller-product-list">
+        ${rows
+          .map(
+            (product) => `
+              <div class="seller-product-row">
+                <span>
+                  <strong>${escapeHtml(product.title)}</strong>
+                  <small>${escapeHtml(product.sku || product.category || "Product")}</small>
+                </span>
+                <b>${escapeHtml(product.stock ?? 0)} left</b>
+              </div>
+            `
+          )
+          .join("")}
+      </div>
+    `;
+  }
+
+  function ensureSellerDetailModal() {
+    let modal = qs("#sellerDetailOverlay");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.id = "sellerDetailOverlay";
+    modal.className = "seller-detail-overlay";
+    modal.innerHTML = `
+      <section class="seller-detail-modal" role="dialog" aria-modal="true" aria-labelledby="sellerDetailTitle">
+        <button class="seller-detail-close" type="button" data-seller-detail-close>Close</button>
+        <div id="sellerDetailContent" class="seller-detail-content">${emptyState("Loading seller details...")}</div>
+      </section>
+    `;
+    document.body.appendChild(modal);
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal || event.target.closest("[data-seller-detail-close]")) {
+        closeSellerDetail();
+      }
+    });
+    return modal;
+  }
+
+  function closeSellerDetail() {
+    qs("#sellerDetailOverlay")?.classList.remove("show");
+    document.body.classList.remove("seller-detail-open");
+  }
+
+  function renderSellerDetail(data) {
+    const seller = data.seller || {};
+    const user = seller.userId || {};
+    const summary = data.summary || {};
+    const products = summary.productSummary || {};
+    const bank = seller.bankDetails || {};
+    const storeName = seller.businessName || seller.fullName || "Seller";
+    const contactName = seller.fullName || user.name || storeName;
+    const licenses = [
+      { label: "GST license", value: seller.gstNumber },
+      { label: "PAN license", value: seller.panNumber },
+      { label: "Aadhaar / identity", value: seller.aadhaarNumber },
+      { label: "Business type", value: seller.businessType },
+      { label: "KYC status", value: seller.kycStatus },
+      { label: "Bank verification", value: seller.bankStatus },
+    ];
+    return `
+      <header class="seller-detail-hero">
+        <div>
+          <span class="eyebrow">Seller Command Window</span>
+          <h2 id="sellerDetailTitle">${escapeHtml(storeName)}</h2>
+          <p>${escapeHtml(contactName)} ${seller.city ? `- ${escapeHtml(seller.city)}` : ""}</p>
+          <div class="seller-detail-badges">
+            ${statusBadge(seller.approvalStatus || "pending")}
+            ${statusBadge(seller.kycStatus || "pending")}
+            ${statusBadge(seller.status || "inactive")}
+          </div>
+        </div>
+        <div class="seller-detail-score">
+          <span>Total earned</span>
+          <strong>${escapeHtml(moneyText(summary.totalSellerPayout))}</strong>
+          <small>${escapeHtml(summary.deliveredOrders || 0)} delivered orders</small>
+        </div>
+      </header>
+
+      <section class="seller-detail-grid">
+        ${sellerMetric("Total sales", moneyText(summary.totalCustomerPaid), "Customer paid")}
+        ${sellerMetric("Seller earnings", moneyText(summary.totalSellerPayout), "Before payout status")}
+        ${sellerMetric("Orders", summary.totalOrders || 0, `${summary.activeOrders || 0} active now`)}
+        ${sellerMetric("Shipment ready", summary.shipmentReadyOrders || 0, `${summary.readyOrders || 0} ready orders`)}
+        ${sellerMetric("Pending payout", moneyText(summary.sellerPayoutPending), "Needs finance action")}
+        ${sellerMetric("Products", products.total || 0, `${products.active || 0} active, ${products.lowStock || 0} low stock`)}
+      </section>
+
+      <section class="seller-agent-grid">
+        <article class="seller-agent-card wide">
+          <div class="seller-agent-heading">
+            <span>Profile Agent</span>
+            <strong>Seller profile and KYC</strong>
+          </div>
+          <div class="seller-profile-chip-grid">
+            ${sellerProfileChip("Contact person", contactName)}
+            ${sellerProfileChip("Mobile", seller.phone || user.phone)}
+            ${sellerProfileChip("Email", seller.email || user.email)}
+            ${sellerProfileChip("Business type", seller.businessType)}
+            ${sellerProfileChip("GST", seller.gstNumber || "Optional / not added")}
+            ${sellerProfileChip("PAN", seller.panNumber)}
+            ${sellerProfileChip("Pickup address", [seller.pickupAddress, seller.city, seller.state, seller.pincode].filter(Boolean).join(", "))}
+            ${sellerProfileChip("Bank holder", bank.accountHolderName)}
+            ${sellerProfileChip("IFSC", bank.ifsc)}
+            ${sellerProfileChip("UPI", bank.upiId || "Optional / not added")}
+          </div>
+        </article>
+
+        <article class="seller-agent-card">
+          <div class="seller-agent-heading">
+            <span>Sales Agent</span>
+            <strong>Performance</strong>
+          </div>
+          <div class="seller-mini-stack">
+            ${sellerMetric("Delivered sales", moneyText(summary.deliveredCustomerPaid), `${summary.deliveredOrders || 0} completed`)}
+            ${sellerMetric("Platform commission", moneyText(summary.totalCommission), `${seller.commissionType || "percentage"} ${seller.commissionValue ?? ""}`)}
+          </div>
+        </article>
+
+        <article class="seller-agent-card">
+          <div class="seller-agent-heading">
+            <span>Order Agent</span>
+            <strong>Current workload</strong>
+          </div>
+          <div class="seller-status-pills">
+            ${sellerProfileChip("Pending", summary.pendingOrders || 0)}
+            ${sellerProfileChip("Ready", summary.readyOrders || 0)}
+            ${sellerProfileChip("Packed", summary.shipmentReadyOrders || 0)}
+            ${sellerProfileChip("Returned", summary.returnedOrders || 0)}
+          </div>
+        </article>
+
+        <article class="seller-agent-card wide">
+          <div class="seller-agent-heading">
+            <span>License Agent</span>
+            <strong>Seller licenses and documents</strong>
+          </div>
+          <div class="seller-license-grid">
+            ${licenses
+              .map((license) => sellerLicenseButton(license.label, license.value, license.value ? "available" : "missing"))
+              .join("")}
+            ${sellerDocumentButtons(seller.kycDocuments)}
+          </div>
+        </article>
+
+        <article class="seller-agent-card">
+          <div class="seller-agent-heading">
+            <span>Shipment Agent</span>
+            <strong>Ready for shipment</strong>
+          </div>
+          ${sellerOrderRows(data.shipmentReadyOrders || data.readyOrders)}
+        </article>
+
+        <article class="seller-agent-card">
+          <div class="seller-agent-heading">
+            <span>Finance Agent</span>
+            <strong>Payout health</strong>
+          </div>
+          <div class="seller-mini-stack">
+            ${sellerMetric("Payout paid", moneyText(summary.sellerPayoutPaid), "Released to seller")}
+            ${sellerMetric("Payout status", seller.payoutEnabled ? "Enabled" : "Disabled", seller.payoutStatus || "active")}
+          </div>
+        </article>
+
+        <article class="seller-agent-card">
+          <div class="seller-agent-heading">
+            <span>Inventory Agent</span>
+            <strong>Low stock alerts</strong>
+          </div>
+          ${sellerProductRows(data.lowStockProducts)}
+        </article>
+
+        <article class="seller-agent-card wide">
+          <div class="seller-agent-heading">
+            <span>Recent Orders</span>
+            <strong>Latest seller activity</strong>
+          </div>
+          ${sellerOrderRows(data.recentOrders)}
+        </article>
+      </section>
+    `;
+  }
+
+  async function openSellerDetail(id) {
+    const modal = ensureSellerDetailModal();
+    const content = qs("#sellerDetailContent", modal);
+    content.innerHTML = emptyState("Loading seller details...");
+    modal.classList.add("show");
+    document.body.classList.add("seller-detail-open");
+    try {
+      const data = await api(`/api/admin/sellers/${id}/detail`);
+      content.innerHTML = renderSellerDetail(data);
+    } catch (error) {
+      content.innerHTML = emptyState(error.message);
+      toast(error.message, true);
+    }
+  }
+
   function financeFilters(data = {}) {
     const sellers = data.sellers || [];
     return `
@@ -284,6 +554,7 @@
           ],
           data.items,
           (row) => `
+            <button data-action="seller-view" data-id="${row._id}">View details</button>
             <button data-action="seller-approve" data-id="${row._id}">Approve</button>
             <button data-action="seller-reject" data-id="${row._id}">Reject</button>
             <button data-action="seller-toggle" data-id="${row._id}" data-status="${row.status === "active" ? "inactive" : "active"}">${row.status === "active" ? "Deactivate" : "Activate"}</button>
@@ -520,6 +791,9 @@
       window.clearTimeout(state.searchTimer);
       state.searchTimer = window.setTimeout(() => loadView(), 350);
     });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeSellerDetail();
+    });
     document.addEventListener("click", async (event) => {
       const refreshButton = event.target.closest("[data-refresh-view]");
       if (refreshButton) {
@@ -554,6 +828,7 @@
       const id = target.dataset.id;
       const action = target.dataset.action;
       if (action === "order-view") {
+        closeSellerDetail();
         toast(`Open Orders page and search ${target.dataset.order}.`);
         state.search = target.dataset.order || "";
         const searchInput = qs("#adminSearch");
@@ -562,6 +837,7 @@
       }
       if (action === "payout-paid") return patch(`/api/admin/finance/orders/${id}/payout`, { payoutStatus: "paid" });
       if (action === "payout-failed") return patch(`/api/admin/finance/orders/${id}/payout`, { payoutStatus: "failed" });
+      if (action === "seller-view") return openSellerDetail(id);
       if (action === "seller-approve") return patch(`/api/admin/sellers/${id}/approve`, {});
       if (action === "seller-reject") return patch(`/api/admin/sellers/${id}/reject`, {});
       if (action === "seller-toggle") return patch(`/api/admin/sellers/${id}`, { status: target.dataset.status });

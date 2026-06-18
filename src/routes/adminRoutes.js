@@ -18,6 +18,7 @@ const {
   rejectProduct,
   rejectSeller,
   reports,
+  sellerDetail,
   updateCustomer,
   updateDelivery,
   updateEmployee,
@@ -36,6 +37,7 @@ router.use(authenticate);
 router.get("/overview", authorizeAdminAccess("dashboard"), adminOverview);
 
 router.get("/sellers", authorizeAdminAccess("sellers"), listSellers);
+router.get("/sellers/:id/detail", authorizeAdminAccess("sellers"), sellerDetail);
 router.patch("/sellers/:id", authorizeAdminAccess("sellers"), updateSeller);
 router.patch("/sellers/:id/approve", authorizeAdminAccess("sellers"), approveSeller);
 router.patch("/sellers/:id/reject", authorizeAdminAccess("sellers"), rejectSeller);
