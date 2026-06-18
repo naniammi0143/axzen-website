@@ -340,6 +340,25 @@ a {
   max-width: 520px;
 }
 
+.auth-gate {
+  min-height: calc(100vh - 68px);
+  display: grid;
+  align-content: center;
+}
+
+.recaptcha-box {
+  min-height: 78px;
+}
+
+.otp-field {
+  display: grid;
+  gap: 8px;
+}
+
+.otp-field[hidden] {
+  display: none;
+}
+
 .portal-page {
   background: #f5f7f8;
 }

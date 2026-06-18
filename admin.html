@@ -24,42 +24,48 @@
   </header>
 
   <main>
-    <section class="portal-hero admin-portal">
-      <div>
-        <p class="eyebrow">Admin website - admin.axzen.in</p>
-        <h1>Company control center for Axzen marketplace operations.</h1>
-        <p>Approve sellers, control product moderation, manage delivery partners, commission rules, customer support, payout settlements, and platform analytics.</p>
-        <a class="primary-button" href="#login">Open admin control</a>
-      </div>
-      <div class="portal-preview">
-        <article><span>Pending sellers</span><strong>12</strong></article>
-        <article><span>Orders today</span><strong>326</strong></article>
-        <article><span>Payout queue</span><strong>Rs. 2.8L</strong></article>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="workflow-grid">
-        <article><span>1</span><h3>Seller control</h3><p>Approve KYC, verify bank details, suspend stores, and set seller status.</p></article>
-        <article><span>2</span><h3>Product control</h3><p>Approve catalogue, reject unsafe listings, manage categories, and feature stores.</p></article>
-        <article><span>3</span><h3>Orders and delivery</h3><p>Monitor order lifecycle, assign delivery partners, and resolve disputes.</p></article>
-        <article><span>4</span><h3>Finance</h3><p>Manage commission rules, split settlement, refunds, invoices, and payout reports.</p></article>
-      </div>
-    </section>
-
-    <section class="section login-section" id="login">
+    <section class="section login-section auth-gate" id="login">
       <div class="section-heading">
-        <div><p class="eyebrow">Company access</p><h2>Login to admin portal.</h2></div>
+        <div>
+          <p class="eyebrow">Admin website - admin.axzen.in</p>
+          <h2>Login with phone OTP to open company control.</h2>
+        </div>
       </div>
       <article class="login-card compact-login">
-        <form class="role-login-form portal-login-form" data-role="admin">
-          <label>Email<input name="email" type="email" value="admin@axzen.in" required></label>
-          <label>Password<input name="password" type="password" value="Admin@123" required></label>
-          <button type="submit">Login as admin</button>
+        <form class="role-login-form firebase-phone-form" data-role="admin">
+          <label>Phone number<input name="phone" type="tel" placeholder="+91 98765 43210" required></label>
+          <div id="recaptcha-admin" class="recaptcha-box"></div>
+          <button type="button" data-send-otp>Send OTP</button>
+          <label class="otp-field" hidden>OTP<input name="otp" type="text" inputmode="numeric" placeholder="Enter OTP"></label>
+          <button type="button" data-verify-otp hidden>Verify and continue</button>
           <p class="login-message" aria-live="polite"></p>
         </form>
       </article>
     </section>
+
+    <div id="protectedContent" hidden>
+      <section class="portal-hero admin-portal">
+        <div>
+          <p class="eyebrow">Company control</p>
+          <h1>Control Axzen marketplace operations.</h1>
+          <p>Approve sellers, control product moderation, manage delivery partners, commission rules, customer support, payout settlements, and platform analytics.</p>
+        </div>
+        <div class="portal-preview">
+          <article><span>Pending sellers</span><strong>12</strong></article>
+          <article><span>Orders today</span><strong>326</strong></article>
+          <article><span>Payout queue</span><strong>Rs. 2.8L</strong></article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="workflow-grid">
+          <article><span>1</span><h3>Seller control</h3><p>Approve KYC, verify bank details, suspend stores, and set seller status.</p></article>
+          <article><span>2</span><h3>Product control</h3><p>Approve catalogue, reject unsafe listings, manage categories, and feature stores.</p></article>
+          <article><span>3</span><h3>Orders and delivery</h3><p>Monitor order lifecycle, assign delivery partners, and resolve disputes.</p></article>
+          <article><span>4</span><h3>Finance</h3><p>Manage commission rules, split settlement, refunds, invoices, and payout reports.</p></article>
+        </div>
+      </section>
+    </div>
 
     <section class="section dashboard-section" id="dashboard" hidden>
       <div class="dashboard-shell">
@@ -77,6 +83,6 @@
     </section>
   </main>
 
-  <script src="portal.js"></script>
+  <script type="module" src="portal.js"></script>
 </body>
 </html>
