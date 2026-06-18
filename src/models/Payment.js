@@ -8,6 +8,9 @@ const paymentSchema = new mongoose.Schema(
     currency: { type: String, default: "INR" },
     provider: { type: String, default: "demo" },
     status: { type: String, enum: ["created", "captured", "failed", "refunded"], default: "captured" },
+    refundPaise: { type: Number, min: 0, default: 0 },
+    transactionId: { type: String, trim: true, default: "" },
+    paymentMethod: { type: String, trim: true, default: "" },
   },
   { timestamps: true }
 );

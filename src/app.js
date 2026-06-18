@@ -41,6 +41,9 @@ app.use(
   })
 );
 app.use(express.json({ limit: "1mb" }));
+app.use("/uploads", (req, res) => {
+  res.status(403).json({ ok: false, message: "Uploads are private." });
+});
 app.use(express.static(rootDir, { index: false }));
 
 app.get("/api", (req, res) => {
@@ -88,6 +91,7 @@ function resolvePage(req) {
   const host = String(req.hostname || "").toLowerCase();
   const route = String(req.path || "/").toLowerCase();
 
+  if (route === "/seller/register" || (host === "seller.axzen.in" && route === "/register")) return "seller-register.html";
   if (route === "/admin" || host === "admin.axzen.in") return "admin.html";
   if (route === "/seller" || host === "seller.axzen.in") return "seller.html";
   if (host === "api.axzen.in") return null;

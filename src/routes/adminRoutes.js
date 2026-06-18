@@ -14,6 +14,7 @@ const {
   listProducts,
   listSellers,
   listSettlements,
+  paymentCommissionReport,
   rejectProduct,
   rejectSeller,
   reports,
@@ -21,6 +22,7 @@ const {
   updateDelivery,
   updateEmployee,
   updateOrder,
+  updateOrderPayoutStatus,
   updateProduct,
   updateSeller,
   updateSettlement,
@@ -50,6 +52,8 @@ router.get("/customers", authorizeAdminAccess("customers"), listCustomers);
 router.patch("/customers/:id", authorizeAdminAccess("customers"), updateCustomer);
 
 router.get("/payments", authorizeAdminAccess("finance"), listPayments);
+router.get("/finance/report", authorizeAdminAccess("finance"), paymentCommissionReport);
+router.patch("/finance/orders/:id/payout", authorizeAdminAccess("finance"), updateOrderPayoutStatus);
 router.get("/settlements", authorizeAdminAccess("finance"), listSettlements);
 router.patch("/settlements/:id", authorizeAdminAccess("finance"), updateSettlement);
 router.get("/finance/summary", authorizeAdminAccess("finance"), financeSummary);

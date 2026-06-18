@@ -87,6 +87,8 @@ function renderDashboard(payload) {
   updateLoginNavigation(true);
 
   if (document.body.classList.contains("admin-page") && window.AxzenAdminPanel) {
+    document.body.classList.add("admin-session-active");
+
     if (protectedContent) {
       protectedContent.hidden = false;
     }
@@ -257,6 +259,7 @@ if (logoutButton) {
     localStorage.removeItem("axzenToken");
     localStorage.removeItem("axzenRole");
     localStorage.removeItem("axzenPhone");
+    document.body.classList.remove("admin-session-active");
 
     if (dashboardSection) {
       dashboardSection.hidden = true;

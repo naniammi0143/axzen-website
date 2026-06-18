@@ -6,7 +6,7 @@ const Seller = require("../models/Seller");
 const Settlement = require("../models/Settlement");
 const asyncHandler = require("../utils/asyncHandler");
 const { success } = require("../utils/apiResponse");
-const { calculateOrderFinance, formatRupees, toPaise } = require("../utils/money");
+const { calculateOrderFinance, formatRupees, getSellerCommission, toPaise } = require("../utils/money");
 
 const listCustomerOrders = asyncHandler(async (req, res) => {
   const orders = await Order.find({ customerId: req.user.id }).sort({ createdAt: -1 });
@@ -29,8 +29,12 @@ const createOrder = asyncHandler(async (req, res) => {
   }
 
   const seller = await Seller.findById(items[0].sellerId);
-  const finance = calculateOrderFinance(items, seller?.commissionBps ?? 1200, toPaise(req.body.deliveryFee || 40));
+  const commission = getSellerCommission(seller);
+  const deliveryCharge = toPaise(req.body.deliveryCharge ?? req.body.deliveryFee ?? 40);
+  const finance = calculateOrderFinance(items, commission, deliveryCharge);
   const orderId = `AXZ-${Date.now()}`;
+  const transactionId = req.body.transactionId || `TXN-${Date.now()}`;
+  const paymentMethod = req.body.paymentMethod || req.body.provider || "demo";
   const order = await Order.create({
     orderId,
     customerId: req.user.id,
@@ -39,6 +43,16 @@ const createOrder = asyncHandler(async (req, res) => {
     items,
     status: "placed",
     paymentStatus: "paid",
+    payoutStatus: "pending",
+    productTotal: finance.productTotalPaise,
+    deliveryCharge: finance.deliveryChargePaise,
+    customerPaid: finance.customerPaidPaise,
+    commissionType: finance.commissionType,
+    commissionValue: finance.commissionValue,
+    commissionAmount: finance.commissionAmountPaise,
+    sellerPayout: finance.sellerPayoutPaise,
+    transactionId,
+    paymentMethod,
     deliveryStatus: "created",
     finance,
     shippingAddress: req.body.shippingAddress || null,
@@ -47,16 +61,19 @@ const createOrder = asyncHandler(async (req, res) => {
   await Payment.create({
     orderId,
     customerId: req.user.id,
-    amountPaise: finance.totalPaise,
+    amountPaise: finance.customerPaidPaise,
     status: "captured",
     provider: req.body.provider || "demo",
+    transactionId,
+    paymentMethod,
   });
   await Settlement.create({
     orderId,
     sellerId: order.sellerId,
-    grossPaise: finance.subtotalPaise,
-    commissionPaise: finance.commissionPaise,
-    payoutPaise: finance.sellerEarningsPaise,
+    grossPaise: finance.productTotalPaise,
+    deliveryChargePaise: finance.deliveryChargePaise,
+    commissionPaise: finance.commissionAmountPaise,
+    payoutPaise: finance.sellerPayoutPaise,
     status: "pending",
   });
   await Delivery.create({ orderId, status: "created" });
@@ -68,10 +85,10 @@ const createOrder = asyncHandler(async (req, res) => {
       order: {
         orderId,
         status: order.status,
-        totalPaise: finance.totalPaise,
-        total: formatRupees(finance.totalPaise),
-        sellerPayout: formatRupees(finance.sellerEarningsPaise),
-        platformCommission: formatRupees(finance.commissionPaise),
+        totalPaise: finance.customerPaidPaise,
+        total: formatRupees(finance.customerPaidPaise),
+        sellerPayout: formatRupees(finance.sellerPayoutPaise),
+        platformCommission: formatRupees(finance.commissionAmountPaise),
       },
     },
     201

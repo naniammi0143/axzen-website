@@ -145,6 +145,58 @@
     return `<article class="stat-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(hint || "")}</small></article>`;
   }
 
+  function dateValue(value) {
+    return value ? new Date(value).toLocaleDateString() : "-";
+  }
+
+  function financeFilters(data = {}) {
+    const sellers = data.sellers || [];
+    return `
+      <form class="filter-bar finance-filter-bar" data-finance-filters>
+        <label>From<input type="date" name="dateFrom"></label>
+        <label>To<input type="date" name="dateTo"></label>
+        <label>Seller
+          <select name="sellerId">
+            <option value="">All sellers</option>
+            ${sellers.map((seller) => `<option value="${escapeHtml(seller._id)}">${escapeHtml(seller.businessName)}</option>`).join("")}
+          </select>
+        </label>
+        <label>Payment
+          <select name="paymentStatus">
+            <option value="">All payments</option>
+            <option value="pending">Pending</option>
+            <option value="paid">Paid</option>
+            <option value="failed">Failed</option>
+            <option value="refunded">Refunded</option>
+          </select>
+        </label>
+        <label>Payout
+          <select name="payoutStatus">
+            <option value="">All payouts</option>
+            <option value="pending">Pending</option>
+            <option value="paid">Paid</option>
+            <option value="failed">Failed</option>
+          </select>
+        </label>
+        <label>Order
+          <select name="orderStatus">
+            <option value="">All orders</option>
+            <option value="placed">Placed</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="packed">Packed</option>
+            <option value="shipped">Shipped</option>
+            <option value="out_for_delivery">Out for delivery</option>
+            <option value="delivered">Delivered</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="returned">Returned</option>
+          </select>
+        </label>
+        <button class="secondary-button" type="submit">Apply</button>
+        <button class="secondary-button" type="button" data-export="finance">Export CSV</button>
+      </form>
+    `;
+  }
+
   function chartBars(rows, labelKey, valueKey) {
     if (!rows?.length) return emptyState("No chart data yet.");
     const max = Math.max(...rows.map((row) => Number(row[valueKey]) || 0), 1);
@@ -217,6 +269,7 @@
     qs('[data-view-panel="sellers"]').innerHTML = panel(
       "Seller approvals and performance",
       filterBar("sellers", [
+        { key: "approvalStatus", label: "Approval status", options: ["pending", "approved", "rejected"] },
         { key: "kycStatus", label: "KYC status", options: ["pending", "approved", "rejected"] },
         { key: "status", label: "Store status", options: ["active", "inactive", "blocked"] },
       ]) +
@@ -224,9 +277,10 @@
           [
             { label: "Store", render: (row) => `<strong>${escapeHtml(row.businessName)}</strong><small>${escapeHtml(row.city)}</small>` },
             { label: "Phone", render: (row) => escapeHtml(row.phone) },
+            { label: "Approval", render: (row) => statusBadge(row.approvalStatus || "pending") },
             { label: "KYC", render: (row) => statusBadge(row.kycStatus) },
             { label: "Status", render: (row) => statusBadge(row.status) },
-            { label: "Commission", render: (row) => `${(Number(row.commissionBps || 0) / 100).toFixed(2)}%` },
+            { label: "Commission", render: (row) => `${escapeHtml(row.commissionType || "percentage")} ${escapeHtml(row.commissionValue ?? (Number(row.commissionBps || 0) / 100).toFixed(2))}` },
           ],
           data.items,
           (row) => `
@@ -290,34 +344,40 @@
     return flow[Math.min(flow.indexOf(normalized) + 1, flow.length - 1)] || "confirmed";
   }
 
-  function renderPayments(payments, settlements, summary) {
+  function renderPayments(data) {
+    const summary = data.summary || {};
     qs('[data-view-panel="payments"]').innerHTML =
-      `<div class="admin-stats">${card("Captured payments", summary.captured?.formatted || "Rs. 0", "Customer paid")} ${card("Refunds", summary.refunds?.formatted || "Rs. 0", "Refund adjustment")} ${card("Payout groups", summary.payouts?.length || 0, "Settlement status")}</div>` +
+      `<div class="admin-stats">
+        ${card("Total Customer Payments", summary.customerPayments?.formatted || "Rs. 0", "Product + delivery")}
+        ${card("Platform Commission", summary.platformCommission?.formatted || "Rs. 0", "Product total only")}
+        ${card("Payout Pending", summary.sellerPayoutPending?.formatted || "Rs. 0", "Seller queue")}
+        ${card("Payout Paid", summary.sellerPayoutPaid?.formatted || "Rs. 0", "Completed")}
+        ${card("Delivery Charges", summary.deliveryCharges?.formatted || "Rs. 0", "Separate from commission")}
+      </div>` +
       panel(
-        "Customer payments",
+        "Payment and commission report",
+        financeFilters(data) +
         table(
           [
-            { label: "Order", render: (row) => escapeHtml(row.orderId) },
-            { label: "Provider", render: (row) => escapeHtml(row.provider) },
-            { label: "Amount", render: (row) => rupees(row.amountPaise) },
-            { label: "Refund", render: (row) => rupees(row.refundPaise) },
-            { label: "Status", render: (row) => statusBadge(row.status) },
+            { label: "Order ID", render: (row) => escapeHtml(row.orderId) },
+            { label: "Seller", render: (row) => escapeHtml(row.sellerName) },
+            { label: "Product Total", render: (row) => rupees(row.productTotal) },
+            { label: "Delivery", render: (row) => rupees(row.deliveryCharge) },
+            { label: "Customer Paid", render: (row) => rupees(row.customerPaid) },
+            { label: "Commission", render: (row) => `${escapeHtml(row.commissionType)} ${escapeHtml(row.commissionValue)}` },
+            { label: "Commission Amount", render: (row) => rupees(row.commissionAmount) },
+            { label: "Seller Payout", render: (row) => rupees(row.sellerPayout) },
+            { label: "Payment", render: (row) => statusBadge(row.paymentStatus) },
+            { label: "Payout", render: (row) => statusBadge(row.payoutStatus) },
+            { label: "Transaction", render: (row) => escapeHtml(row.transactionId || "-") },
+            { label: "Payout Date", render: (row) => escapeHtml(dateValue(row.payoutDate)) },
           ],
-          payments.items
-        )
-      ) +
-      panel(
-        "Seller payouts",
-        table(
-          [
-            { label: "Order", render: (row) => escapeHtml(row.orderId) },
-            { label: "Gross", render: (row) => rupees(row.grossPaise) },
-            { label: "Commission", render: (row) => rupees(row.commissionPaise) },
-            { label: "Payout", render: (row) => rupees(row.payoutPaise) },
-            { label: "Status", render: (row) => statusBadge(row.status) },
-          ],
-          settlements.items,
-          (row) => `<button data-action="settlement-paid" data-id="${row._id}">Mark paid</button><button data-action="settlement-hold" data-id="${row._id}">Hold</button>`
+          data.items,
+          (row) => `
+            <button data-action="payout-paid" data-id="${row._id}">Mark paid</button>
+            <button data-action="payout-failed" data-id="${row._id}">Mark failed</button>
+            <button data-action="order-view" data-id="${row._id}" data-order="${escapeHtml(row.orderId)}">View</button>
+          `
         )
       );
   }
@@ -429,8 +489,7 @@
     try {
       if (view === "dashboard") return await loadDashboard();
       if (view === "payments") {
-        const [payments, settlements, summary] = await Promise.all([api("/api/admin/payments"), api("/api/admin/settlements"), api("/api/admin/finance/summary")]);
-        return renderPayments(payments, settlements, summary);
+        return renderPayments(await api(`/api/admin/finance/report?${state.financeQuery || ""}`));
       }
       if (view === "reports") return renderReports(await api("/api/admin/reports"));
       const data = await listView(view, state.filterQuery || "");
@@ -476,7 +535,8 @@
       const exportButton = event.target.closest("[data-export]");
       if (exportButton) {
         const type = exportButton.dataset.export;
-        const response = await fetch(`/api/admin/reports/export/${type}`, {
+        const query = type === "finance" && state.financeQuery ? `?${state.financeQuery}` : "";
+        const response = await fetch(`/api/admin/reports/export/${type}${query}`, {
           headers: { Authorization: `Bearer ${state.token}` },
         });
         const blob = await response.blob();
@@ -493,6 +553,15 @@
       if (!target) return;
       const id = target.dataset.id;
       const action = target.dataset.action;
+      if (action === "order-view") {
+        toast(`Open Orders page and search ${target.dataset.order}.`);
+        state.search = target.dataset.order || "";
+        const searchInput = qs("#adminSearch");
+        if (searchInput) searchInput.value = state.search;
+        return loadView("orders");
+      }
+      if (action === "payout-paid") return patch(`/api/admin/finance/orders/${id}/payout`, { payoutStatus: "paid" });
+      if (action === "payout-failed") return patch(`/api/admin/finance/orders/${id}/payout`, { payoutStatus: "failed" });
       if (action === "seller-approve") return patch(`/api/admin/sellers/${id}/approve`, {});
       if (action === "seller-reject") return patch(`/api/admin/sellers/${id}/reject`, {});
       if (action === "seller-toggle") return patch(`/api/admin/sellers/${id}`, { status: target.dataset.status });
@@ -509,6 +578,18 @@
       if (action === "delivery-failed") return patch(`/api/admin/deliveries/${id}`, { status: "failed", failedReason: "Marked failed by admin" });
       if (action === "employee-block") return patch(`/api/admin/employees/${id}`, { status: "blocked" });
     });
+
+    document.addEventListener("submit", async (event) => {
+      const form = event.target.closest("[data-finance-filters]");
+      if (!form) return;
+      event.preventDefault();
+      const params = new URLSearchParams(new FormData(form));
+      [...params.entries()].forEach(([key, value]) => {
+        if (!value) params.delete(key);
+      });
+      state.financeQuery = params.toString();
+      await loadView("payments");
+    });
   }
 
   window.AxzenAdminPanel = {
@@ -516,6 +597,9 @@
       state.token = token;
       state.user = user;
       qs("#adminRoleLabel").textContent = `${user.role.replaceAll("_", " ")} access`;
+      if (!["superadmin", "finance"].includes(user.role)) {
+        qs('[data-admin-view="payments"]')?.setAttribute("hidden", "hidden");
+      }
       bindEvents();
       loadView("dashboard");
     },

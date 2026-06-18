@@ -36,6 +36,11 @@ const createSellerProduct = asyncHandler(async (req, res) => {
     return;
   }
 
+  if (!seller.isActive || seller.approvalStatus !== "approved" || seller.kycStatus !== "approved") {
+    res.status(403).json({ ok: false, message: "Seller account is waiting for admin approval." });
+    return;
+  }
+
   if (!req.body.title || !req.body.sku || !req.body.price) {
     res.status(400).json({ ok: false, message: "Title, SKU, and price are required." });
     return;

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register as Seller on Axzen</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="portal-page seller-register-page">
+  <header class="site-header">
+    <a class="brand" href="/seller" aria-label="Seller Axzen home">
+      <img class="brand-logo" src="assets/logo.png" alt="Axzen" onerror="this.hidden=true">
+      <span class="brand-mark">S</span>
+      <span class="sr-only">Seller Axzen</span>
+    </a>
+    <nav class="main-nav">
+      <a href="/seller">Seller Login</a>
+      <a href="https://axzen.in" target="_blank" rel="noopener noreferrer">Customer site</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="seller-register-hero">
+      <div>
+        <p class="eyebrow">Seller registration</p>
+        <h1>Register as Seller on Axzen</h1>
+        <p>Submit your store, KYC, pickup, and bank details. Your seller account stays pending until the Axzen admin team approves it.</p>
+      </div>
+    </section>
+
+    <section class="section seller-register-section">
+      <form class="seller-register-form" id="sellerRegisterForm" enctype="multipart/form-data" novalidate>
+        <div class="form-block">
+          <div class="form-block-heading">
+            <p class="eyebrow">Account</p>
+            <h2>Seller details</h2>
+          </div>
+          <label>Seller full name<input name="fullName" type="text" required></label>
+          <label>Mobile number<input name="mobile" type="tel" inputmode="numeric" maxlength="10" required></label>
+          <label>Email<input name="email" type="email" required></label>
+          <label>Password<input name="password" type="password" minlength="8" required></label>
+          <label>Confirm password<input name="confirmPassword" type="password" minlength="8" required></label>
+        </div>
+
+        <div class="form-block">
+          <div class="form-block-heading">
+            <p class="eyebrow">Business</p>
+            <h2>Store and KYC</h2>
+          </div>
+          <label>Store name<input name="storeName" type="text" required></label>
+          <label>Business type<input name="businessType" type="text" placeholder="Proprietorship, Pvt Ltd, Home business" required></label>
+          <label>GST number optional<input name="gstNumber" type="text"></label>
+          <label>PAN number<input name="panNumber" type="text" maxlength="10" required></label>
+          <label>Aadhaar number optional<input name="aadhaarNumber" type="text" inputmode="numeric" maxlength="12"></label>
+        </div>
+
+        <div class="form-block">
+          <div class="form-block-heading">
+            <p class="eyebrow">Pickup</p>
+            <h2>Address</h2>
+          </div>
+          <label class="full-row">Pickup address<textarea name="pickupAddress" rows="4" required></textarea></label>
+          <label>City<input name="city" type="text" required></label>
+          <label>State<input name="state" type="text" required></label>
+          <label>Pincode<input name="pincode" type="text" inputmode="numeric" maxlength="6" required></label>
+        </div>
+
+        <div class="form-block">
+          <div class="form-block-heading">
+            <p class="eyebrow">Payouts</p>
+            <h2>Bank details</h2>
+          </div>
+          <label>Bank account holder name<input name="accountHolderName" type="text" required></label>
+          <label>Bank account number<input name="accountNumber" type="text" required></label>
+          <label>IFSC code<input name="ifsc" type="text" maxlength="11" required></label>
+          <label>UPI ID optional<input name="upiId" type="text"></label>
+        </div>
+
+        <div class="form-block">
+          <div class="form-block-heading">
+            <p class="eyebrow">Documents</p>
+            <h2>KYC upload</h2>
+          </div>
+          <label>Upload PAN document<input name="panDocument" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required></label>
+          <label>Upload Aadhaar/GST/KYC document<input name="kycDocument" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required></label>
+        </div>
+
+        <p class="form-message" id="sellerRegisterMessage" aria-live="polite"></p>
+        <button class="primary-button seller-register-submit" type="submit">Submit seller registration</button>
+      </form>
+    </section>
+  </main>
+
+  <script src="seller-register.js"></script>
+</body>
+</html>

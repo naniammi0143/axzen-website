@@ -14,6 +14,7 @@ const userSchema = new mongoose.Schema(
       },
     },
     phone: { type: String, trim: true, default: "" },
+    passwordHash: { type: String, default: "", select: false },
     firebaseUid: { type: String, trim: true, default: "" },
     role: {
       type: String,
