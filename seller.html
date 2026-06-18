@@ -24,16 +24,27 @@
   </header>
 
   <main>
-    <section class="section login-section auth-gate" id="login">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">Seller website - seller.axzen.in</p>
-          <h2>Login with phone OTP to open seller portal.</h2>
+    <section class="login-section auth-gate portal-auth seller-auth" id="login">
+      <div class="auth-copy">
+        <p class="eyebrow">Seller website - seller.axzen.in</p>
+        <h1>Run your store with a secure seller login.</h1>
+        <p>Open your seller workspace to add products, manage inventory, track orders, and view commission settlements.</p>
+        <div class="auth-highlights" aria-label="Seller controls">
+          <span>Products</span>
+          <span>Orders</span>
+          <span>Payouts</span>
         </div>
       </div>
       <article class="login-card compact-login">
+        <div class="login-card-heading">
+          <span class="login-icon">S</span>
+          <div>
+            <p class="eyebrow">Seller login</p>
+            <h2>Verify your phone</h2>
+          </div>
+        </div>
         <form class="role-login-form firebase-phone-form" data-role="seller">
-          <label>Phone number<input name="phone" type="tel" placeholder="+91 98765 43210" required></label>
+          <label>Phone number<input name="phone" type="tel" placeholder="+91 98765 43210" required autocomplete="tel"></label>
           <div id="recaptcha-seller" class="recaptcha-box"></div>
           <button type="button" data-send-otp>Send OTP</button>
           <label class="otp-field" hidden>OTP<input name="otp" type="text" inputmode="numeric" placeholder="Enter OTP"></label>

@@ -57,7 +57,7 @@ function getRecaptcha(form) {
   }
 
   const verifier = new RecaptchaVerifier(auth, containerId, {
-    size: "normal",
+    size: "invisible",
   });
   recaptchaVerifiers.set(role, verifier);
   return verifier;
@@ -161,16 +161,23 @@ phoneForms.forEach((form) => {
 
     sendButton.disabled = true;
     sendButton.textContent = "Sending OTP...";
+    form.classList.add("is-sending");
 
     try {
       const confirmationResult = await signInWithPhoneNumber(auth, phone, getRecaptcha(form));
       confirmationResults.set(role, { confirmationResult, phone });
+      form.classList.remove("is-sending");
+      form.classList.add("otp-sent");
+      phoneInput.readOnly = true;
+      sendButton.hidden = true;
       otpGroup.hidden = false;
       verifyButton.hidden = false;
+      otpInput.focus();
       setLoginMessage(form, `OTP sent to ${phone}.`);
     } catch (error) {
+      form.classList.remove("is-sending", "otp-sent");
+      sendButton.hidden = false;
       setLoginMessage(form, error.message, true);
-    } finally {
       sendButton.disabled = false;
       sendButton.textContent = "Send OTP";
     }

@@ -346,8 +346,94 @@ a {
   align-content: center;
 }
 
+.portal-auth {
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
+  gap: clamp(28px, 6vw, 88px);
+  align-items: center;
+  padding: clamp(42px, 7vw, 88px) clamp(18px, 6vw, 86px);
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(245, 247, 248, 0.97), rgba(245, 247, 248, 0.84)),
+    url("https://images.unsplash.com/photo-1556740758-90de374c12ad?auto=format&fit=crop&w=1800&q=80") center/cover;
+}
+
+.admin-auth {
+  background:
+    linear-gradient(135deg, rgba(245, 247, 248, 0.98), rgba(245, 247, 248, 0.82)),
+    url("https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1800&q=80") center/cover;
+}
+
+.auth-copy {
+  max-width: 760px;
+}
+
+.auth-copy h1 {
+  max-width: 760px;
+  margin-bottom: 18px;
+  font-size: clamp(42px, 5.6vw, 72px);
+  line-height: 0.98;
+}
+
+.auth-copy p {
+  max-width: 660px;
+  color: #3c4b54;
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.auth-highlights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.auth-highlights span {
+  padding: 10px 14px;
+  color: var(--brand-dark);
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(10, 107, 95, 0.18);
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.login-card-heading {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.login-card-heading h2 {
+  margin-bottom: 0;
+  font-size: 24px;
+}
+
+.login-icon {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, var(--brand-dark), var(--brand));
+  border-radius: 8px;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.portal-auth .login-card {
+  width: 100%;
+  padding: 28px;
+  border-color: rgba(16, 24, 32, 0.08);
+  box-shadow: 0 26px 80px rgba(16, 24, 32, 0.16);
+}
+
 .recaptcha-box {
-  min-height: 78px;
+  width: 1px;
+  height: 1px;
+  min-height: 1px;
+  overflow: hidden;
 }
 
 .otp-field {
@@ -357,6 +443,11 @@ a {
 
 .otp-field[hidden] {
   display: none;
+}
+
+.role-login-form.otp-sent [name="phone"] {
+  color: #52636d;
+  background: #f4f7f7;
 }
 
 .portal-page {
@@ -1194,6 +1285,7 @@ h3 {
   .commerce-hero,
   .commerce-layout,
   .portal-hero,
+  .portal-auth,
   .hero,
   .intro-band,
   .seller-section {
@@ -1211,6 +1303,11 @@ h3 {
 
   .dashboard-preview {
     justify-self: start;
+  }
+
+  .portal-auth {
+    min-height: auto;
+    align-content: start;
   }
 
   .workflow-grid {
@@ -1267,6 +1364,22 @@ h3 {
 
   .hero {
     padding-top: 32px;
+  }
+
+  .portal-auth {
+    padding: 28px 14px 42px;
+  }
+
+  .auth-copy h1 {
+    font-size: 38px;
+  }
+
+  .auth-copy p {
+    font-size: 16px;
+  }
+
+  .portal-auth .login-card {
+    padding: 20px;
   }
 
   .metric-grid,
