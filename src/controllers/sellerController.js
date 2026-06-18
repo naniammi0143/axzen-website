@@ -71,6 +71,51 @@ async function saveSellerDocument(file, sellerId, type) {
   };
 }
 
+function sellerResponse(seller, statusCode = 201) {
+  return {
+    statusCode,
+    payload: {
+      message: "Registration submitted successfully. Your account is waiting for admin approval.",
+      seller: {
+        id: seller._id,
+        approvalStatus: seller.approvalStatus,
+        kycStatus: seller.kycStatus,
+        isActive: seller.isActive,
+      },
+    },
+  };
+}
+
+function buildSellerUpdate(req, phone, email) {
+  return {
+    businessName: clean(req.body.storeName),
+    fullName: clean(req.body.fullName),
+    phone,
+    email,
+    category: clean(req.body.businessType),
+    businessType: clean(req.body.businessType),
+    city: clean(req.body.city),
+    state: clean(req.body.state),
+    pincode: clean(req.body.pincode),
+    pickupAddress: clean(req.body.pickupAddress),
+    gstNumber: clean(req.body.gstNumber).toUpperCase(),
+    panNumber: clean(req.body.panNumber).toUpperCase(),
+    aadhaarNumber: clean(req.body.aadhaarNumber),
+    approvalStatus: "pending",
+    kycStatus: "pending",
+    status: "inactive",
+    isActive: false,
+    payoutEnabled: false,
+    bankDetails: {
+      accountHolderName: clean(req.body.accountHolderName),
+      accountNumber: clean(req.body.accountNumber),
+      ifsc: clean(req.body.ifsc).toUpperCase(),
+      bankName: clean(req.body.bankName),
+      upiId: clean(req.body.upiId),
+    },
+  };
+}
+
 const getProfile = asyncHandler(async (req, res) => {
   const seller = await Seller.findOne({ userId: req.user.id });
   success(res, { seller });
@@ -109,25 +154,44 @@ const registerSeller = asyncHandler(async (req, res) => {
     return;
   }
 
+  const existingSeller = await Seller.findOne({
+    $or: [{ phone }, { email }],
+  });
+
+  if (existingSeller) {
+    const userUpdate = {
+      name: clean(req.body.fullName),
+      email,
+      phone,
+      firebaseUid: decoded.uid,
+      passwordHash: hashPassword(req.body.password),
+      role: "seller",
+      status: "pending",
+    };
+    await User.findOneAndUpdate({ _id: existingSeller.userId }, userUpdate, { new: true });
+
+    Object.assign(existingSeller, buildSellerUpdate(req, phone, email));
+    existingSeller.kycDocuments = [
+      await saveSellerDocument(req.files.panDocument, existingSeller._id, "pan"),
+      await saveSellerDocument(req.files.kycDocument, existingSeller._id, "kyc"),
+    ];
+    await existingSeller.save();
+
+    const { payload } = sellerResponse(existingSeller, 200);
+    success(res, payload, 200);
+    return;
+  }
+
   const duplicateUser = await User.findOne({
     $or: [{ phone }, { email }],
   });
 
-  if (duplicateUser) {
-    res.status(409).json({ ok: false, message: "Seller email or mobile number already exists." });
+  if (duplicateUser && duplicateUser.role !== "seller") {
+    res.status(409).json({ ok: false, message: "This mobile number or email is already linked to another Axzen account." });
     return;
   }
 
-  const duplicateSeller = await Seller.findOne({
-    $or: [{ phone }, { email }],
-  });
-
-  if (duplicateSeller) {
-    res.status(409).json({ ok: false, message: "Seller email or mobile number already exists." });
-    return;
-  }
-
-  const user = await User.create({
+  const userPayload = {
     name: clean(req.body.fullName),
     email,
     phone,
@@ -135,36 +199,16 @@ const registerSeller = asyncHandler(async (req, res) => {
     passwordHash: hashPassword(req.body.password),
     role: "seller",
     status: "pending",
-  });
+  };
+  const createdUser = !duplicateUser;
+  const user = duplicateUser
+    ? await User.findByIdAndUpdate(duplicateUser._id, userPayload, { new: true })
+    : await User.create(userPayload);
 
   try {
     const seller = await Seller.create({
       userId: user._id,
-      businessName: clean(req.body.storeName),
-      fullName: clean(req.body.fullName),
-      phone,
-      email,
-      category: clean(req.body.businessType),
-      businessType: clean(req.body.businessType),
-      city: clean(req.body.city),
-      state: clean(req.body.state),
-      pincode: clean(req.body.pincode),
-      pickupAddress: clean(req.body.pickupAddress),
-      gstNumber: clean(req.body.gstNumber).toUpperCase(),
-      panNumber: clean(req.body.panNumber).toUpperCase(),
-      aadhaarNumber: clean(req.body.aadhaarNumber),
-      approvalStatus: "pending",
-      kycStatus: "pending",
-      status: "inactive",
-      isActive: false,
-      payoutEnabled: false,
-      bankDetails: {
-        accountHolderName: clean(req.body.accountHolderName),
-        accountNumber: clean(req.body.accountNumber),
-        ifsc: clean(req.body.ifsc).toUpperCase(),
-        bankName: clean(req.body.bankName),
-        upiId: clean(req.body.upiId),
-      },
+      ...buildSellerUpdate(req, phone, email),
     });
 
     const kycDocuments = [
@@ -175,21 +219,12 @@ const registerSeller = asyncHandler(async (req, res) => {
     seller.kycDocuments = kycDocuments;
     await seller.save();
 
-    success(
-      res,
-      {
-        message: "Registration submitted successfully. Your account is waiting for admin approval.",
-        seller: {
-          id: seller._id,
-          approvalStatus: seller.approvalStatus,
-          kycStatus: seller.kycStatus,
-          isActive: seller.isActive,
-        },
-      },
-      201
-    );
+    const { payload, statusCode } = sellerResponse(seller, 201);
+    success(res, payload, statusCode);
   } catch (registrationError) {
-    await User.deleteOne({ _id: user._id });
+    if (createdUser) {
+      await User.deleteOne({ _id: user._id });
+    }
     throw registrationError;
   }
 });
