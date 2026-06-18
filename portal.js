@@ -195,13 +195,23 @@ phoneForms.forEach((form) => {
     verifyButton.disabled = true;
     verifyButton.textContent = "Verifying...";
 
+    let credential;
+
     try {
-      const credential = await session.confirmationResult.confirm(otp);
+      credential = await session.confirmationResult.confirm(otp);
+    } catch (error) {
+      setLoginMessage(form, "OTP is incorrect or expired. Enter the latest SMS OTP.", true);
+      verifyButton.disabled = false;
+      verifyButton.textContent = "Verify and continue";
+      return;
+    }
+
+    try {
       const firebaseToken = await credential.user.getIdToken();
       setLoginMessage(form, "Phone verified. Opening your dashboard.");
       await createPhoneSession(role, session.phone, firebaseToken);
     } catch (error) {
-      setLoginMessage(form, "Invalid OTP. Please try again.", true);
+      setLoginMessage(form, error.message || "Phone verified, but dashboard login failed.", true);
     } finally {
       verifyButton.disabled = false;
       verifyButton.textContent = "Verify and continue";

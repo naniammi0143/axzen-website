@@ -13,6 +13,30 @@ async function ensureReady() {
 }
 
 module.exports = async (req, res) => {
-  await ensureReady();
-  return app(req, res);
+  if (req.url === "/api" || req.url === "/api/" || req.url === "/api/health") {
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/json");
+    res.end(
+      JSON.stringify({
+        ok: true,
+        service: "Axzen API",
+        database: readyPromise ? "initializing" : "not checked",
+      })
+    );
+    return;
+  }
+
+  try {
+    await ensureReady();
+    return app(req, res);
+  } catch (error) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(
+      JSON.stringify({
+        ok: false,
+        message: error.message || "Backend startup failed.",
+      })
+    );
+  }
 };
