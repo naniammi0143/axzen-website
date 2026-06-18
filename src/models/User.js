@@ -3,7 +3,16 @@ const mongoose = require("mongoose");
 const userSchema = new mongoose.Schema(
   {
     name: { type: String, trim: true, default: "" },
-    email: { type: String, trim: true, lowercase: true, default: "" },
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      set: (value) => {
+        if (!value) return undefined;
+        const normalized = String(value).trim().toLowerCase();
+        return normalized || undefined;
+      },
+    },
     phone: { type: String, trim: true, default: "" },
     firebaseUid: { type: String, trim: true, default: "" },
     role: {
@@ -21,6 +30,14 @@ const userSchema = new mongoose.Schema(
 );
 
 userSchema.index({ phone: 1, role: 1 }, { unique: true, sparse: true });
-userSchema.index({ email: 1, role: 1 }, { unique: true, sparse: true });
+userSchema.index(
+  { email: 1, role: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      email: { $exists: true },
+    },
+  }
+);
 
 module.exports = mongoose.model("User", userSchema);

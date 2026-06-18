@@ -3,7 +3,23 @@ const Product = require("../models/Product");
 const Seller = require("../models/Seller");
 const User = require("../models/User");
 
+async function repairUserEmailIndex() {
+  await User.updateMany({ email: "" }, { $unset: { email: "" } });
+
+  try {
+    await User.collection.dropIndex("email_1_role_1");
+  } catch (error) {
+    if (error.codeName !== "IndexNotFound" && error.code !== 27) {
+      throw error;
+    }
+  }
+
+  await User.syncIndexes();
+}
+
 async function seedDefaults() {
+  await repairUserEmailIndex();
+
   await Category.bulkWrite(
     ["Grocery", "Fashion", "Electronics", "Home"].map((name) => ({
       updateOne: {
