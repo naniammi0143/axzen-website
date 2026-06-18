@@ -1,4 +1,5 @@
 const fs = require("fs/promises");
+const os = require("os");
 const path = require("path");
 const User = require("../models/User");
 const Seller = require("../models/Seller");
@@ -7,7 +8,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const { success } = require("../utils/apiResponse");
 const { hashPassword } = require("../utils/password");
 
-const uploadRoot = path.join(__dirname, "..", "..", "uploads", "seller-kyc");
+const uploadRoot = process.env.UPLOAD_DIR || path.join(os.tmpdir(), "axzen-uploads", "seller-kyc");
 
 function clean(value = "") {
   return String(value).trim();
@@ -65,7 +66,8 @@ async function saveSellerDocument(file, sellerId, type) {
     type,
     originalName: file.originalName,
     fileName,
-    path: path.relative(path.join(__dirname, "..", ".."), filePath).replace(/\\/g, "/"),
+    path: filePath,
+    storage: process.env.UPLOAD_DIR ? "local" : "serverless-temp",
     mimeType: file.mimetype,
     size: file.size,
   };
