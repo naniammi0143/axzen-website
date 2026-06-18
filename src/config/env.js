@@ -6,6 +6,7 @@ const env = {
   mongoUri: process.env.MONGO_URI || process.env.MONGODB_URI,
   jwtSecret: process.env.JWT_SECRET || process.env.AUTH_SECRET || "axzen-local-development-secret",
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID || "axzen-c70e1",
+  firebaseWebApiKey: process.env.FIREBASE_WEB_API_KEY || "AIzaSyBfdpqGOahFlX-vFROEFMvVEX9anZV5TG4",
   firebaseServiceAccountJson: process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "",
   allowedOrigins: [
     "https://axzen.in",

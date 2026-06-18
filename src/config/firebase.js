@@ -35,7 +35,31 @@ async function verifyFirebaseToken(idToken) {
     };
   }
 
-  return getFirebaseAdmin().auth().verifyIdToken(idToken);
+  if (env.firebaseServiceAccountJson) {
+    return getFirebaseAdmin().auth().verifyIdToken(idToken);
+  }
+
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.firebaseWebApiKey}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ idToken }),
+    }
+  );
+  const result = await response.json();
+
+  if (!response.ok || !result.users?.length) {
+    throw new Error(result.error?.message || "Firebase token verification failed.");
+  }
+
+  const user = result.users[0];
+  return {
+    uid: user.localId,
+    phone_number: user.phoneNumber,
+  };
 }
 
 module.exports = {
