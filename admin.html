@@ -54,46 +54,91 @@
       </article>
     </section>
 
-    <div id="protectedContent" hidden>
-      <section class="portal-hero admin-portal">
-        <div>
-          <p class="eyebrow">Company control</p>
-          <h1>Control Axzen marketplace operations.</h1>
-          <p>Approve sellers, control product moderation, manage delivery partners, commission rules, customer support, payout settlements, and platform analytics.</p>
-        </div>
-        <div class="portal-preview">
-          <article><span>Pending sellers</span><strong>12</strong></article>
-          <article><span>Orders today</span><strong>326</strong></article>
-          <article><span>Payout queue</span><strong>Rs. 2.8L</strong></article>
-        </div>
-      </section>
+    <section class="admin-app" id="protectedContent" hidden>
+      <aside class="admin-sidebar">
+        <a class="admin-sidebar-brand" href="/admin" aria-label="Axzen admin">
+          <span class="brand-mark">A</span>
+          <strong>Axzen Admin</strong>
+        </a>
+        <nav class="admin-menu" aria-label="Admin sections">
+          <button class="active" type="button" data-admin-view="dashboard">Dashboard</button>
+          <button type="button" data-admin-view="sellers">Sellers</button>
+          <button type="button" data-admin-view="products">Products</button>
+          <button type="button" data-admin-view="orders">Orders</button>
+          <button type="button" data-admin-view="payments">Payments</button>
+          <button type="button" data-admin-view="customers">Customers</button>
+          <button type="button" data-admin-view="delivery">Delivery</button>
+          <button type="button" data-admin-view="employees">Employees</button>
+          <button type="button" data-admin-view="reports">Reports</button>
+          <button type="button" data-admin-view="audit">Audit Logs</button>
+        </nav>
+      </aside>
 
-      <section class="section">
-        <div class="workflow-grid">
-          <article><span>1</span><h3>Seller control</h3><p>Approve KYC, verify bank details, suspend stores, and set seller status.</p></article>
-          <article><span>2</span><h3>Product control</h3><p>Approve catalogue, reject unsafe listings, manage categories, and feature stores.</p></article>
-          <article><span>3</span><h3>Orders and delivery</h3><p>Monitor order lifecycle, assign delivery partners, and resolve disputes.</p></article>
-          <article><span>4</span><h3>Finance</h3><p>Manage commission rules, split settlement, refunds, invoices, and payout reports.</p></article>
-        </div>
-      </section>
-    </div>
+      <div class="admin-main">
+        <header class="admin-topbar">
+          <div>
+            <p class="eyebrow" id="adminRoleLabel">Admin workspace</p>
+            <h1 id="adminPageTitle">Dashboard</h1>
+          </div>
+          <div class="admin-actions">
+            <input id="adminSearch" type="search" placeholder="Search current section">
+            <button class="secondary-button" type="button" id="adminRefresh">Refresh</button>
+            <button class="secondary-button logout-button" type="button" id="logoutButton">Logout</button>
+          </div>
+        </header>
 
-    <section class="section dashboard-section" id="dashboard" hidden>
-      <div class="dashboard-shell">
-        <aside class="dashboard-sidebar">
-          <p class="eyebrow" id="dashboardRole">Admin</p>
-          <h2 id="dashboardTitle">Welcome</h2>
-          <p id="dashboardSummary"></p>
-          <button class="secondary-button logout-button" type="button" id="logoutButton">Logout</button>
-        </aside>
-        <div class="dashboard-main">
-          <div class="dashboard-metrics" id="dashboardMetrics"></div>
-          <div class="dashboard-panels" id="dashboardPanels"></div>
-        </div>
+        <div class="admin-toast" id="adminToast" role="status"></div>
+
+        <section class="admin-view active" data-view-panel="dashboard">
+          <div class="admin-stats" id="adminStats"></div>
+          <div class="admin-grid-two">
+            <article class="admin-panel">
+              <div class="panel-heading">
+                <h2>Sales and orders</h2>
+                <span>Current month</span>
+              </div>
+              <div class="mini-chart" id="salesChart"></div>
+            </article>
+            <article class="admin-panel">
+              <div class="panel-heading">
+                <h2>Top categories</h2>
+                <span>Product mix</span>
+              </div>
+              <div class="mini-chart" id="categoryChart"></div>
+            </article>
+          </div>
+          <div class="admin-grid-two">
+            <article class="admin-panel">
+              <div class="panel-heading">
+                <h2>Recent orders</h2>
+                <span>Live operations</span>
+              </div>
+              <div id="recentOrdersTable"></div>
+            </article>
+            <article class="admin-panel">
+              <div class="panel-heading">
+                <h2>Low stock alerts</h2>
+                <span>Needs action</span>
+              </div>
+              <div id="lowStockTable"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="admin-view" data-view-panel="sellers"></section>
+        <section class="admin-view" data-view-panel="products"></section>
+        <section class="admin-view" data-view-panel="orders"></section>
+        <section class="admin-view" data-view-panel="payments"></section>
+        <section class="admin-view" data-view-panel="customers"></section>
+        <section class="admin-view" data-view-panel="delivery"></section>
+        <section class="admin-view" data-view-panel="employees"></section>
+        <section class="admin-view" data-view-panel="reports"></section>
+        <section class="admin-view" data-view-panel="audit"></section>
       </div>
     </section>
   </main>
 
+  <script src="admin-panel.js"></script>
   <script type="module" src="portal.js"></script>
 </body>
 </html>

@@ -29,7 +29,34 @@ function authorize(...roles) {
   };
 }
 
+const adminAccess = {
+  dashboard: ["superadmin", "admin", "support", "finance", "delivery_manager"],
+  sellers: ["superadmin", "admin"],
+  products: ["superadmin", "admin"],
+  orders: ["superadmin", "admin", "support", "delivery_manager"],
+  customers: ["superadmin", "admin", "support"],
+  finance: ["superadmin", "finance"],
+  delivery: ["superadmin", "admin", "delivery_manager"],
+  employees: ["superadmin"],
+  reports: ["superadmin", "admin", "finance"],
+  audit: ["superadmin"],
+};
+
+function authorizeAdminAccess(area) {
+  return (req, res, next) => {
+    const allowed = adminAccess[area] || [];
+
+    if (!req.user || !allowed.includes(req.user.role)) {
+      res.status(403).json({ ok: false, message: "This admin section is not allowed for your role." });
+      return;
+    }
+
+    next();
+  };
+}
+
 module.exports = {
   authenticate,
   authorize,
+  authorizeAdminAccess,
 };

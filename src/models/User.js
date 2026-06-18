@@ -17,7 +17,7 @@ const userSchema = new mongoose.Schema(
     firebaseUid: { type: String, trim: true, default: "" },
     role: {
       type: String,
-      enum: ["customer", "seller", "admin", "superadmin"],
+      enum: ["customer", "seller", "admin", "superadmin", "support", "finance", "delivery_manager"],
       required: true,
     },
     status: {

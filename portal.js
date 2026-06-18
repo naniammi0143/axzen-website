@@ -66,6 +66,24 @@ function getRecaptcha(form) {
 function renderDashboard(payload) {
   const { user, dashboard } = payload;
 
+  if (document.body.classList.contains("admin-page") && window.AxzenAdminPanel) {
+    const loginSection = document.querySelector("#login");
+    if (loginSection) {
+      loginSection.hidden = true;
+    }
+
+    if (protectedContent) {
+      protectedContent.hidden = false;
+    }
+
+    window.AxzenAdminPanel.init({
+      token: localStorage.getItem("axzenToken"),
+      user,
+    });
+    protectedContent?.scrollIntoView({ behavior: "smooth" });
+    return;
+  }
+
   dashboardRole.textContent = `${user.role} dashboard`;
   dashboardTitle.textContent = dashboard.title;
   dashboardSummary.textContent = dashboard.summary;
@@ -233,7 +251,11 @@ if (logoutButton) {
       protectedContent.hidden = true;
     }
 
-    document.querySelector(".login-section").scrollIntoView({ behavior: "smooth" });
+    const loginSection = document.querySelector(".login-section");
+    if (loginSection) {
+      loginSection.hidden = false;
+      loginSection.scrollIntoView({ behavior: "smooth" });
+    }
   });
 }
 

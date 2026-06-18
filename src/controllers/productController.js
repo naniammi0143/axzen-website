@@ -5,7 +5,7 @@ const { success } = require("../utils/apiResponse");
 const { formatRupees, toPaise } = require("../utils/money");
 
 const listProducts = asyncHandler(async (req, res) => {
-  const products = await Product.find({ status: "active" }).sort({ updatedAt: -1 }).limit(48);
+  const products = await Product.find({ status: { $in: ["active", "approved"] } }).sort({ updatedAt: -1 }).limit(48);
 
   success(res, {
     products: products.map((product) => ({

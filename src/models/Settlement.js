@@ -8,7 +8,7 @@ const settlementSchema = new mongoose.Schema(
     commissionPaise: { type: Number, min: 0, required: true },
     payoutPaise: { type: Number, min: 0, required: true },
     currency: { type: String, default: "INR" },
-    status: { type: String, enum: ["pending", "processing", "paid", "hold"], default: "pending" },
+    status: { type: String, enum: ["pending", "processing", "paid", "hold", "failed"], default: "pending" },
   },
   { timestamps: true }
 );

@@ -38,6 +38,30 @@ const dashboards = {
       { title: "Platform settings", items: [["Commission", "Global and category rules"], ["Payments", "Provider settings"], ["Delivery", "Partner configuration"]] },
     ],
   },
+  support: {
+    title: "Support Desk",
+    summary: "Resolve customer issues, review customer order history, and coordinate returns.",
+    metrics: [["Open tickets", "00"], ["Customer blocks", "00"], ["Returns", "00"], ["Escalations", "00"]],
+    panels: [
+      { title: "Customer support", items: [["Customers", "Phone and order history"], ["Issues", "Returns and refunds"], ["Notes", "Escalation trail"]] },
+    ],
+  },
+  finance: {
+    title: "Finance Control",
+    summary: "Review payments, refunds, commissions, seller payouts, and finance reports.",
+    metrics: [["Captured", "Rs. 0"], ["Refunds", "Rs. 0"], ["Payout queue", "Rs. 0"], ["Failed payouts", "00"]],
+    panels: [
+      { title: "Finance", items: [["Payments", "Customer payment status"], ["Payouts", "Seller settlements"], ["Reports", "CSV exports"]] },
+    ],
+  },
+  delivery_manager: {
+    title: "Delivery Control",
+    summary: "Manage delivery partner status, tracking IDs, failed delivery reasons, and same-day eligibility.",
+    metrics: [["Assigned", "00"], ["In transit", "00"], ["Delivered", "00"], ["Failed", "00"]],
+    panels: [
+      { title: "Delivery", items: [["Tracking", "Partner and tracking ID"], ["Failed delivery", "Reason capture"], ["Same day", "Pincode eligibility"]] },
+    ],
+  },
 };
 
 const getDashboard = asyncHandler(async (req, res) => {

@@ -17,7 +17,7 @@ router.post(
   "/phone-login",
   authLimiter,
   [
-    body("role").isIn(["customer", "seller", "admin", "superadmin"]),
+    body("role").isIn(["customer", "seller", "admin", "superadmin", "support", "finance", "delivery_manager"]),
     body("firebaseToken").isString().notEmpty(),
   ],
   validate,

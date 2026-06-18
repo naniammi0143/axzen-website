@@ -36,7 +36,7 @@ async function ensureRoleProfile(user) {
     );
   }
 
-  if (["admin", "superadmin"].includes(user.role)) {
+  if (["admin", "superadmin", "support", "finance", "delivery_manager"].includes(user.role)) {
     await AdminUser.updateOne(
       { userId: user._id },
       {
@@ -45,7 +45,13 @@ async function ensureRoleProfile(user) {
           permissions:
             user.role === "superadmin"
               ? ["*"]
-              : ["sellers", "products", "orders", "finance"],
+              : user.role === "finance"
+                ? ["finance", "reports"]
+                : user.role === "support"
+                  ? ["customers", "orders"]
+                  : user.role === "delivery_manager"
+                    ? ["delivery", "orders"]
+                    : ["sellers", "products", "orders"],
         },
       },
       { upsert: true }

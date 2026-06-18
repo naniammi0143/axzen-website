@@ -1,16 +1,68 @@
 const express = require("express");
 const {
+  adminOverview,
   approveProduct,
   approveSeller,
+  exportCsv,
   financeSummary,
+  listAuditLogs,
+  listCustomers,
+  listDeliveries,
+  listEmployees,
+  listOrders,
+  listPayments,
+  listProducts,
+  listSellers,
+  listSettlements,
+  rejectProduct,
+  rejectSeller,
+  reports,
+  updateCustomer,
+  updateDelivery,
+  updateEmployee,
+  updateOrder,
+  updateProduct,
+  updateSeller,
+  updateSettlement,
 } = require("../controllers/adminController");
-const { authenticate, authorize } = require("../middleware/auth");
+const { authenticate, authorizeAdminAccess } = require("../middleware/auth");
 
 const router = express.Router();
-const adminOnly = [authenticate, authorize("admin", "superadmin")];
 
-router.patch("/sellers/:id/approve", adminOnly, approveSeller);
-router.patch("/products/:id/approve", adminOnly, approveProduct);
-router.get("/finance/summary", adminOnly, financeSummary);
+router.use(authenticate);
+
+router.get("/overview", authorizeAdminAccess("dashboard"), adminOverview);
+
+router.get("/sellers", authorizeAdminAccess("sellers"), listSellers);
+router.patch("/sellers/:id", authorizeAdminAccess("sellers"), updateSeller);
+router.patch("/sellers/:id/approve", authorizeAdminAccess("sellers"), approveSeller);
+router.patch("/sellers/:id/reject", authorizeAdminAccess("sellers"), rejectSeller);
+
+router.get("/products", authorizeAdminAccess("products"), listProducts);
+router.patch("/products/:id", authorizeAdminAccess("products"), updateProduct);
+router.patch("/products/:id/approve", authorizeAdminAccess("products"), approveProduct);
+router.patch("/products/:id/reject", authorizeAdminAccess("products"), rejectProduct);
+
+router.get("/orders", authorizeAdminAccess("orders"), listOrders);
+router.patch("/orders/:id", authorizeAdminAccess("orders"), updateOrder);
+
+router.get("/customers", authorizeAdminAccess("customers"), listCustomers);
+router.patch("/customers/:id", authorizeAdminAccess("customers"), updateCustomer);
+
+router.get("/payments", authorizeAdminAccess("finance"), listPayments);
+router.get("/settlements", authorizeAdminAccess("finance"), listSettlements);
+router.patch("/settlements/:id", authorizeAdminAccess("finance"), updateSettlement);
+router.get("/finance/summary", authorizeAdminAccess("finance"), financeSummary);
+
+router.get("/deliveries", authorizeAdminAccess("delivery"), listDeliveries);
+router.patch("/deliveries/:orderId", authorizeAdminAccess("delivery"), updateDelivery);
+
+router.get("/employees", authorizeAdminAccess("employees"), listEmployees);
+router.patch("/employees/:id", authorizeAdminAccess("employees"), updateEmployee);
+
+router.get("/reports", authorizeAdminAccess("reports"), reports);
+router.get("/reports/export/:type", authorizeAdminAccess("reports"), exportCsv);
+
+router.get("/audit-logs", authorizeAdminAccess("audit"), listAuditLogs);
 
 module.exports = router;
