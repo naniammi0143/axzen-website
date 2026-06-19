@@ -35,6 +35,8 @@ const sellerSchema = new mongoose.Schema(
     payoutEnabled: { type: Boolean, default: true },
     codEnabled: { type: Boolean, default: true },
     onlinePaymentEnabled: { type: Boolean, default: true },
+    freeDeliveryEnabled: { type: Boolean, default: false },
+    freeDeliveryMinOrderPaise: { type: Number, min: 0, default: 0 },
     agreements: {
       marketplaceTerms: { type: Boolean, default: false },
       kycConsent: { type: Boolean, default: false },

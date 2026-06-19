@@ -14,6 +14,8 @@ const orderSchema = new mongoose.Schema(
     },
     productTotal: { type: Number, min: 0, default: 0 },
     deliveryCharge: { type: Number, min: 0, default: 0 },
+    sellerDeliveryCharge: { type: Number, min: 0, default: 0 },
+    freeDeliveryApplied: { type: Boolean, default: false },
     customerPaid: { type: Number, min: 0, default: 0 },
     commissionType: { type: String, enum: ["percentage", "fixed"], default: "percentage" },
     commissionValue: { type: Number, min: 0, default: 0 },

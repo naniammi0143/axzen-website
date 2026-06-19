@@ -31,6 +31,15 @@ test("supports zero delivery charge", () => {
   assert.equal(finance.commissionAmountPaise, 5000);
 });
 
+test("cuts seller-paid free delivery from seller payout only", () => {
+  const finance = calculateOrderFinance(items, { commissionType: "percentage", commissionValue: 10 }, 0, 4000);
+
+  assert.equal(finance.deliveryChargePaise, 0);
+  assert.equal(finance.sellerDeliveryChargePaise, 4000);
+  assert.equal(finance.customerPaidPaise, 100000);
+  assert.equal(finance.sellerPayoutPaise, 84000);
+});
+
 test("uses legacy seller commission bps when explicit settings are absent", () => {
   const commission = getSellerCommission({ commissionBps: 1500 });
 

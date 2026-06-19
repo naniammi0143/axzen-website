@@ -6,6 +6,7 @@ const settlementSchema = new mongoose.Schema(
     sellerId: { type: mongoose.Schema.Types.ObjectId, ref: "Seller", required: true },
     grossPaise: { type: Number, min: 0, required: true },
     deliveryChargePaise: { type: Number, min: 0, default: 0 },
+    sellerDeliveryChargePaise: { type: Number, min: 0, default: 0 },
     commissionPaise: { type: Number, min: 0, required: true },
     paymentChargePaise: { type: Number, min: 0, default: 0 },
     payoutPaise: { type: Number, min: 0, required: true },

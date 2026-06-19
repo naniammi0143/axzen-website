@@ -217,6 +217,21 @@ function cartSupportsOnlinePayment(cart = getCustomerCart()) {
   return cart.length > 0 && cart.every((item) => item.onlinePaymentEnabled !== false);
 }
 
+function getCartFreeDelivery(cart = getCustomerCart()) {
+  const sellerIds = getCartSellerIds(cart);
+  const subtotal = getCartTotalPaise(cart);
+  const firstItem = cart[0] || {};
+  const threshold = Number(firstItem.freeDeliveryMinOrderPaise) || 0;
+  const eligible = sellerIds.length === 1 && firstItem.freeDeliveryEnabled === true && subtotal >= threshold;
+  return {
+    enabled: sellerIds.length === 1 && firstItem.freeDeliveryEnabled === true,
+    eligible,
+    threshold,
+    customerDeliveryChargePaise: eligible ? 0 : DELIVERY_CHARGE_PAISE,
+    sellerDeliveryChargePaise: eligible ? DELIVERY_CHARGE_PAISE : 0,
+  };
+}
+
 function getCheckoutAvailability(cart = getCustomerCart()) {
   const sellerIds = getCartSellerIds(cart);
   const singleSeller = sellerIds.length === 1;
@@ -281,6 +296,9 @@ function renderCheckoutPanel(cart = getCustomerCart()) {
   const address = getSavedCustomerAddress();
   const isCustomerLoggedIn = localStorage.getItem("axzenToken") && localStorage.getItem("axzenRole") === "customer";
   const { codAvailable, onlineAvailable, blockReason } = getCheckoutAvailability(cart);
+  const freeDelivery = getCartFreeDelivery(cart);
+  const productTotal = getCartTotalPaise(cart);
+  const customerPaid = productTotal + freeDelivery.customerDeliveryChargePaise;
   const canPlaceOrder = codAvailable || onlineAvailable;
 
   if (!isCustomerLoggedIn) {
@@ -331,9 +349,16 @@ function renderCheckoutPanel(cart = getCustomerCart()) {
         </label>
       </div>
       <div class="checkout-total">
-        <span>Product total</span><b>${rupees(getCartTotalPaise(cart))}</b>
-        <span>Delivery charge</span><b>${rupees(DELIVERY_CHARGE_PAISE)}</b>
-        <strong>Customer paid</strong><strong>${rupees(getCartTotalPaise(cart) + DELIVERY_CHARGE_PAISE)}</strong>
+        <span>Product total</span><b>${rupees(productTotal)}</b>
+        <span>Delivery charge</span><b>${freeDelivery.eligible ? "Free" : rupees(DELIVERY_CHARGE_PAISE)}</b>
+        ${
+          freeDelivery.eligible
+            ? `<span class="checkout-note">Free delivery applied. Delivery cost is covered by seller.</span><span></span>`
+            : freeDelivery.enabled
+              ? `<span class="checkout-note">Free delivery available above ${rupees(freeDelivery.threshold)}.</span><span></span>`
+              : ""
+        }
+        <strong>Customer paid</strong><strong>${rupees(customerPaid)}</strong>
       </div>
       <button type="submit" data-place-order ${canPlaceOrder ? "" : "disabled"}>${codAvailable ? "Place order" : "Pay online and place order"}</button>
     </form>
@@ -362,6 +387,8 @@ function addProductToCart(productId) {
       pricePaise: product.pricePaise,
       codEnabled: product.codEnabled !== false,
       onlinePaymentEnabled: product.onlinePaymentEnabled !== false,
+      freeDeliveryEnabled: product.freeDeliveryEnabled === true,
+      freeDeliveryMinOrderPaise: Number(product.freeDeliveryMinOrderPaise) || 0,
       quantity: 1,
     });
   }
@@ -472,9 +499,12 @@ async function placeCustomerOrder(form) {
   };
   saveCustomerAddress(shippingAddress);
   const paymentMethod = formData.get("paymentMethod") || "cod";
+  const freeDelivery = getCartFreeDelivery(cart);
   const orderPayload = {
     items: buildOrderItems(cart),
-    deliveryCharge: DELIVERY_CHARGE_PAISE / 100,
+    deliveryCharge: freeDelivery.customerDeliveryChargePaise / 100,
+    sellerDeliveryCharge: freeDelivery.sellerDeliveryChargePaise / 100,
+    freeDeliveryApplied: freeDelivery.eligible,
     paymentMethod,
     shippingAddress,
   };
@@ -605,6 +635,8 @@ async function openDeliveryLabel(orderId) {
 }
 
 function renderSellerPaymentSettings(seller = {}) {
+  const freeDeliveryEnabled = seller.freeDeliveryEnabled === true;
+  const freeDeliveryMinOrder = Math.round((Number(seller.freeDeliveryMinOrderPaise) || 0) / 100);
   return `
     <article class="dashboard-panel seller-payment-settings" id="sellerPayments" data-seller-section="payments">
       <div class="order-invoice-heading">
@@ -626,6 +658,13 @@ function renderSellerPaymentSettings(seller = {}) {
           <strong>${seller.onlinePaymentEnabled ? "Enabled" : "Disabled"}</strong>
           <input type="checkbox" name="onlinePaymentEnabled" ${seller.onlinePaymentEnabled ? "checked" : ""}>
           <small>Ready for Razorpay/payment gateway integration.</small>
+        </label>
+        <label class="seller-payment-box ${freeDeliveryEnabled ? "enabled" : "disabled"}">
+          <span>Free Delivery</span>
+          <strong>${freeDeliveryEnabled ? "Enabled" : "Disabled"}</strong>
+          <input type="checkbox" name="freeDeliveryEnabled" ${freeDeliveryEnabled ? "checked" : ""}>
+          <small>Customer sees free delivery after this sale amount. Delivery cost is cut from seller payout.</small>
+          <input type="number" name="freeDeliveryMinOrder" min="0" step="1" value="${freeDeliveryMinOrder}" placeholder="Minimum sale amount">
         </label>
         <button class="seller-payment-save" type="submit">Save payment options</button>
         <p class="seller-payment-message" data-seller-payment-message></p>
@@ -681,6 +720,7 @@ function renderSellerWorkspace(user = {}) {
         ${sellerDetailTile("Payout", seller.payoutEnabled ? "Enabled" : "Pending approval")}
         ${sellerDetailTile("COD", seller.codEnabled ? "Enabled" : "Disabled")}
         ${sellerDetailTile("Online payment", seller.onlinePaymentEnabled ? "Enabled" : "Disabled")}
+        ${sellerDetailTile("Free delivery", seller.freeDeliveryEnabled ? `Above ${rupees(seller.freeDeliveryMinOrderPaise || 0)}` : "Disabled")}
         ${sellerDetailTile("KYC status", seller.kycStatus || "pending")}
       </div>
       <div class="seller-agreement-summary">
@@ -1309,6 +1349,10 @@ async function loadRoleOrders(role) {
 }
 
 async function updateSellerSetting(key, value, reload = true) {
+  await updateSellerSettings({ [key]: value === "true" }, reload);
+}
+
+async function updateSellerSettings(payload, reload = true) {
   const token = localStorage.getItem("axzenToken");
   const response = await fetch("/api/sellers/me", {
     method: "PUT",
@@ -1316,7 +1360,7 @@ async function updateSellerSetting(key, value, reload = true) {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ [key]: value === "true" }),
+    body: JSON.stringify(payload),
   });
   const result = await response.json();
   if (!response.ok) {
@@ -1976,8 +2020,17 @@ document.addEventListener("submit", async (event) => {
     try {
       const codEnabled = paymentForm.querySelector("[name='codEnabled']")?.checked;
       const onlinePaymentEnabled = paymentForm.querySelector("[name='onlinePaymentEnabled']")?.checked;
-      await updateSellerSetting("codEnabled", String(Boolean(codEnabled)), false);
-      await updateSellerSetting("onlinePaymentEnabled", String(Boolean(onlinePaymentEnabled)), false);
+      const freeDeliveryEnabled = paymentForm.querySelector("[name='freeDeliveryEnabled']")?.checked;
+      const freeDeliveryMinOrder = paymentForm.querySelector("[name='freeDeliveryMinOrder']")?.value || "0";
+      await updateSellerSettings(
+        {
+          codEnabled: Boolean(codEnabled),
+          onlinePaymentEnabled: Boolean(onlinePaymentEnabled),
+          freeDeliveryEnabled: Boolean(freeDeliveryEnabled),
+          freeDeliveryMinOrder,
+        },
+        false
+      );
       await loadRoleOrders("seller");
       if (message) message.textContent = "Payment options saved.";
     } catch (error) {

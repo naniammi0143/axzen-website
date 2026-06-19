@@ -37,7 +37,9 @@ const listProducts = asyncHandler(async (req, res) => {
   const products = await Product.find({ status: { $in: ["active", "approved"] } }).sort({ updatedAt: -1 }).limit(48).lean();
   const sellerIds = [...new Set(products.map((product) => String(product.sellerId)).filter(Boolean))];
   const sellers = sellerIds.length
-    ? await Seller.find({ _id: { $in: sellerIds } }).select("_id codEnabled onlinePaymentEnabled").lean()
+    ? await Seller.find({ _id: { $in: sellerIds } })
+        .select("_id codEnabled onlinePaymentEnabled freeDeliveryEnabled freeDeliveryMinOrderPaise")
+        .lean()
     : [];
   const sellerSettings = new Map(sellers.map((seller) => [String(seller._id), seller]));
 
@@ -58,6 +60,8 @@ const listProducts = asyncHandler(async (req, res) => {
         image: product.images?.[0] || "",
         codEnabled: settings.codEnabled !== false,
         onlinePaymentEnabled: settings.onlinePaymentEnabled !== false,
+        freeDeliveryEnabled: settings.freeDeliveryEnabled === true,
+        freeDeliveryMinOrderPaise: Number(settings.freeDeliveryMinOrderPaise) || 0,
       };
     }),
   });

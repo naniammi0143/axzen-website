@@ -6,12 +6,18 @@ const Seller = require("../models/Seller");
 const { verifyFirebaseToken } = require("../config/firebase");
 const asyncHandler = require("../utils/asyncHandler");
 const { success } = require("../utils/apiResponse");
+const { toPaise } = require("../utils/money");
 const { hashPassword } = require("../utils/password");
 
 const uploadRoot = process.env.UPLOAD_DIR || path.join(os.tmpdir(), "axzen-uploads", "seller-kyc");
 
 function clean(value = "") {
   return String(value).trim();
+}
+
+function toBoolean(value) {
+  if (typeof value === "boolean") return value;
+  return value === "true" || value === "on" || value === "1";
 }
 
 function normalizePhone(mobile) {
@@ -144,8 +150,13 @@ const updateProfile = asyncHandler(async (req, res) => {
   if (req.body.businessName !== undefined) update.businessName = req.body.businessName;
   if (req.body.category !== undefined) update.category = req.body.category;
   if (req.body.city !== undefined) update.city = req.body.city;
-  if (req.body.codEnabled !== undefined) update.codEnabled = Boolean(req.body.codEnabled);
-  if (req.body.onlinePaymentEnabled !== undefined) update.onlinePaymentEnabled = Boolean(req.body.onlinePaymentEnabled);
+  if (req.body.codEnabled !== undefined) update.codEnabled = toBoolean(req.body.codEnabled);
+  if (req.body.onlinePaymentEnabled !== undefined) update.onlinePaymentEnabled = toBoolean(req.body.onlinePaymentEnabled);
+  if (req.body.freeDeliveryEnabled !== undefined) update.freeDeliveryEnabled = toBoolean(req.body.freeDeliveryEnabled);
+  if (req.body.freeDeliveryMinOrder !== undefined) update.freeDeliveryMinOrderPaise = toPaise(req.body.freeDeliveryMinOrder);
+  if (req.body.freeDeliveryMinOrderPaise !== undefined) {
+    update.freeDeliveryMinOrderPaise = Math.max(Number(req.body.freeDeliveryMinOrderPaise) || 0, 0);
+  }
 
   const seller = await Seller.findOneAndUpdate(
     { userId: req.user.id },

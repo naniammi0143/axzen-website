@@ -38,9 +38,10 @@ function sellerOrderView(order) {
   const productTotal = financeValue(order, "productTotal", "productTotalPaise") || financeValue(order, "productTotal", "subtotalPaise");
   const platformFee = financeValue(order, "commissionAmount", "commissionAmountPaise") || financeValue(order, "commissionAmount", "commissionPaise");
   const savedPaymentCharge = financeValue(order, "paymentCharge", "paymentChargePaise") || financeValue(order, "paymentCharge", "onlinePaymentChargePaise");
+  const sellerDeliveryCharge = financeValue(order, "sellerDeliveryCharge", "sellerDeliveryChargePaise");
   const paymentCharge = savedPaymentCharge || Math.min(Math.round((productTotal * getPaymentChargePercent()) / 100), Math.max(productTotal - platformFee, 0));
   const savedPayout = savedPaymentCharge ? financeValue(order, "sellerPayout", "sellerPayoutPaise") || financeValue(order, "sellerPayout", "sellerEarningsPaise") : 0;
-  const sellerPayout = Math.max(savedPayout || productTotal - platformFee - paymentCharge, 0);
+  const sellerPayout = Math.max(savedPayout || productTotal - platformFee - paymentCharge - sellerDeliveryCharge, 0);
 
   return {
     _id: order._id,
@@ -51,6 +52,9 @@ function sellerOrderView(order) {
     paymentMethod: order.paymentMethod,
     productTotal,
     customerPaid: financeValue(order, "customerPaid", "customerPaidPaise") || financeValue(order, "customerPaid", "totalPaise"),
+    deliveryCharge: financeValue(order, "deliveryCharge", "deliveryChargePaise"),
+    sellerDeliveryCharge,
+    freeDeliveryApplied: Boolean(order.freeDeliveryApplied || order.finance?.freeDeliveryApplied),
     platformFee,
     paymentCharge,
     sellerPayout,
@@ -329,9 +333,18 @@ async function buildOrderFinanceFromRequest(req) {
     return { error: "Seller not found for this order." };
   }
 
-  const deliveryCharge = toPaise(req.body.deliveryCharge ?? req.body.deliveryFee ?? 40);
-  const finance = calculateOrderFinance(items, getSellerCommission(seller), deliveryCharge);
-  return { cart, items, seller, finance };
+  const productTotalPaise = items.reduce((total, item) => total + (Number(item.pricePaise) || 0) * (Number(item.quantity) || 1), 0);
+  const sellerFreeDeliveryEligible =
+    seller.freeDeliveryEnabled === true && productTotalPaise >= (Number(seller.freeDeliveryMinOrderPaise) || 0);
+  const requestedDeliveryChargePaise = toPaise(req.body.deliveryCharge ?? req.body.deliveryFee ?? 40);
+  const requestedSellerDeliveryChargePaise = toPaise(req.body.sellerDeliveryCharge ?? 0);
+  const deliveryCharge = sellerFreeDeliveryEligible ? 0 : requestedDeliveryChargePaise;
+  const sellerDeliveryCharge = sellerFreeDeliveryEligible
+    ? requestedSellerDeliveryChargePaise || requestedDeliveryChargePaise || 4000
+    : 0;
+  const finance = calculateOrderFinance(items, getSellerCommission(seller), deliveryCharge, sellerDeliveryCharge);
+  finance.freeDeliveryApplied = sellerFreeDeliveryEligible;
+  return { cart, items, seller, finance, freeDeliveryApplied: sellerFreeDeliveryEligible };
 }
 
 const createRazorpayCheckoutOrder = asyncHandler(async (req, res) => {
@@ -419,6 +432,8 @@ const createOrder = asyncHandler(async (req, res) => {
     payoutStatus: "pending",
     productTotal: finance.productTotalPaise,
     deliveryCharge: finance.deliveryChargePaise,
+    sellerDeliveryCharge: finance.sellerDeliveryChargePaise,
+    freeDeliveryApplied: context.freeDeliveryApplied,
     customerPaid: finance.customerPaidPaise,
     commissionType: finance.commissionType,
     commissionValue: finance.commissionValue,
@@ -456,6 +471,7 @@ const createOrder = asyncHandler(async (req, res) => {
     sellerId: order.sellerId,
     grossPaise: finance.productTotalPaise,
     deliveryChargePaise: finance.deliveryChargePaise,
+    sellerDeliveryChargePaise: finance.sellerDeliveryChargePaise,
     commissionPaise: finance.commissionAmountPaise,
     paymentChargePaise: finance.paymentChargePaise,
     payoutPaise: finance.sellerPayoutPaise,
@@ -478,6 +494,7 @@ const createOrder = asyncHandler(async (req, res) => {
         total: formatRupees(finance.customerPaidPaise),
         sellerPayout: formatRupees(finance.sellerPayoutPaise),
         platformCommission: formatRupees(finance.commissionAmountPaise),
+        freeDeliveryApplied: context.freeDeliveryApplied,
       },
     },
     201
