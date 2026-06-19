@@ -8,6 +8,7 @@
     reportType: "sales",
     reportQuery: "",
     reportRows: [],
+    helpdeskRows: [],
     employeeRows: [],
     employeeRoles: [],
   };
@@ -859,18 +860,28 @@
   }
 
   function renderHelpdesk(data) {
+    state.helpdeskRows = data.tickets || data.items || [];
     qs('[data-view-panel="helpdesk"]').innerHTML = panel(
       "Seller helpdesk tickets",
       table(
         [
-          { label: "Token", render: (row) => `<strong>${escapeHtml(row.ticketId)}</strong><small>${escapeHtml(row.sellerName || "-")}</small>` },
+          {
+            label: "Token",
+            render: (row) => `
+              <button class="admin-link-button" data-action="helpdesk-view" data-id="${row._id}">
+                <strong>${escapeHtml(row.ticketId)}</strong>
+                <small>${escapeHtml(row.sellerName || "-")}</small>
+              </button>
+            `,
+          },
+          { label: "Contact", render: (row) => `<strong>${escapeHtml(row.sellerContactPerson || "-")}</strong><small>${escapeHtml(row.sellerContactNumber || "-")}</small>` },
           { label: "Category", render: (row) => escapeHtml(row.category) },
           { label: "Message", render: (row) => escapeHtml(row.message) },
           { label: "Status", render: (row) => statusBadge(row.status) },
           { label: "Department Note", render: (row) => escapeHtml(row.departmentNote || "-") },
           { label: "Created", render: (row) => new Date(row.createdAt).toLocaleString() },
         ],
-        data.tickets || data.items || [],
+        state.helpdeskRows,
         (row) => `
           <select data-helpdesk-status="${row._id}">
             ${["open", "in_progress", "closed"].map((status) => `<option value="${status}" ${status === row.status ? "selected" : ""}>${status}</option>`).join("")}
@@ -880,6 +891,44 @@
         `
       )
     );
+  }
+
+  function openHelpdeskTicket(id) {
+    const ticket = state.helpdeskRows.find((row) => String(row._id) === String(id));
+    if (!ticket) {
+      toast("Ticket details not found.", true);
+      return;
+    }
+
+    const drawer = ensureReportDrawer("helpdeskTicket", `Ticket ${ticket.ticketId}`);
+    qs(".report-drawer-body", drawer).innerHTML = `
+      <section class="customer-detail-hero">
+        <h3>${escapeHtml(ticket.ticketId)}</h3>
+        <p>${escapeHtml(ticket.sellerName || "Seller")} - ${escapeHtml(ticket.category || "other")}</p>
+        <div class="report-detail-grid">
+          ${sellerMetric("Status", ticket.status || "open", "Current ticket status")}
+          ${sellerMetric("Created", dateValue(ticket.createdAt), "Token raised")}
+          ${sellerMetric("Contact person", ticket.sellerContactPerson || "-", "Seller profile")}
+          ${sellerMetric("Contact number", ticket.sellerContactNumber || "-", "Seller mobile")}
+        </div>
+      </section>
+      <h3 class="drawer-section-title">Complaint details</h3>
+      <div class="report-detail-grid">
+        ${sellerProfileChip("Seller", ticket.sellerName || "-")}
+        ${sellerProfileChip("Email", ticket.sellerEmail || "-")}
+        ${sellerProfileChip("Category", ticket.category || "-")}
+        ${sellerProfileChip("Closed at", ticket.closedAt ? dateValue(ticket.closedAt) : "-")}
+      </div>
+      <section class="helpdesk-detail-note">
+        <h3>Seller message</h3>
+        <p>${escapeHtml(ticket.message || "-")}</p>
+      </section>
+      <section class="helpdesk-detail-note">
+        <h3>Department note</h3>
+        <p>${escapeHtml(ticket.departmentNote || "No department note added yet.")}</p>
+      </section>
+    `;
+    openReportDrawer(drawer);
   }
 
   function renderEmployees(data) {
@@ -1363,6 +1412,7 @@
       if (action === "order-invoice") return openInvoice(id || target.dataset.order);
       if (action === "order-label") return openDeliveryLabel(id || target.dataset.order);
       if (action === "customer-view") return openCustomerDetail(id);
+      if (action === "helpdesk-view") return openHelpdeskTicket(id);
       if (action === "report-detail") return openReportDetail(target.dataset.index);
       if (action === "customer-toggle") return patch(`/api/admin/customers/${id}`, { status: target.dataset.status });
       if (action === "settlement-paid") return patch(`/api/admin/settlements/${id}`, { status: "paid" });

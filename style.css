@@ -4911,6 +4911,15 @@ h1 {
   gap: 10px;
 }
 
+.seller-order-topbar-tabs {
+  flex: 1 1 min(760px, 100%);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
 .seller-topbar-menu {
   order: 2;
   flex-basis: 100%;
@@ -5210,6 +5219,7 @@ h1 {
 }
 
 .seller-orders-kpis,
+.seller-order-topbar-tabs,
 .seller-order-tabs,
 .seller-order-filters,
 .seller-order-actions {
@@ -5241,6 +5251,7 @@ h1 {
   font-size: 20px;
 }
 
+.seller-order-topbar-tabs button,
 .seller-order-tabs button,
 .seller-order-filters button,
 .seller-order-actions button,
@@ -5255,12 +5266,20 @@ h1 {
   font-weight: 900;
 }
 
+.seller-order-topbar-tabs button.active,
 .seller-order-tabs button.active,
 .seller-order-actions button:first-child {
   color: #fff;
   background: #0071e3;
 }
 
+.seller-order-topbar-tabs button.has-new:not(.active) {
+  color: #b91c1c;
+  background: #fff1f2;
+  border-color: #fecdd3;
+}
+
+.seller-order-topbar-tabs span,
 .seller-order-tabs span {
   display: inline-grid;
   min-width: 22px;
@@ -5389,6 +5408,40 @@ h1 {
 .seller-support-form {
   display: grid;
   gap: 12px;
+}
+
+.seller-support-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.seller-support-summary article {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+}
+
+.seller-support-summary span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.seller-support-summary strong {
+  color: #0f172a;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.seller-support-summary small {
+  color: #64748b;
+  font-weight: 800;
 }
 
 .seller-inventory-row {
@@ -6018,6 +6071,44 @@ h1 {
   gap: 10px;
 }
 
+.admin-link-button {
+  display: grid;
+  gap: 3px;
+  padding: 0;
+  color: #0071e3;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  text-align: left;
+}
+
+.admin-link-button small {
+  color: #64748b;
+  font-weight: 800;
+}
+
+.helpdesk-detail-note {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+}
+
+.helpdesk-detail-note h3,
+.helpdesk-detail-note p {
+  margin: 0;
+}
+
+.helpdesk-detail-note p {
+  color: #475569;
+  font-weight: 800;
+  line-height: 1.6;
+}
+
 .employee-page {
   display: grid;
   gap: 18px;
@@ -6244,6 +6335,7 @@ h1 {
     justify-content: center;
   }
 
+  .seller-order-topbar-tabs button,
   .seller-order-tabs button {
     flex: 1 1 calc(50% - 10px);
   }
@@ -6413,6 +6505,7 @@ h1 {
   .seller-payout-title,
   .seller-payout-breakup,
   .seller-payment-toggle-grid,
+  .seller-support-summary,
   .seller-detail-grid,
   .seller-module-grid,
   .seller-ops-grid,

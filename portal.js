@@ -852,6 +852,8 @@ function renderSellerInventoryRows(products = []) {
 }
 
 function renderSellerSupportPanel(tickets = []) {
+  const openTickets = tickets.filter((ticket) => ticket.status !== "closed").length;
+  const closedTickets = tickets.filter((ticket) => ticket.status === "closed").length;
   return `
     <article class="dashboard-panel seller-support-panel" id="sellerSupport" data-seller-section="support">
       <div class="seller-about-heading">
@@ -860,7 +862,24 @@ function renderSellerSupportPanel(tickets = []) {
           <h3>Raise a complaint</h3>
           <p>Create a support token and track complaint status from Axzen admin.</p>
         </div>
-        <span>${tickets.filter((ticket) => ticket.status !== "closed").length} open</span>
+        <span>${openTickets} open</span>
+      </div>
+      <div class="seller-support-summary">
+        <article>
+          <span>Complaints</span>
+          <strong>${tickets.length}</strong>
+          <small>Total tokens raised</small>
+        </article>
+        <article>
+          <span>Closed tickets</span>
+          <strong>${closedTickets}</strong>
+          <small>Resolved by admin</small>
+        </article>
+        <article>
+          <span>Raise a complaint</span>
+          <strong>${openTickets}</strong>
+          <small>Open and in-progress tokens</small>
+        </article>
       </div>
       <form class="seller-support-form" data-seller-ticket-create>
         <label>Category
@@ -923,7 +942,8 @@ async function loadSellerProducts() {
 
 async function loadSellerTickets() {
   const panel = document.querySelector("[data-seller-ticket-list]");
-  if (!panel) return;
+  const supportPanel = document.querySelector("#sellerSupport");
+  if (!panel && !supportPanel) return;
   const token = localStorage.getItem("axzenToken");
   try {
     const response = await fetch("/api/seller/support-tickets", {
@@ -932,9 +952,14 @@ async function loadSellerTickets() {
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || "Unable to load support tickets.");
     sellerTicketsCache = result.tickets || [];
-    panel.innerHTML = renderSellerTickets(sellerTicketsCache);
+    if (supportPanel) {
+      supportPanel.outerHTML = renderSellerSupportPanel(sellerTicketsCache);
+      setSellerSection(getSellerSectionFromHash());
+    } else if (panel) {
+      panel.innerHTML = renderSellerTickets(sellerTicketsCache);
+    }
   } catch (error) {
-    panel.innerHTML = `<p class="order-invoice-empty">${escapeHtml(error.message || "Unable to load support tickets.")}</p>`;
+    if (panel) panel.innerHTML = `<p class="order-invoice-empty">${escapeHtml(error.message || "Unable to load support tickets.")}</p>`;
   }
 }
 
@@ -1095,6 +1120,7 @@ function refreshSellerOrdersPanelFromCache() {
   if (!panel) return;
   const section = dashboardSection?.dataset.sellerSection || "orders";
   panel.outerHTML = renderOrderInvoicePanel(sellerOrdersCache, "seller");
+  updateSellerOrderTopbarTabs(sellerOrdersCache);
   renderSellerOrdersRows();
   setSellerSection(section);
 }
@@ -1236,7 +1262,7 @@ function getSellerOrderActions(order = {}) {
 
 function getSellerFilteredOrders() {
   const panel = document.querySelector("#orderInvoicePanel");
-  const activeTab = panel?.dataset.activeTab || "new";
+  const activeTab = getActiveSellerOrderTab();
   const search = (panel?.querySelector("[data-seller-order-search]")?.value || "").trim().toLowerCase();
   const paymentStatus = panel?.querySelector("[data-seller-payment-filter]")?.value || "";
   const orderStatus = panel?.querySelector("[data-seller-status-filter]")?.value || "";
@@ -1252,6 +1278,37 @@ function getSellerFilteredOrders() {
       .toLowerCase();
     return tabMatch && paymentMatch && statusMatch && dateMatch && (!search || haystack.includes(search));
   });
+}
+
+function getActiveSellerOrderTab() {
+  const panel = document.querySelector("#orderInvoicePanel");
+  const topbarActive = document.querySelector("[data-seller-order-topbar-tabs] [data-seller-order-tab].active")?.dataset.sellerOrderTab;
+  return panel?.dataset.activeTab || topbarActive || "new";
+}
+
+function getSellerOrderCounts(orders = sellerOrdersCache) {
+  return sellerOrderTabs.reduce((acc, [key]) => {
+    acc[key] = orders.filter((order) => normalizeSellerOrderStatus(order.status) === key).length;
+    return acc;
+  }, {});
+}
+
+function renderSellerOrderTabsMarkup(counts = {}, activeTab = "new") {
+  return sellerOrderTabs
+    .map(
+      ([key, label]) => `
+        <button type="button" class="${key === activeTab ? "active" : ""} ${key === "new" && (counts[key] || 0) ? "has-new" : ""}" data-seller-order-tab="${key}">
+          ${escapeHtml(label)} <span>${counts[key] || 0}</span>
+        </button>
+      `
+    )
+    .join("");
+}
+
+function updateSellerOrderTopbarTabs(orders = sellerOrdersCache) {
+  const container = document.querySelector("[data-seller-order-topbar-tabs]");
+  if (!container) return;
+  container.innerHTML = renderSellerOrderTabsMarkup(getSellerOrderCounts(orders), getActiveSellerOrderTab());
 }
 
 function renderSellerOrdersRows() {
@@ -1375,10 +1432,7 @@ function renderOrderInvoicePanel(orders = [], role = "customer") {
   if (role === "seller") {
     const previousTab = document.querySelector("#orderInvoicePanel")?.dataset.activeTab || "new";
     sellerOrdersCache = orders;
-    const counts = sellerOrderTabs.reduce((acc, [key]) => {
-      acc[key] = orders.filter((order) => normalizeSellerOrderStatus(order.status) === key).length;
-      return acc;
-    }, {});
+    const counts = getSellerOrderCounts(orders);
     const pendingCount = orders.filter((order) => ["new", "accepted"].includes(normalizeSellerOrderStatus(order.status))).length;
     return `
       <article class="dashboard-panel seller-orders-page" id="orderInvoicePanel" data-seller-section="orders" data-active-tab="${escapeHtml(previousTab)}">
@@ -1386,17 +1440,6 @@ function renderOrderInvoicePanel(orders = [], role = "customer") {
           <span><small>Total orders</small><strong>${orders.length}</strong></span>
           <span><small>Open orders</small><strong>${pendingCount}</strong></span>
           <span><small>Shipment ready</small><strong>${counts.packed || 0}</strong></span>
-        </div>
-        <div class="seller-order-tabs">
-          ${sellerOrderTabs
-            .map(
-              ([key, label]) => `
-                <button type="button" class="${key === previousTab ? "active" : ""} ${key === "new" && (counts[key] || 0) ? "has-new" : ""}" data-seller-order-tab="${key}">
-                  ${escapeHtml(label)} <span>${counts[key] || 0}</span>
-                </button>
-              `
-            )
-            .join("")}
         </div>
         <div class="seller-order-filters">
           <input type="search" data-seller-order-search placeholder="Search order ID, customer, product">
@@ -1506,6 +1549,7 @@ async function loadRoleOrders(role) {
     }
     dashboardPanels.insertAdjacentHTML("beforeend", renderOrderInvoicePanel(result.orders || [], role));
     if (role === "seller") {
+      updateSellerOrderTopbarTabs(result.orders || []);
       renderSellerOrdersRows();
       setSellerSection(getSellerSectionFromHash());
     }
@@ -1514,6 +1558,7 @@ async function loadRoleOrders(role) {
     document.querySelector(".seller-payment-settings")?.remove();
     dashboardPanels.insertAdjacentHTML("beforeend", renderOrderInvoicePanel([], role));
     if (role === "seller") {
+      updateSellerOrderTopbarTabs([]);
       renderSellerOrdersRows();
       setSellerSection(getSellerSectionFromHash());
     }
@@ -2029,7 +2074,9 @@ document.addEventListener("click", async (event) => {
   if (orderTab) {
     const panel = document.querySelector("#orderInvoicePanel");
     if (panel) panel.dataset.activeTab = orderTab.dataset.sellerOrderTab;
-    document.querySelectorAll("[data-seller-order-tab]").forEach((tab) => tab.classList.toggle("active", tab === orderTab));
+    document.querySelectorAll("[data-seller-order-tab]").forEach((tab) => {
+      tab.classList.toggle("active", tab.dataset.sellerOrderTab === orderTab.dataset.sellerOrderTab);
+    });
     renderSellerOrdersRows();
     return;
   }
