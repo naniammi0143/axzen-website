@@ -38,7 +38,7 @@ const adminAccess = {
   customers: ["superadmin", "admin", "support"],
   finance: ["superadmin", "finance"],
   delivery: ["superadmin", "admin", "delivery_manager"],
-  employees: ["superadmin"],
+  employees: ["superadmin", "admin"],
   reports: ["superadmin", "admin", "finance"],
   audit: ["superadmin"],
 };
@@ -52,14 +52,14 @@ function authorizeAdminAccess(area) {
       return;
     }
 
-    const profile = await AdminUser.findOne({ userId: req.user.id }).select("permissions").lean();
-    const permissions = profile?.permissions || [];
-    if (permissions.includes("*") || permissions.includes(area)) {
+    if (allowed.includes(req.user.role)) {
       next();
       return;
     }
 
-    if (!profile && allowed.includes(req.user.role)) {
+    const profile = await AdminUser.findOne({ userId: req.user.id }).select("permissions").lean();
+    const permissions = profile?.permissions || [];
+    if (permissions.includes("*") || permissions.includes(area)) {
       next();
       return;
     }

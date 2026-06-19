@@ -47,6 +47,14 @@
     audit: "audit",
   };
 
+  const roleViewAccess = {
+    superadmin: ["dashboard", "sellers", "products", "orders", "payments", "customers", "delivery", "employees", "reports", "audit"],
+    admin: ["dashboard", "sellers", "products", "orders", "customers", "delivery", "employees", "reports"],
+    support: ["dashboard", "orders", "customers"],
+    finance: ["dashboard", "payments", "reports"],
+    delivery_manager: ["dashboard", "orders", "delivery"],
+  };
+
   function qs(selector, root = document) {
     return root.querySelector(selector);
   }
@@ -1331,7 +1339,8 @@
       state.token = token;
       state.user = user;
       const permissions = user.admin?.permissions || [];
-      const hasAccess = (view) => permissions.includes("*") || permissions.includes(viewPermissions[view]);
+      const hasAccess = (view) =>
+        (roleViewAccess[user.role] || []).includes(view) || permissions.includes("*") || permissions.includes(viewPermissions[view]);
       qs("#adminRoleLabel").textContent = `${(user.admin?.displayRole || user.role).replaceAll("_", " ")} access`;
       qsa("[data-admin-view]").forEach((button) => {
         if (permissions.length && !hasAccess(button.dataset.adminView)) {
