@@ -2355,9 +2355,48 @@ button:hover,
 
 .commerce-nav,
 .main-nav {
+  position: relative;
   gap: 8px;
   font-size: 14px;
   font-weight: 700;
+}
+
+.customer-profile-trigger {
+  width: 38px;
+  height: 38px;
+  color: #fff;
+  background: #0b2f57;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  font-weight: 950;
+}
+
+.customer-profile-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 50;
+  display: grid;
+  min-width: 180px;
+  gap: 6px;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.18);
+}
+
+.customer-profile-menu[hidden] {
+  display: none;
+}
+
+.customer-profile-menu a {
+  padding: 10px 12px;
+  color: #0f172a;
+  background: #f8fafc;
+  border-radius: 12px;
+  font-weight: 900;
 }
 
 .commerce-nav a,
@@ -2530,6 +2569,43 @@ h1 {
   backdrop-filter: blur(18px);
 }
 
+.customer-sale-banner {
+  width: min(1180px, calc(100% - 32px));
+  margin: 18px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: clamp(18px, 3vw, 28px);
+  color: #fff;
+  background: linear-gradient(120deg, #0b2f57, #0071e3);
+  border-radius: 18px;
+}
+
+.customer-sale-banner h2,
+.customer-sale-banner p {
+  margin: 0;
+}
+
+.customer-category-rail {
+  width: min(1180px, calc(100% - 32px));
+  margin: 14px auto;
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+}
+
+.customer-category-rail button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 14px;
+  color: #0f172a;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  font-weight: 900;
+}
+
 .commerce-band button,
 .category-row button,
 .store-tags span,
@@ -2609,8 +2685,122 @@ h1 {
   margin-right: 18px;
 }
 
+.commerce-product small {
+  display: block;
+  margin: 4px 18px 0;
+  color: #64748b;
+  font-weight: 800;
+}
+
+.seller-hash-link {
+  padding: 0;
+  color: #0071e3;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+}
+
+.customer-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 18px;
+}
+
+.customer-price-row del {
+  color: #94a3b8;
+  font-weight: 800;
+}
+
+.commerce-product .customer-price-row strong,
+.customer-product-detail .customer-price-row strong {
+  margin: 0;
+}
+
 .commerce-product button {
   margin: 18px;
+}
+
+.commerce-product button[data-product-details] {
+  min-height: 36px;
+  margin-bottom: 0;
+  color: #0f172a;
+  background: #edf6ff;
+}
+
+.customer-seller-page {
+  display: grid;
+  gap: 16px;
+}
+
+.customer-seller-page header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
+}
+
+.customer-seller-page header button {
+  min-height: 40px;
+  padding: 0 18px;
+  color: #fff;
+  background: #0071e3;
+  border: 0;
+  border-radius: 999px;
+  font-weight: 900;
+}
+
+.customer-product-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.customer-product-modal > article {
+  width: min(920px, 100%);
+  max-height: 92vh;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+  gap: 18px;
+  padding: 18px;
+  background: #fff;
+  border-radius: 20px;
+}
+
+.customer-product-modal [data-close-customer-product] {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+
+.customer-product-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.customer-product-gallery img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 14px;
+  background: #f1f5f9;
+}
+
+.customer-product-detail {
+  display: grid;
+  align-content: start;
+  gap: 10px;
 }
 
 .store-rail {
@@ -5662,7 +5852,8 @@ h1 {
   text-transform: uppercase;
 }
 
-.seller-product-form input {
+.seller-product-form input,
+.seller-product-form textarea {
   min-height: 42px;
   min-width: 0;
   padding: 0 12px;
@@ -5670,6 +5861,11 @@ h1 {
   background: #fff;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 12px;
+}
+
+.seller-product-form textarea {
+  min-height: 92px;
+  padding-top: 12px;
 }
 
 .seller-product-form select {
@@ -5688,6 +5884,10 @@ h1 {
 
 .seller-product-file {
   grid-column: span 3;
+}
+
+.seller-product-form .wide {
+  grid-column: span 2;
 }
 
 .seller-product-file small {
@@ -6122,6 +6322,16 @@ h1 {
   font-weight: 800;
 }
 
+.admin-mini-input {
+  width: 74px;
+  min-height: 32px;
+  margin: 2px;
+  padding: 0 8px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 10px;
+  font-weight: 800;
+}
+
 .helpdesk-detail-note {
   display: grid;
   gap: 8px;
@@ -6338,6 +6548,20 @@ h1 {
 }
 
 @media (max-width: 640px) {
+  .customer-sale-banner,
+  .customer-seller-page header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .customer-product-modal > article {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-product-gallery {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .seller-dashboard-topbar {
     padding: 16px;
     border-radius: 18px;

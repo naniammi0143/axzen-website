@@ -526,7 +526,7 @@ const listProducts = asyncHandler(async (req, res) => {
 });
 
 const updateProduct = asyncHandler(async (req, res) => {
-  const allowed = ["status", "category", "subcategory", "pricePaise", "discountPaise", "stock", "lowStockThreshold", "gstBps", "rejectionReason"];
+  const allowed = ["status", "category", "subcategory", "pricePaise", "mrpPaise", "discountPaise", "stock", "lowStockThreshold", "gstBps", "rejectionReason", "ratingAverage", "ratingCount", "unitLabel", "description"];
   const update = {};
   allowed.forEach((key) => {
     if (req.body[key] !== undefined) update[key] = req.body[key];

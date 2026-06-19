@@ -737,13 +737,15 @@
             { label: "SKU", render: (row) => escapeHtml(row.sku) },
             { label: "Product", render: (row) => `<strong>${escapeHtml(row.title)}</strong><small>${escapeHtml(row.sellerName)}</small>` },
             { label: "Category", render: (row) => escapeHtml(row.category) },
-            { label: "Price", render: (row) => rupees(row.pricePaise) },
+            { label: "Price", render: (row) => `<strong>${rupees(row.pricePaise)}</strong><small>MRP ${rupees(row.mrpPaise || row.pricePaise)}</small>` },
+            { label: "Rating", render: (row) => `<input class="admin-mini-input" data-product-rating="${row._id}" type="number" min="0" max="5" step="0.1" value="${Number(row.ratingAverage || 0)}"><input class="admin-mini-input" data-product-rating-count="${row._id}" type="number" min="0" step="1" value="${Number(row.ratingCount || 0)}">` },
             { label: "Stock", render: (row) => escapeHtml(row.stock) },
             { label: "Status", render: (row) => statusBadge(row.status) },
           ],
           data.items,
           (row) => `
             <button data-action="product-approve" data-id="${row._id}">Approve</button>
+            <button data-action="product-rating" data-id="${row._id}">Save rating</button>
             <button data-action="product-reject" data-id="${row._id}">Reject</button>
             <button data-action="product-block" data-id="${row._id}">Block</button>
           `
@@ -1405,6 +1407,12 @@
       if (action === "seller-reject") return patch(`/api/admin/sellers/${id}/reject`, {});
       if (action === "seller-toggle") return patch(`/api/admin/sellers/${id}`, { status: target.dataset.status });
       if (action === "product-approve") return patch(`/api/admin/products/${id}/approve`, {});
+      if (action === "product-rating") {
+        return patch(`/api/admin/products/${id}`, {
+          ratingAverage: Number(qs(`[data-product-rating="${id}"]`)?.value || 0),
+          ratingCount: Number(qs(`[data-product-rating-count="${id}"]`)?.value || 0),
+        });
+      }
       if (action === "product-reject") return patch(`/api/admin/products/${id}/reject`, { rejectionReason: "Rejected by admin" });
       if (action === "product-block") return patch(`/api/admin/products/${id}`, { status: "blocked" });
       if (action === "order-next") return patch(`/api/admin/orders/${id}`, { status: target.dataset.status });

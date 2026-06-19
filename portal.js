@@ -36,6 +36,9 @@ const sellerAboutLink = document.querySelector("#sellerAboutLink");
 const sellerSidebarCompany = document.querySelector("#sellerSidebarCompany");
 const sellerTopbarInitial = document.querySelector("#sellerTopbarInitial");
 const sellerProfilePopover = document.querySelector("[data-seller-profile-popover]");
+const customerProfilePopover = document.querySelector("[data-customer-profile-popover]");
+const customerMain = document.querySelector("[data-customer-main]");
+const customerMainDefaultHtml = customerMain?.innerHTML || "";
 const ownerLoginModal = document.querySelector("[data-owner-login-modal]");
 let sellerProductsCache = [];
 let sellerOrdersCache = [];
@@ -281,7 +284,7 @@ function renderCartSummary(showCheckout = false) {
                   (item) => `
                     <div class="cart-line">
                       <span>${escapeHtml(item.title)}</span>
-                      <small>${escapeHtml(item.sellerName || "Axzen seller")} | Qty ${Number(item.quantity) || 1}</small>
+                      <small>${escapeHtml(item.sellerName || "Axzen seller")} | ${escapeHtml(item.unitLabel || "1 pc")} | Qty ${Number(item.quantity) || 1}</small>
                       <b>${rupees((Number(item.pricePaise) || 0) * (Number(item.quantity) || 1))}</b>
                       <button type="button" data-cart-remove="${escapeHtml(item.id)}">Remove</button>
                     </div>
@@ -391,6 +394,7 @@ function addProductToCart(productId) {
       sku: product.sku,
       title: product.title,
       pricePaise: product.pricePaise,
+      unitLabel: product.unitLabel || "1 pc",
       codEnabled: product.codEnabled !== false,
       onlinePaymentEnabled: product.onlinePaymentEnabled !== false,
       freeDeliveryEnabled: product.freeDeliveryEnabled === true,
@@ -561,19 +565,129 @@ function renderStorefrontProduct(product) {
   const title = product.title || product.name || "Product";
   const sellerName = product.sellerName || product.seller || "Axzen seller";
   const category = product.category || "Product";
+  const mrp = Number(product.mrpPaise) > Number(product.pricePaise) ? product.mrp || rupees(product.mrpPaise) : "";
+  const rating = Number(product.ratingAverage || 0).toFixed(1);
   return `
-    <article class="commerce-product">
+    <article class="commerce-product" data-product-card="${escapeHtml(product.id)}">
       ${
         image
           ? `<img class="commerce-product-image commerce-product-photo" src="${escapeHtml(image)}" alt="${escapeHtml(title)}" loading="lazy">`
           : `<div class="commerce-product-image">${escapeHtml(category)}</div>`
       }
       <h3>${escapeHtml(title)}</h3>
-      <p>${escapeHtml(sellerName)} | ${escapeHtml(category)}</p>
-      <strong>${escapeHtml(product.price || "Rs. 0")}</strong>
+      <p><button class="seller-hash-link" type="button" data-open-seller="${escapeHtml(product.sellerId)}">#${escapeHtml(sellerName)}</button> | ${escapeHtml(category)}</p>
+      <div class="customer-price-row">
+        ${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}
+        <strong>${escapeHtml(product.price || "Rs. 0")}</strong>
+      </div>
+      <small>${escapeHtml(product.unitLabel || "1 pc")} | ${rating} rating (${Number(product.ratingCount) || 0})</small>
+      <button type="button" data-product-details="${escapeHtml(product.id)}">View details</button>
       <button type="button" data-add-cart="${escapeHtml(product.id)}">Add to cart</button>
     </article>
   `;
+}
+
+function getStorefrontSellers() {
+  const sellers = new Map();
+  storefrontProductsCache.forEach((product) => {
+    if (!product.sellerId) return;
+    const entry = sellers.get(String(product.sellerId)) || {
+      id: product.sellerId,
+      name: product.sellerName || "Axzen seller",
+      products: [],
+    };
+    entry.products.push(product);
+    sellers.set(String(product.sellerId), entry);
+  });
+  return [...sellers.values()];
+}
+
+function renderCustomerCategories(products = storefrontProductsCache) {
+  const rail = document.querySelector("[data-customer-category-rail]");
+  if (!rail) return;
+  const categories = ["All", ...new Set(products.map((product) => product.category || "General").filter(Boolean))].slice(0, 8);
+  rail.innerHTML = categories.map((category) => `<button type="button" data-customer-category-pill="${escapeHtml(category)}">${escapeHtml(category)}</button>`).join("");
+}
+
+function renderStorefrontProducts(products = storefrontProductsCache) {
+  const grid = document.querySelector(".commerce-products");
+  if (!grid) return;
+  grid.innerHTML = products.length ? products.map(renderStorefrontProduct).join("") : `<p class="order-invoice-empty">No products found.</p>`;
+}
+
+function resetCustomerMain() {
+  const target = document.querySelector("[data-customer-main]");
+  if (target && !target.querySelector(".section-heading")) target.innerHTML = customerMainDefaultHtml;
+}
+
+function renderStoreRail() {
+  const rail = document.querySelector(".store-rail");
+  if (!rail) return;
+  const sellers = getStorefrontSellers().slice(0, 6);
+  if (!sellers.length) return;
+  rail.innerHTML = sellers
+    .map(
+      (seller) => `
+        <article class="store-card" data-open-seller="${escapeHtml(seller.id)}">
+          <div class="store-card-top"><span class="store-avatar">${escapeHtml(seller.name.slice(0, 2).toUpperCase())}</span><span class="store-status">Follow</span></div>
+          <h3>${escapeHtml(seller.name)}</h3>
+          <p class="store-meta">${seller.products.length} products on Axzen</p>
+          <div class="store-tags">${[...new Set(seller.products.map((product) => product.category || "General"))].slice(0, 3).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function openCustomerSellerPage(sellerId) {
+  const seller = getStorefrontSellers().find((entry) => String(entry.id) === String(sellerId));
+  const target = document.querySelector("[data-customer-main]");
+  if (!seller || !target) return;
+  target.innerHTML = `
+    <section class="customer-seller-page">
+      <header>
+        <div>
+          <p class="eyebrow">Seller page</p>
+          <h2>${escapeHtml(seller.name)}</h2>
+          <p>${seller.products.length} products available</p>
+        </div>
+        <button type="button" data-follow-seller="${escapeHtml(seller.id)}">Follow</button>
+      </header>
+      <div class="commerce-products">${seller.products.map(renderStorefrontProduct).join("")}</div>
+    </section>
+  `;
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function openCustomerProductModal(productId) {
+  const product = storefrontProductsCache.find((item) => String(item.id) === String(productId));
+  if (!product) return;
+  document.querySelector("[data-customer-product-modal]")?.remove();
+  const images = product.images?.length ? product.images : [product.image].filter(Boolean);
+  const mrp = Number(product.mrpPaise) > Number(product.pricePaise) ? product.mrp || rupees(product.mrpPaise) : "";
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    `<aside class="customer-product-modal" data-customer-product-modal>
+      <article>
+        <button type="button" data-close-customer-product>Close</button>
+        <div class="customer-product-gallery">
+          ${
+            images.length
+              ? images.slice(0, 5).map((image) => `<img src="${escapeHtml(image)}" alt="${escapeHtml(product.title)}">`).join("")
+              : `<div class="commerce-product-image">${escapeHtml(product.category || "Product")}</div>`
+          }
+        </div>
+        <div class="customer-product-detail">
+          <p class="eyebrow">${escapeHtml(product.sellerName || "Seller")}</p>
+          <h2>${escapeHtml(product.title || "Product")}</h2>
+          <p>${escapeHtml(product.description || "Seller verified product on Axzen.")}</p>
+          <div class="customer-price-row">${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}<strong>${escapeHtml(product.price || "Rs. 0")}</strong></div>
+          <p>${escapeHtml(product.unitLabel || "1 pc")} | ${Number(product.ratingAverage || 0).toFixed(1)} rating (${Number(product.ratingCount) || 0})</p>
+          <button type="button" data-add-cart="${escapeHtml(product.id)}">Add to cart</button>
+        </div>
+      </article>
+    </aside>`
+  );
 }
 
 async function loadStorefrontCatalog() {
@@ -585,7 +699,9 @@ async function loadStorefrontCatalog() {
     if (!response.ok) throw new Error(result.message || "Unable to load products.");
     if (result.products?.length) {
       storefrontProductsCache = result.products;
-      grid.innerHTML = result.products.map(renderStorefrontProduct).join("");
+      renderCustomerCategories(result.products);
+      renderStorefrontProducts(result.products);
+      renderStoreRail();
     }
   } catch (error) {
     console.warn(error.message || "Customer catalog unavailable.");
@@ -780,8 +896,11 @@ function renderSellerProductManager(products = []) {
           </select>
         </label>
         <label class="seller-other-category" hidden>Other category<input name="categoryOther" placeholder="Enter category"></label>
-        <label>Price<input name="price" type="number" min="0" step="0.01" required placeholder="999"></label>
+        <label>MRP<input name="mrp" type="number" min="0" step="0.01" required placeholder="1299"></label>
+        <label>Selling price<input name="price" type="number" min="0" step="0.01" required placeholder="999"></label>
+        <label>Qty / unit<input name="unitLabel" required placeholder="1 pc, 500 g, pack of 2"></label>
         <label>Stock<input name="stock" type="number" min="0" step="1" placeholder="10"></label>
+        <label class="wide">Product details<textarea name="description" placeholder="Material, warranty, ingredients, size, or usage details"></textarea></label>
         <label class="seller-product-file">Product images
           <input name="productImages" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple required>
           <small>Maximum 5 images, 5MB each.</small>
@@ -1935,6 +2054,14 @@ document.addEventListener("click", async (event) => {
   ) {
     sellerProfilePopover.hidden = true;
   }
+  if (
+    customerProfilePopover &&
+    !customerProfilePopover.hidden &&
+    !event.target.closest("[data-customer-profile-menu]") &&
+    !event.target.closest("[data-customer-profile-popover]")
+  ) {
+    customerProfilePopover.hidden = true;
+  }
 
   const addCartButton = event.target.closest("[data-add-cart]");
   if (addCartButton) {
@@ -1958,6 +2085,38 @@ document.addEventListener("click", async (event) => {
       setCartMessage("Login with phone OTP to continue checkout.", true);
       loginSection?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
+    return;
+  }
+
+  const customerProfileButton = event.target.closest("[data-customer-profile-menu]");
+  if (customerProfileButton) {
+    if (customerProfilePopover) customerProfilePopover.hidden = !customerProfilePopover.hidden;
+    return;
+  }
+
+  const productDetails = event.target.closest("[data-product-details]");
+  if (productDetails) {
+    openCustomerProductModal(productDetails.dataset.productDetails);
+    return;
+  }
+
+  if (event.target.closest("[data-close-customer-product]") || event.target === document.querySelector("[data-customer-product-modal]")) {
+    document.querySelector("[data-customer-product-modal]")?.remove();
+    return;
+  }
+
+  const openSellerButton = event.target.closest("[data-open-seller]");
+  if (openSellerButton) {
+    openCustomerSellerPage(openSellerButton.dataset.openSeller);
+    return;
+  }
+
+  const categoryPill = event.target.closest("[data-customer-category-pill]");
+  if (categoryPill) {
+    const category = categoryPill.dataset.customerCategoryPill || "All";
+    const products = category === "All" ? storefrontProductsCache : storefrontProductsCache.filter((product) => product.category === category);
+    resetCustomerMain();
+    renderStorefrontProducts(products);
     return;
   }
 
@@ -2264,6 +2423,28 @@ document.addEventListener("change", (event) => {
 });
 
 document.addEventListener("submit", async (event) => {
+  const customerSearchForm = event.target.closest("[data-customer-search]");
+  if (customerSearchForm) {
+    event.preventDefault();
+    const formData = new FormData(customerSearchForm);
+    const term = String(formData.get("search") || "").trim().toLowerCase();
+    const category = String(formData.get("category") || "All");
+    if (term.startsWith("#")) {
+      const sellerTerm = term.slice(1);
+      const seller = getStorefrontSellers().find((entry) => entry.name.toLowerCase().includes(sellerTerm));
+      if (seller) openCustomerSellerPage(seller.id);
+      return;
+    }
+    resetCustomerMain();
+    const filtered = storefrontProductsCache.filter((product) => {
+      const categoryMatch = category === "All" || product.category === category;
+      const haystack = [product.title, product.sellerName, product.category, product.sku].join(" ").toLowerCase();
+      return categoryMatch && (!term || haystack.includes(term));
+    });
+    renderStorefrontProducts(filtered);
+    return;
+  }
+
   const checkoutForm = event.target.closest("[data-checkout-form]");
   if (checkoutForm) {
     event.preventDefault();

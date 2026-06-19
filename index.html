@@ -30,16 +30,16 @@
       <span class="sr-only">Axzen.in</span>
     </a>
 
-    <form class="commerce-search">
-      <select aria-label="Category">
+    <form class="commerce-search" data-customer-search>
+      <select aria-label="Category" name="category" data-customer-category>
         <option>All</option>
         <option>Grocery</option>
         <option>Fashion</option>
         <option>Electronics</option>
         <option>Home</option>
       </select>
-      <input type="search" placeholder="Search products, stores, categories">
-      <button type="button">Search</button>
+      <input type="search" name="search" placeholder="Search products, stores, categories or #seller">
+      <button type="submit">Search</button>
     </form>
 
     <nav class="commerce-nav" aria-label="Customer navigation">
@@ -47,6 +47,13 @@
       <a href="#orders">Orders</a>
       <a href="#cart">Cart</a>
       <a href="#login">Login</a>
+      <button class="customer-profile-trigger" type="button" data-customer-profile-menu aria-label="Customer options">...</button>
+      <div class="customer-profile-menu" data-customer-profile-popover hidden>
+        <a href="#dashboard">My profile</a>
+        <a href="#orders">My orders</a>
+        <a href="#cart">Cart</a>
+        <a href="#login">Login / OTP</a>
+      </div>
     </nav>
   </header>
 
@@ -77,6 +84,17 @@
       <button type="button">Today delivery</button>
     </section>
 
+    <section class="customer-sale-banner" aria-label="Axzen sale">
+      <div>
+        <p class="eyebrow">Axzen Summer Sale Festival</p>
+        <h2>Fresh deals from trusted local sellers</h2>
+        <p>Discover verified stores, festival offers, fast dispatch and seller-backed products.</p>
+      </div>
+      <a class="primary-button" href="#products">Shop sale</a>
+    </section>
+
+    <section class="customer-category-rail" data-customer-category-rail aria-label="Shop by category"></section>
+
     <section class="section commerce-layout" id="products">
       <aside class="shop-sidebar">
         <h3>Filters</h3>
@@ -86,7 +104,7 @@
         <label><input type="checkbox"> 4 star and above</label>
       </aside>
 
-      <div>
+      <div data-customer-main>
         <div class="section-heading">
           <div>
             <p class="eyebrow">Products</p>
