@@ -1980,15 +1980,6 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("change", (event) => {
-  const paymentCheckbox = event.target.closest("[data-seller-payment-form] input[type='checkbox']");
-  if (paymentCheckbox) {
-    const box = paymentCheckbox.closest(".seller-payment-box");
-    box?.classList.toggle("enabled", paymentCheckbox.checked);
-    box?.classList.toggle("disabled", !paymentCheckbox.checked);
-    const strong = box?.querySelector("strong");
-    if (strong) strong.textContent = paymentCheckbox.checked ? "Enabled" : "Disabled";
-  }
-
   const categoryChoice = event.target.closest("[data-product-category-choice]");
   if (categoryChoice) {
     const otherField = categoryChoice.form?.querySelector(".seller-other-category");
@@ -2017,6 +2008,15 @@ document.addEventListener("submit", async (event) => {
   if (paymentForm) {
     event.preventDefault();
     const message = paymentForm.querySelector("[data-seller-payment-message]");
+    if (!window.confirm("Are you sure you want to save these payment options?")) {
+      paymentForm.reset();
+      if (message) {
+        message.textContent = "Payment option changes were not saved.";
+        message.classList.remove("error");
+      }
+      return;
+    }
+
     try {
       const codEnabled = paymentForm.querySelector("[name='codEnabled']")?.checked;
       const onlinePaymentEnabled = paymentForm.querySelector("[name='onlinePaymentEnabled']")?.checked;
