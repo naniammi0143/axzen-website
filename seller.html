@@ -10,14 +10,14 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
-<body class="portal-page">
-  <header class="site-header">
+<body class="portal-page seller-page">
+  <header class="site-header seller-site-header">
     <a class="brand" href="/seller" aria-label="Seller Axzen home">
       <img class="brand-logo" src="assets/logo.png" alt="" onerror="this.hidden=true">
       <span class="brand-mark">S</span>
       <span id="sellerBrandText">Seller</span>
     </a>
-    <nav class="main-nav">
+    <nav class="main-nav seller-main-nav">
       <a href="https://axzen.in" target="_blank" rel="noopener noreferrer">Customer site</a>
       <a class="ghost-button" id="sellerRegisterLink" href="/seller/register">Register</a>
       <a class="ghost-button" id="sellerAboutLink" href="#sellerAbout" hidden>About</a>
@@ -26,22 +26,31 @@
   </header>
 
   <main>
-    <section class="login-section auth-gate portal-auth seller-auth" id="login">
-      <div class="auth-copy">
-        <p class="eyebrow">Seller website - seller.axzen.in</p>
-        <h1>Partner with Axzen and grow your store with confidence.</h1>
-        <p>Register your business, collaborate with Axzen, and once approved, manage products, orders, delivery handoffs, commissions, and payouts from one secure seller workspace.</p>
+    <section class="login-section auth-gate portal-auth seller-auth seller-command-hero" id="login">
+      <div class="auth-copy seller-hero-copy">
+        <p class="eyebrow">seller.axzen.in partner console</p>
+        <h1>Run your Axzen store like a professional marketplace business.</h1>
+        <p>Register, verify KYC, list products, manage orders, print delivery labels, track returns, and monitor payouts from one structured seller command center.</p>
         <div class="hero-actions seller-auth-actions">
           <a class="primary-button" href="/seller/register">Register as seller</a>
-          <a class="secondary-button" href="#login">Already registered? Login</a>
+          <a class="secondary-button" href="#login">Login with phone OTP</a>
         </div>
-        <div class="auth-highlights" aria-label="Seller controls">
-          <span>Products</span>
-          <span>Orders</span>
-          <span>Payouts</span>
+        <div class="seller-trust-strip" aria-label="Seller controls">
+          <span><strong>KYC</strong> verified onboarding</span>
+          <span><strong>COD</strong> seller controlled</span>
+          <span><strong>Payouts</strong> transparent settlement</span>
+        </div>
+        <div class="seller-hero-agents" aria-label="Seller workflow agents">
+          <article><span>01</span><strong>Onboarding Agent</strong><small>KYC, bank, PAN, GST and approval status.</small></article>
+          <article><span>02</span><strong>Order Agent</strong><small>Ready, packed, shipped, returned and cancelled orders.</small></article>
+          <article><span>03</span><strong>Finance Agent</strong><small>Commission, gateway charge, COD and payout tracking.</small></article>
         </div>
       </div>
-      <article class="login-card compact-login">
+      <article class="login-card compact-login seller-login-card">
+        <div class="seller-card-topline">
+          <span>Secure access</span>
+          <b>Phone OTP</b>
+        </div>
         <div class="login-card-heading">
           <span class="login-icon">S</span>
           <div>
@@ -57,29 +66,62 @@
           <button type="button" data-verify-otp hidden>Verify and continue</button>
           <p class="login-message" aria-live="polite"></p>
         </form>
+        <div class="seller-login-footnote">
+          <span>New seller?</span>
+          <a href="/seller/register">Submit registration and KYC</a>
+        </div>
       </article>
+    </section>
+
+    <section class="seller-ops-section" aria-label="Axzen seller operations">
+      <div class="seller-section-heading">
+        <p class="eyebrow">Marketplace operating system</p>
+        <h2>Built for sellers, teams, finance and fulfilment.</h2>
+        <p>Axzen seller console keeps every major business function separate, trackable and ready for admin approval workflows.</p>
+      </div>
+      <div class="seller-ops-grid">
+        <article><span>Catalog</span><h3>Product management</h3><p>Create listings, maintain pricing, stock, approvals and low-stock readiness.</p></article>
+        <article><span>Orders</span><h3>Order control</h3><p>Track pending, ready, packed, shipped, delivered, cancelled and returned orders.</p></article>
+        <article><span>Shipping</span><h3>Shipment desk</h3><p>Print labels, view pickup data, maintain AWB and future courier integrations.</p></article>
+        <article><span>Finance</span><h3>Payout ledger</h3><p>View product total, commission, gateway charge, COD and settlement status.</p></article>
+        <article><span>Compliance</span><h3>Business records</h3><p>Keep PAN, GST, invoices, returns, stock and tax-support records ready.</p></article>
+        <article><span>Support</span><h3>Issue handling</h3><p>Manage return reasons, customer issues and admin communication cleanly.</p></article>
+      </div>
+    </section>
+
+    <section class="seller-process-section" aria-label="Seller business workflow">
+      <div class="seller-process-card">
+        <p class="eyebrow">Approval workflow</p>
+        <h2>From registration to payout, every stage has a clear status.</h2>
+        <div class="seller-process-steps">
+          <article><b>1</b><strong>Register</strong><span>Company, contact, pickup and bank details.</span></article>
+          <article><b>2</b><strong>Verify</strong><span>KYC, PAN/GST and seller agreement approval.</span></article>
+          <article><b>3</b><strong>Sell</strong><span>Products, inventory, orders and delivery labels.</span></article>
+          <article><b>4</b><strong>Settle</strong><span>Commission, payment charges and seller payout.</span></article>
+        </div>
+      </div>
     </section>
 
     <div id="protectedContent" hidden>
       <section class="portal-hero seller-portal">
         <div>
           <p class="eyebrow">Seller workspace</p>
-          <h1>Manage products, inventory, orders, delivery, and payouts.</h1>
-          <p>Seller Axzen gives every seller tools to publish catalogue, control stock, accept orders, hand over delivery, run offers, and track commission settlements.</p>
+          <h1>Manage your live seller business from one control room.</h1>
+          <p>Use the dashboard modules for products, inventory, orders, shipments, payments, returns, profile and support.</p>
         </div>
         <div class="portal-preview">
-          <article><span>Live products</span><strong>24</strong></article>
-          <article><span>Orders today</span><strong>18</strong></article>
-          <article><span>Next payout</span><strong>Rs. 18,420</strong></article>
+          <article><span>Workspace</span><strong>9 modules</strong></article>
+          <article><span>Payment modes</span><strong>COD / Online</strong></article>
+          <article><span>Reports</span><strong>Ready</strong></article>
         </div>
       </section>
 
       <section class="section">
-        <div class="workflow-grid">
-          <article><span>1</span><h3>Add products</h3><p>Upload images, price, tax, stock, variants, and product status.</p></article>
-          <article><span>2</span><h3>Manage orders</h3><p>Accept orders, print invoices, update packing status, and request pickup.</p></article>
-          <article><span>3</span><h3>Delivery handoff</h3><p>Mark ready for pickup, track delivery partner, and handle customer updates.</p></article>
-          <article><span>4</span><h3>Payouts</h3><p>View commission split, settlement history, refunds, and reports.</p></article>
+        <div class="workflow-grid seller-workflow-grid">
+          <article><span>01</span><h3>Products</h3><p>Upload catalogue, prices, tax, stock and variants.</p></article>
+          <article><span>02</span><h3>Orders</h3><p>Review new orders, prepare packs and update status.</p></article>
+          <article><span>03</span><h3>Shipments</h3><p>Print labels and prepare future courier integrations.</p></article>
+          <article><span>04</span><h3>Payments</h3><p>Track COD, online payments, commission and payout.</p></article>
         </div>
       </section>
     </div>
