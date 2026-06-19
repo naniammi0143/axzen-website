@@ -87,6 +87,7 @@
             <a href="#sellerInventory" data-seller-nav="inventory">Inventory</a>
             <a href="#sellerReturns" data-seller-nav="returns">Returns</a>
             <a href="#sellerEmployees" data-seller-nav="employees">Employees</a>
+            <a href="#sellerAbout" data-seller-nav="profile">Profile</a>
             <a href="#sellerSupport" data-seller-nav="support">Support</a>
           </div>
           <div class="seller-sidebar-account">
@@ -129,6 +130,20 @@
           <div class="dashboard-panels" id="dashboardPanels"></div>
         </div>
       </div>
+    </section>
+    <section class="seller-owner-modal" data-owner-login-modal hidden>
+      <article class="seller-owner-card">
+        <button class="seller-drawer-close" type="button" data-close-owner-login>Close</button>
+        <p class="eyebrow">Owner verification</p>
+        <h2>Login as owner</h2>
+        <p>Verify the seller mobile number with OTP to open the full Seller Workspace.</p>
+        <label>Owner mobile number<input name="ownerPhone" type="tel" data-owner-phone placeholder="+91 98765 43210"></label>
+        <div id="recaptcha-owner" class="recaptcha-box"></div>
+        <button type="button" data-send-owner-otp>Send OTP</button>
+        <label data-owner-otp-wrap hidden>OTP<input name="ownerOtp" type="text" inputmode="numeric" data-owner-otp placeholder="Enter OTP"></label>
+        <button type="button" data-verify-owner-otp hidden>Verify owner</button>
+        <p class="login-message" data-owner-login-message aria-live="polite"></p>
+      </article>
     </section>
   </main>
 

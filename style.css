@@ -4619,6 +4619,27 @@ h1 {
   display: none;
 }
 
+.seller-page.seller-owner-mode .dashboard-shell {
+  grid-template-columns: 292px minmax(0, 1fr);
+}
+
+.seller-page.seller-owner-mode .dashboard-sidebar {
+  position: sticky;
+  top: 18px;
+  min-height: calc(100vh - 36px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+  color: #e5f0ff;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(56, 189, 248, 0.22), transparent 36%),
+    linear-gradient(180deg, #06162d, #0f172a);
+  border-color: rgba(255, 255, 255, 0.1);
+  border-radius: 24px 0 0 24px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.16);
+}
+
 .seller-page .dashboard-sidebar .eyebrow,
 .seller-page .dashboard-sidebar p {
   color: rgba(226, 232, 240, 0.78);
@@ -4635,6 +4656,11 @@ h1 {
   border: 1px solid rgba(15, 23, 42, 0.06);
   border-radius: 24px;
   box-shadow: 0 24px 70px rgba(15, 23, 42, 0.08);
+}
+
+.seller-page.seller-owner-mode .dashboard-main {
+  border-left: 0;
+  border-radius: 0 24px 24px 0;
 }
 
 .seller-page .dashboard-metrics article {
@@ -4814,6 +4840,10 @@ h1 {
   object-fit: contain;
 }
 
+.seller-owner-mode .seller-topbar-brand img {
+  display: none;
+}
+
 .seller-dashboard-topbar h1 {
   margin: 2px 0 0;
   color: #0f172a;
@@ -4892,6 +4922,11 @@ h1 {
   box-shadow: 0 22px 60px rgba(15, 23, 42, 0.16);
 }
 
+.seller-profile-menu[hidden],
+.seller-owner-modal[hidden] {
+  display: none;
+}
+
 .seller-profile-menu button {
   width: 100%;
   min-height: 38px;
@@ -4907,6 +4942,61 @@ h1 {
 
 .seller-profile-menu button:hover {
   background: #e8f3ff;
+}
+
+.seller-owner-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.seller-owner-card {
+  width: min(440px, 100%);
+  display: grid;
+  gap: 13px;
+  padding: 24px;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 22px;
+  box-shadow: 0 26px 80px rgba(15, 23, 42, 0.24);
+}
+
+.seller-owner-card h2,
+.seller-owner-card p {
+  margin: 0;
+}
+
+.seller-owner-card label {
+  display: grid;
+  gap: 7px;
+  color: #334155;
+  font-weight: 900;
+}
+
+.seller-owner-card input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 13px;
+  color: #0f172a;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 13px;
+  font: inherit;
+  font-weight: 800;
+}
+
+.seller-owner-card > button:not(.seller-drawer-close) {
+  min-height: 44px;
+  color: #fff;
+  background: #0071e3;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 950;
 }
 
 .seller-orders-page {

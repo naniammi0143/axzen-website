@@ -36,6 +36,7 @@ const sellerAboutLink = document.querySelector("#sellerAboutLink");
 const sellerSidebarCompany = document.querySelector("#sellerSidebarCompany");
 const sellerTopbarInitial = document.querySelector("#sellerTopbarInitial");
 const sellerProfilePopover = document.querySelector("[data-seller-profile-popover]");
+const ownerLoginModal = document.querySelector("[data-owner-login-modal]");
 let sellerProductsCache = [];
 let sellerOrdersCache = [];
 let storefrontProductsCache = [];
@@ -103,6 +104,9 @@ function updateSellerHeader(user = null) {
   sellerBrandText.textContent = isSellerLoggedIn ? seller.businessName || seller.fullName || "Seller" : "Seller";
   document.body.classList.toggle("seller-session-active", isSellerLoggedIn);
   document.body.classList.toggle("seller-owner-mode", isOwnerMode);
+  if (dashboardRole && dashboardSection?.classList.contains("seller-dashboard-app")) dashboardRole.hidden = !isOwnerMode;
+  if (dashboardTitle && dashboardSection?.classList.contains("seller-dashboard-app")) dashboardTitle.hidden = !isOwnerMode;
+  if (dashboardSummary && dashboardSection?.classList.contains("seller-dashboard-app")) dashboardSummary.hidden = !isOwnerMode;
   if (sellerSidebarCompany) sellerSidebarCompany.textContent = isSellerLoggedIn ? seller.businessName || seller.fullName || "Seller company" : "Seller company";
   if (sellerTopbarInitial) sellerTopbarInitial.textContent = (seller.businessName || seller.fullName || "Seller").trim().charAt(0).toUpperCase();
   if (sellerRegisterLink) sellerRegisterLink.hidden = isSellerLoggedIn;
@@ -1251,6 +1255,46 @@ function getRecaptcha(form) {
   return verifier;
 }
 
+function setOwnerLoginMessage(message, isError = false) {
+  const node = document.querySelector("[data-owner-login-message]");
+  if (!node) return;
+  node.textContent = message;
+  node.classList.toggle("error", isError);
+  node.style.display = "block";
+}
+
+function getOwnerRecaptcha() {
+  const role = "owner";
+  if (recaptchaVerifiers.has(role)) return recaptchaVerifiers.get(role);
+  const verifier = new RecaptchaVerifier(auth, "recaptcha-owner", { size: "invisible" });
+  recaptchaVerifiers.set(role, verifier);
+  return verifier;
+}
+
+function openOwnerLoginModal() {
+  if (!ownerLoginModal) return;
+  const phoneInput = ownerLoginModal.querySelector("[data-owner-phone]");
+  if (phoneInput && !phoneInput.value) phoneInput.value = localStorage.getItem("axzenPhone") || "";
+  ownerLoginModal.hidden = false;
+  phoneInput?.focus();
+}
+
+function closeOwnerLoginModal() {
+  if (ownerLoginModal) ownerLoginModal.hidden = true;
+}
+
+function enableSellerOwnerMode() {
+  localStorage.setItem(SELLER_OWNER_KEY, "true");
+  document.body.classList.add("seller-owner-mode");
+  if (dashboardRole) dashboardRole.hidden = false;
+  if (dashboardTitle) dashboardTitle.hidden = false;
+  if (dashboardSummary) dashboardSummary.hidden = false;
+  if (sellerProfilePopover) sellerProfilePopover.hidden = true;
+  closeOwnerLoginModal();
+  setSellerSection("dashboard", true);
+  dashboardSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function renderDashboard(payload) {
   const { user, dashboard } = payload;
   updateSellerHeader(user);
@@ -1543,11 +1587,63 @@ document.addEventListener("click", async (event) => {
 
   const ownerLoginButton = event.target.closest("[data-login-owner]");
   if (ownerLoginButton) {
-    localStorage.setItem(SELLER_OWNER_KEY, "true");
-    document.body.classList.add("seller-owner-mode");
     if (sellerProfilePopover) sellerProfilePopover.hidden = true;
-    setSellerSection("dashboard", true);
-    dashboardSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+    openOwnerLoginModal();
+    return;
+  }
+
+  if (event.target.closest("[data-close-owner-login]")) {
+    closeOwnerLoginModal();
+    return;
+  }
+
+  const sendOwnerOtp = event.target.closest("[data-send-owner-otp]");
+  if (sendOwnerOtp) {
+    const phoneInput = ownerLoginModal?.querySelector("[data-owner-phone]");
+    const otpWrap = ownerLoginModal?.querySelector("[data-owner-otp-wrap]");
+    const verifyButton = ownerLoginModal?.querySelector("[data-verify-owner-otp]");
+    const phone = formatPhoneNumber(phoneInput?.value || "");
+    if (phone.length < 12) {
+      setOwnerLoginMessage("Enter a valid owner mobile number.", true);
+      return;
+    }
+    sendOwnerOtp.disabled = true;
+    sendOwnerOtp.textContent = "Sending OTP...";
+    try {
+      const confirmationResult = await signInWithPhoneNumber(auth, phone, getOwnerRecaptcha());
+      confirmationResults.set("owner", { confirmationResult, phone });
+      if (phoneInput) phoneInput.readOnly = true;
+      sendOwnerOtp.hidden = true;
+      if (otpWrap) otpWrap.hidden = false;
+      if (verifyButton) verifyButton.hidden = false;
+      setOwnerLoginMessage(`OTP sent to ${phone}.`);
+    } catch (error) {
+      setOwnerLoginMessage(error.message || "Unable to send owner OTP.", true);
+      sendOwnerOtp.disabled = false;
+      sendOwnerOtp.textContent = "Send OTP";
+    }
+    return;
+  }
+
+  const verifyOwnerOtp = event.target.closest("[data-verify-owner-otp]");
+  if (verifyOwnerOtp) {
+    const otp = ownerLoginModal?.querySelector("[data-owner-otp]")?.value.trim() || "";
+    const session = confirmationResults.get("owner");
+    if (!session || otp.length < 4) {
+      setOwnerLoginMessage("Enter the OTP sent to owner mobile.", true);
+      return;
+    }
+    verifyOwnerOtp.disabled = true;
+    verifyOwnerOtp.textContent = "Verifying...";
+    try {
+      await session.confirmationResult.confirm(otp);
+      setOwnerLoginMessage("Owner verified. Opening seller workspace.");
+      enableSellerOwnerMode();
+    } catch (error) {
+      setOwnerLoginMessage("OTP is incorrect or expired. Enter the latest SMS OTP.", true);
+      verifyOwnerOtp.disabled = false;
+      verifyOwnerOtp.textContent = "Verify owner";
+    }
     return;
   }
 
