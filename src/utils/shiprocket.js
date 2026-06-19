@@ -62,7 +62,9 @@ function buildMockShipment(order) {
     awbNumber: `MOCK${Date.now()}`,
     courierName: "Shiprocket Test",
     trackingUrl: `https://shiprocket.co/tracking/${encodeURIComponent(orderId)}`,
-    shipmentStatus: "shipped",
+    shipmentStatus: "waiting_for_pickup",
+    pickupAgentName: "Shiprocket pickup agent",
+    pickupAgentPhone: process.env.SHIPROCKET_MOCK_AGENT_PHONE || "9999999999",
     providerResponse: { mode: "mock" },
   };
 }
@@ -114,7 +116,9 @@ async function createShiprocketShipment({ order, seller, customerAddress }) {
     awbNumber: result.awb_code || result.awb || result.shipment_id || `SR${Date.now()}`,
     courierName: result.courier_name || result.courier_company_id || "Shiprocket",
     trackingUrl: result.tracking_url || "",
-    shipmentStatus: result.status || "shipped",
+    shipmentStatus: result.status || "waiting_for_pickup",
+    pickupAgentName: result.pickup_agent_name || result.pickup_agent || "",
+    pickupAgentPhone: result.pickup_agent_phone || result.pickup_agent_mobile || "",
     providerResponse: result,
   };
 }

@@ -109,6 +109,7 @@ function updateSellerHeader(user = null) {
   if (dashboardSummary && dashboardSection?.classList.contains("seller-dashboard-app")) dashboardSummary.hidden = !isOwnerMode;
   if (sellerSidebarCompany) sellerSidebarCompany.textContent = isSellerLoggedIn ? seller.businessName || seller.fullName || "Seller company" : "Seller company";
   if (sellerTopbarInitial) sellerTopbarInitial.textContent = (seller.businessName || seller.fullName || "Seller").trim().charAt(0).toUpperCase();
+  if (sellerProfilePopover) sellerProfilePopover.hidden = true;
   if (sellerRegisterLink) sellerRegisterLink.hidden = isSellerLoggedIn;
   if (sellerLoginLink) sellerLoginLink.hidden = isSellerLoggedIn;
   if (sellerAboutLink) sellerAboutLink.hidden = !isSellerLoggedIn;
@@ -905,8 +906,11 @@ function getSellerOrderActions(order = {}) {
       ["reject", "Cancel"],
     ];
   }
-  if (status === "accepted") return [["pack", "Pack Order"], ["reject", "Cancel"]];
-  if (status === "packed") return [["track", "Track Pickup"], ["reject", "Cancel"]];
+  if (status === "accepted") return [["pack", "Packing Complete"], ["reject", "Cancel"]];
+  if (status === "packed") {
+    const pickupActions = order.pickupAgentPhone ? [["agent", "Assigned to agent"], ["call-agent", "Call agent"]] : [["track", "Waiting for pickup agent"]];
+    return [...pickupActions, ["reject", "Cancel"]];
+  }
   if (status === "shipped") return [["track", "Track Shipment"]];
   if (status === "delivered") return [["details", "Delivery Details"]];
   if (status === "returned") return [["details", "Return Details"]];
@@ -1004,6 +1008,8 @@ function renderSellerOrderDrawer(order = {}) {
             <p>Status: ${escapeHtml(order.shipmentStatus || order.deliveryStatus || "created")}</p>
             <p>Courier: ${escapeHtml(order.courierName || "-")}</p>
             <p>AWB: ${escapeHtml(order.awbNumber || "-")}</p>
+            ${order.pickupAgentName ? `<p>Agent: ${escapeHtml(order.pickupAgentName)}</p>` : ""}
+            ${order.pickupAgentPhone ? `<p>Agent phone: ${escapeHtml(order.pickupAgentPhone)}</p>` : ""}
             ${order.trackingUrl ? `<a href="${escapeHtml(order.trackingUrl)}" target="_blank" rel="noopener noreferrer">Open tracking</a>` : ""}
             ${order.cancelReason ? `<p>Cancel reason: ${escapeHtml(order.cancelReason)}</p>` : ""}
             ${order.returnReason ? `<p>Return reason: ${escapeHtml(order.returnReason)}</p>` : ""}
@@ -1058,21 +1064,10 @@ function renderOrderInvoicePanel(orders = [], role = "customer") {
     const pendingCount = orders.filter((order) => ["new", "accepted"].includes(normalizeSellerOrderStatus(order.status))).length;
     return `
       <article class="dashboard-panel seller-orders-page" id="orderInvoicePanel" data-seller-section="orders" data-active-tab="new">
-        <div class="seller-orders-header">
-          <div>
-            <p class="eyebrow">Seller orders</p>
-            <h3>Orders</h3>
-            <p>Accept, pack, ship and track seller orders from one workspace.</p>
-          </div>
-          <div class="seller-orders-kpis">
-            <span><small>Total orders</small><strong>${orders.length}</strong></span>
-            <span><small>Open orders</small><strong>${pendingCount}</strong></span>
-            <span><small>Shipment ready</small><strong>${counts.packed || 0}</strong></span>
-          </div>
-        </div>
-        <div class="seller-new-order-alert" ${pendingCount ? "" : "hidden"}>
-          <strong>${pendingCount} order${pendingCount === 1 ? "" : "s"} need attention</strong>
-          <span>New customer orders are automatically accepted and ready for packing.</span>
+        <div class="seller-orders-kpis">
+          <span><small>Total orders</small><strong>${orders.length}</strong></span>
+          <span><small>Open orders</small><strong>${pendingCount}</strong></span>
+          <span><small>Shipment ready</small><strong>${counts.packed || 0}</strong></span>
         </div>
         <div class="seller-order-tabs">
           ${sellerOrderTabs
@@ -1553,6 +1548,15 @@ phoneForms.forEach((form) => {
 });
 
 document.addEventListener("click", async (event) => {
+  if (
+    sellerProfilePopover &&
+    !sellerProfilePopover.hidden &&
+    !event.target.closest("[data-seller-profile-menu]") &&
+    !event.target.closest("[data-seller-profile-popover]")
+  ) {
+    sellerProfilePopover.hidden = true;
+  }
+
   const addCartButton = event.target.closest("[data-add-cart]");
   if (addCartButton) {
     addProductToCart(addCartButton.dataset.addCart);
@@ -1687,10 +1691,22 @@ document.addEventListener("click", async (event) => {
   if (orderAction) {
     const action = orderAction.dataset.sellerOrderAction;
     const orderId = orderAction.dataset.orderId;
+    const order = sellerOrdersCache.find((entry) => String(entry._id || entry.orderId) === String(orderId));
     if (action === "track") {
-      const order = sellerOrdersCache.find((entry) => String(entry._id || entry.orderId) === String(orderId));
       if (order?.trackingUrl) window.open(order.trackingUrl, "_blank", "noopener,noreferrer");
       else showSellerOrdersToast("Tracking URL is not available yet.", true);
+      return;
+    }
+    if (action === "agent") {
+      showSellerOrdersToast(order?.pickupAgentName ? `Assigned to ${order.pickupAgentName}` : "Pickup agent assigned.");
+      return;
+    }
+    if (action === "call-agent") {
+      if (order?.pickupAgentPhone) {
+        window.location.href = `tel:${order.pickupAgentPhone}`;
+      } else {
+        showSellerOrdersToast("Pickup agent phone number is not available yet.", true);
+      }
       return;
     }
     if (action === "settlement" || action === "details") {

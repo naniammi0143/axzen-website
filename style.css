@@ -4834,8 +4834,8 @@ h1 {
 }
 
 .seller-topbar-brand img {
-  width: clamp(150px, 11vw, 230px);
-  max-height: 76px;
+  width: clamp(190px, 14vw, 280px);
+  max-height: 92px;
   object-fit: contain;
 }
 
@@ -4846,8 +4846,8 @@ h1 {
 .seller-dashboard-topbar h1 {
   margin: 2px 0 0;
   color: #0f172a;
-  font-size: clamp(42px, 4.8vw, 72px);
-  line-height: 0.92;
+  font-size: clamp(32px, 3.2vw, 52px);
+  line-height: 1;
   letter-spacing: -0.045em;
 }
 
@@ -5006,6 +5006,9 @@ h1 {
 .seller-orders-page {
   display: grid;
   gap: clamp(12px, 1.4vw, 18px);
+  align-content: start;
+  max-height: calc(100vh - 220px);
+  overflow: hidden;
 }
 
 .seller-orders-header {
@@ -5035,6 +5038,10 @@ h1 {
   background: #f8fafc;
   border: 1px solid rgba(15, 23, 42, 0.07);
   border-radius: 14px;
+}
+
+.seller-orders-page > .seller-orders-kpis {
+  justify-content: flex-end;
 }
 
 .seller-orders-kpis small {
@@ -5092,7 +5099,8 @@ h1 {
 }
 
 .seller-orders-table-wrap {
-  overflow-x: auto;
+  max-height: clamp(320px, 48vh, 620px);
+  overflow: auto;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 18px;
 }
@@ -5957,7 +5965,7 @@ h1 {
   }
 
   .seller-dashboard-topbar h1 {
-    font-size: clamp(38px, 13vw, 52px);
+    font-size: clamp(32px, 10vw, 44px);
   }
 
   .seller-topbar-actions > .secondary-button,

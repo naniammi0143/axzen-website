@@ -72,6 +72,8 @@ function sellerOrderView(order) {
     awbNumber: order.awbNumber || "",
     courierName: order.courierName || "",
     trackingUrl: order.trackingUrl || "",
+    pickupAgentName: order.pickupAgentName || "",
+    pickupAgentPhone: order.pickupAgentPhone || "",
     transactionId: order.transactionId || "",
     cancelReason: order.cancelReason || "",
     returnReason: order.returnReason || "",
@@ -100,6 +102,20 @@ async function getSellerForUser(req) {
 
 const listSellerOrders = asyncHandler(async (req, res) => {
   const seller = await getSellerForUser(req);
+  const autoAcceptBefore = new Date(Date.now() - 5 * 60 * 1000);
+  await Order.updateMany(
+    { sellerId: seller._id, status: { $in: ["placed", "pending"] }, createdAt: { $lte: autoAcceptBefore } },
+    {
+      status: "accepted",
+      $push: {
+        timeline: {
+          status: "accepted",
+          note: "Automatically accepted after 5 minutes.",
+          at: new Date(),
+        },
+      },
+    }
+  );
   const orders = await Order.find({ sellerId: seller._id }).populate("customerId", "name phone email").sort({ createdAt: -1 }).lean();
   success(res, { orders: orders.map(sellerOrderView) });
 });
@@ -182,6 +198,8 @@ const packSellerOrder = asyncHandler(async (req, res) => {
   order.awbNumber = shipment.awbNumber || "";
   order.courierName = shipment.courierName || "";
   order.trackingUrl = shipment.trackingUrl || "";
+  order.pickupAgentName = shipment.pickupAgentName || "";
+  order.pickupAgentPhone = shipment.pickupAgentPhone || "";
   pushTimeline(order, "waiting_for_pickup", "Order packed. Waiting for pickup agent.");
   await order.save();
 
@@ -396,7 +414,7 @@ const createOrder = asyncHandler(async (req, res) => {
     sellerId: seller?._id || items[0].sellerId,
     sellerName: seller?.businessName || "Seller",
     items,
-    status: "accepted",
+    status: "placed",
     paymentStatus: paymentMethod === "cod" ? "pending" : "paid",
     payoutStatus: "pending",
     productTotal: finance.productTotalPaise,
@@ -417,8 +435,8 @@ const createOrder = asyncHandler(async (req, res) => {
     shippingAddress: req.body.shippingAddress || null,
     timeline: [
       {
-        status: "accepted",
-        note: "Order placed and automatically accepted by seller workflow.",
+        status: "placed",
+        note: "Order placed by customer. Waiting for seller acceptance.",
         at: new Date(),
       },
     ],
@@ -453,7 +471,7 @@ const createOrder = asyncHandler(async (req, res) => {
         orderId,
         invoiceNumber,
         status: order.status,
-        statusLabel: "Seller accepted order",
+        statusLabel: "Order placed. Seller will accept shortly.",
         paymentStatus: order.paymentStatus,
         paymentMethod: order.paymentMethod,
         totalPaise: finance.customerPaidPaise,

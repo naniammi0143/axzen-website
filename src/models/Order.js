@@ -41,6 +41,8 @@ const orderSchema = new mongoose.Schema(
     courierName: { type: String, trim: true, default: "" },
     trackingUrl: { type: String, trim: true, default: "" },
     shipmentStatus: { type: String, trim: true, default: "" },
+    pickupAgentName: { type: String, trim: true, default: "" },
+    pickupAgentPhone: { type: String, trim: true, default: "" },
     finance: { type: Object, required: true },
     shippingAddress: { type: Object, default: null },
     timeline: [
