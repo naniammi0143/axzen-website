@@ -33,6 +33,8 @@ const sellerBrandText = document.querySelector("#sellerBrandText");
 const sellerRegisterLink = document.querySelector("#sellerRegisterLink");
 const sellerLoginLink = document.querySelector("#sellerLoginLink");
 const sellerAboutLink = document.querySelector("#sellerAboutLink");
+const sellerSidebarCompany = document.querySelector("#sellerSidebarCompany");
+let sellerProductsCache = [];
 
 const sellerSectionLabels = {
   dashboard: "Dashboard",
@@ -42,6 +44,7 @@ const sellerSectionLabels = {
   payments: "Payments",
   inventory: "Inventory",
   returns: "Returns",
+  employees: "Employees",
   profile: "Profile",
   support: "Support",
 };
@@ -53,6 +56,7 @@ const sellerHashSections = {
   "#sellerPayments": "payments",
   "#sellerInventory": "inventory",
   "#sellerReturns": "returns",
+  "#sellerEmployees": "employees",
   "#sellerAbout": "profile",
   "#sellerSupport": "support",
 };
@@ -85,6 +89,8 @@ function updateSellerHeader(user = null) {
   const seller = user?.seller || {};
   const isSellerLoggedIn = user?.role === "seller";
   sellerBrandText.textContent = isSellerLoggedIn ? seller.businessName || seller.fullName || "Seller" : "Seller";
+  document.body.classList.toggle("seller-session-active", isSellerLoggedIn);
+  if (sellerSidebarCompany) sellerSidebarCompany.textContent = isSellerLoggedIn ? seller.businessName || seller.fullName || "Seller company" : "Seller company";
   if (sellerRegisterLink) sellerRegisterLink.hidden = isSellerLoggedIn;
   if (sellerLoginLink) sellerLoginLink.hidden = isSellerLoggedIn;
   if (sellerAboutLink) sellerAboutLink.hidden = !isSellerLoggedIn;
@@ -269,6 +275,7 @@ function renderSellerWorkspace(user = {}) {
     ["sellerShipments", "Shipments", "Delivery labels and shipment readiness"],
     ["sellerInventory", "Inventory", "Stock, low-stock alerts and product availability"],
     ["sellerReturns", "Returns", "Return requests, refund status and issue handling"],
+    ["sellerEmployees", "Employees", "Add seller staff, assign work and manage access"],
     ["sellerSupport", "Support", "Admin support and seller helpdesk"],
   ];
   return `
@@ -315,15 +322,31 @@ function renderSellerProductManager(products = []) {
       <div class="seller-about-heading">
         <div>
           <p class="eyebrow">Products</p>
-          <h3>Upload product with images</h3>
-          <p>Add up to 5 JPG/PNG images. Images are stored in Cloudinary and shown to admin and customers after approval.</p>
+          <h3>Product catalogue</h3>
+          <p>Search products like the customer app. Add new products with up to 5 Cloudinary images.</p>
         </div>
-        <span>${products.length} products</span>
+        <div class="seller-product-actions">
+          <input type="search" data-seller-product-search placeholder="Search products, SKU, category">
+          <button type="button" data-toggle-product-form>Add product</button>
+          <span>${products.length} products</span>
+        </div>
       </div>
-      <form class="seller-product-form" data-seller-product-create>
+      <form class="seller-product-form" data-seller-product-create hidden>
         <label>Product title<input name="title" required placeholder="Product name"></label>
         <label>SKU<input name="sku" required placeholder="SKU-001"></label>
-        <label>Category<input name="category" placeholder="Fashion, Grocery, Electronics"></label>
+        <label>Category
+          <select name="categoryChoice" data-product-category-choice required>
+            <option value="">Select category</option>
+            <option value="Grocery">Grocery</option>
+            <option value="Fashion">Fashion</option>
+            <option value="Electronics">Electronics</option>
+            <option value="Home">Home</option>
+            <option value="Beauty">Beauty</option>
+            <option value="Food">Food</option>
+            <option value="Other">Other</option>
+          </select>
+        </label>
+        <label class="seller-other-category" hidden>Other category<input name="categoryOther" placeholder="Enter category"></label>
         <label>Price<input name="price" type="number" min="0" step="0.01" required placeholder="999"></label>
         <label>Stock<input name="stock" type="number" min="0" step="1" placeholder="10"></label>
         <label class="seller-product-file">Product images
@@ -333,7 +356,7 @@ function renderSellerProductManager(products = []) {
         <button type="submit">Submit product for approval</button>
       </form>
       <div class="seller-product-upload-message" data-seller-product-message aria-live="polite"></div>
-      <div class="seller-uploaded-products" data-seller-product-list>
+      <div class="seller-catalog-grid" data-seller-product-list>
         ${renderSellerProductList(products)}
       </div>
     </article>
@@ -346,16 +369,18 @@ function renderSellerProductList(products = []) {
     .map((product) => {
       const images = product.images || [];
       return `
-        <article class="seller-uploaded-product">
+        <article class="customer-product-card seller-catalog-card">
           ${
             images[0]
-              ? `<img src="${escapeHtml(images[0])}" alt="${escapeHtml(product.title)}" loading="lazy">`
-              : `<div class="seller-upload-placeholder">${escapeHtml(product.category || "Product")}</div>`
+              ? `<img class="product-image product-photo" src="${escapeHtml(images[0])}" alt="${escapeHtml(product.title)}" loading="lazy">`
+              : `<div class="product-image">${escapeHtml(product.category || "Product")}</div>`
           }
-          <div>
+          <div class="product-info">
+            <span>${escapeHtml(product.sellerName || "Your store")}</span>
             <strong>${escapeHtml(product.title)}</strong>
-            <span>${escapeHtml(product.sku)} | ${escapeHtml(product.category || "General")}</span>
-            <small>${escapeHtml(product.status || "pending_approval")} | ${images.length} image${images.length === 1 ? "" : "s"}</small>
+            <p>${escapeHtml(product.sku)} | ${escapeHtml(product.category || "General")}</p>
+            <b>${rupees(product.pricePaise)}</b>
+            <small>${escapeHtml(product.status || "pending_approval")} | stock ${escapeHtml(product.stock ?? 0)} | ${images.length} image${images.length === 1 ? "" : "s"}</small>
           </div>
         </article>
       `;
@@ -375,8 +400,9 @@ async function loadSellerProducts() {
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || "Unable to load products.");
     const list = document.querySelector("[data-seller-product-list]");
-    const count = document.querySelector("#sellerProducts .seller-about-heading > span");
-    if (list) list.innerHTML = renderSellerProductList(result.products || []);
+    const count = document.querySelector("#sellerProducts .seller-product-actions > span");
+    sellerProductsCache = result.products || [];
+    if (list) list.innerHTML = renderSellerProductList(sellerProductsCache);
     if (count) count.textContent = `${result.products?.length || 0} products`;
   } catch (error) {
     const message = document.querySelector("[data-seller-product-message]");
@@ -387,8 +413,55 @@ async function loadSellerProducts() {
   }
 }
 
+function filterSellerProducts(term = "") {
+  const list = document.querySelector("[data-seller-product-list]");
+  if (!list) return;
+  const clean = term.trim().toLowerCase();
+  const filtered = clean
+    ? sellerProductsCache.filter((product) =>
+        [product.title, product.sku, product.category, product.status].some((value) => String(value || "").toLowerCase().includes(clean))
+      )
+    : sellerProductsCache;
+  list.innerHTML = renderSellerProductList(filtered);
+}
+
+function playSellerOrderNotification(orderCount = 1) {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const context = new AudioContext();
+    const beep = (delay, frequency) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.frequency.value = frequency;
+      oscillator.type = "sine";
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      gain.gain.setValueAtTime(0.0001, context.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.18, context.currentTime + delay + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + delay + 0.34);
+      oscillator.start(context.currentTime + delay);
+      oscillator.stop(context.currentTime + delay + 0.36);
+    };
+    beep(0, 880);
+    if (orderCount > 1) beep(0.42, 1040);
+  } catch (error) {
+    console.warn("Seller notification sound unavailable.");
+  }
+}
+
+function notifyNewSellerOrders(orders = []) {
+  const latestOrderTime = orders.reduce((latest, order) => Math.max(latest, new Date(order.createdAt || order.updatedAt || 0).getTime()), 0);
+  const storageKey = "axzenSellerLastOrderSeen";
+  const previous = Number(localStorage.getItem(storageKey) || 0);
+  const newOrders = orders.filter((order) => new Date(order.createdAt || order.updatedAt || 0).getTime() > previous);
+  if (previous && newOrders.length) playSellerOrderNotification(newOrders.length);
+  if (latestOrderTime) localStorage.setItem(storageKey, String(latestOrderTime));
+}
+
 function renderOrderInvoicePanel(orders = [], role = "customer") {
   if (role === "seller") {
+    const newOrders = orders.filter((order) => ["accepted", "placed", "pending"].includes(order.status || ""));
     return `
       <article class="dashboard-panel order-invoice-panel seller-payout-panel" id="orderInvoicePanel" data-seller-section="orders">
         <div class="order-invoice-heading">
@@ -396,8 +469,13 @@ function renderOrderInvoicePanel(orders = [], role = "customer") {
             <p class="eyebrow">Seller orders</p>
             <h3>Order payout details</h3>
           </div>
-          <span>${orders.length} orders</span>
+          <span>${newOrders.length ? `${newOrders.length} new orders` : `${orders.length} orders`}</span>
         </div>
+        ${
+          newOrders.length
+            ? `<div class="seller-new-order-alert"><strong>New order received</strong><span>Orders are automatically accepted and ready for packing.</span></div>`
+            : ""
+        }
         ${
           orders.length
             ? `<div class="seller-payout-list">
@@ -407,7 +485,7 @@ function renderOrderInvoicePanel(orders = [], role = "customer") {
                       <div class="seller-payout-card">
                         <div class="seller-payout-title">
                           <strong>${escapeHtml(order.orderId)}</strong>
-                          <span>${escapeHtml(order.status || "placed")} | payout ${escapeHtml(order.payoutStatus || "pending")}</span>
+                          <span>${escapeHtml(order.status === "accepted" ? "Seller accepted order" : order.status || "placed")} | payout ${escapeHtml(order.payoutStatus || "pending")}</span>
                         </div>
                         <div class="seller-payout-breakup">
                           <span><small>Product total</small><b>${rupees(order.productTotal)}</b></span>
@@ -488,6 +566,7 @@ async function loadRoleOrders(role) {
     document.querySelector("#orderInvoicePanel")?.remove();
     document.querySelector(".seller-payment-settings")?.remove();
     if (role === "seller") {
+      notifyNewSellerOrders(result.orders || []);
       dashboardPanels.insertAdjacentHTML("beforeend", renderSellerPaymentSettings(sellerResult?.seller || {}));
     }
     dashboardPanels.insertAdjacentHTML("beforeend", renderOrderInvoicePanel(result.orders || [], role));
@@ -792,6 +871,16 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const productFormToggle = event.target.closest("[data-toggle-product-form]");
+  if (productFormToggle) {
+    const form = document.querySelector("[data-seller-product-create]");
+    if (form) {
+      form.hidden = !form.hidden;
+      productFormToggle.textContent = form.hidden ? "Add product" : "Close form";
+    }
+    return;
+  }
+
   const invoiceButton = event.target.closest("[data-print-invoice]");
   const labelButton = event.target.closest("[data-print-label]");
   const settingButton = event.target.closest("[data-seller-setting]");
@@ -836,6 +925,20 @@ document.addEventListener("click", async (event) => {
   }
 });
 
+document.addEventListener("input", (event) => {
+  const productSearch = event.target.closest("[data-seller-product-search]");
+  if (productSearch) {
+    filterSellerProducts(productSearch.value);
+  }
+});
+
+document.addEventListener("change", (event) => {
+  const categoryChoice = event.target.closest("[data-product-category-choice]");
+  if (!categoryChoice) return;
+  const otherField = categoryChoice.form?.querySelector(".seller-other-category");
+  if (otherField) otherField.hidden = categoryChoice.value !== "Other";
+});
+
 document.addEventListener("submit", async (event) => {
   const productForm = event.target.closest("[data-seller-product-create]");
   if (!productForm) return;
@@ -865,12 +968,17 @@ document.addEventListener("submit", async (event) => {
 
   try {
     const token = localStorage.getItem("axzenToken");
+    const formData = new FormData(productForm);
+    const categoryChoice = formData.get("categoryChoice");
+    formData.set("category", categoryChoice === "Other" ? formData.get("categoryOther") || "General" : categoryChoice || "General");
+    formData.delete("categoryChoice");
+    formData.delete("categoryOther");
     const response = await fetch("/api/seller/products", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
       },
-      body: new FormData(productForm),
+      body: formData,
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || "Unable to upload product.");

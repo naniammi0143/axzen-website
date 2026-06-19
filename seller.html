@@ -74,7 +74,7 @@
     <section class="section dashboard-section seller-dashboard-app" id="dashboard" hidden>
       <div class="dashboard-shell">
         <aside class="dashboard-sidebar">
-          <span class="seller-sidebar-logo">Seller Panel</span>
+          <img class="seller-sidebar-logo" src="assets/seller-sidebar-logo.png" alt="Axzen Seller" onerror="this.hidden=true">
           <p class="eyebrow" id="dashboardRole">Seller</p>
           <h2 id="dashboardTitle">Welcome</h2>
           <p id="dashboardSummary"></p>
@@ -86,9 +86,11 @@
             <a href="#sellerPayments" data-seller-nav="payments">Payments</a>
             <a href="#sellerInventory" data-seller-nav="inventory">Inventory</a>
             <a href="#sellerReturns" data-seller-nav="returns">Returns</a>
+            <a href="#sellerEmployees" data-seller-nav="employees">Employees</a>
             <a href="#sellerAbout" data-seller-nav="profile">Profile</a>
             <a href="#sellerSupport" data-seller-nav="support">Support</a>
           </div>
+          <strong class="seller-sidebar-company" id="sellerSidebarCompany">Seller company</strong>
           <button class="secondary-button logout-button" type="button" id="logoutButton">Logout</button>
         </aside>
         <div class="dashboard-main">
