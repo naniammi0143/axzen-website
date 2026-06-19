@@ -73,6 +73,10 @@ function sellerOrderView(order) {
     courierName: order.courierName || "",
     trackingUrl: order.trackingUrl || "",
     transactionId: order.transactionId || "",
+    cancelReason: order.cancelReason || "",
+    returnReason: order.returnReason || "",
+    refundStatus: order.refundStatus || "none",
+    refundDueDate: order.refundDueDate || null,
     timeline: order.timeline || [],
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
@@ -137,6 +141,7 @@ async function updateSellerOrderStatus(req, res, nextStatus, options = {}) {
 
   order.status = nextStatus;
   if (options.deliveryStatus) order.deliveryStatus = options.deliveryStatus;
+  if (nextStatus === "cancelled") order.cancelReason = options.note || "Cancelled by seller.";
   if (nextStatus === "cancelled" && order.paymentStatus === "pending") order.payoutStatus = "failed";
   pushTimeline(order, nextStatus, options.note || `Seller marked order as ${nextStatus}.`);
   await order.save();
@@ -152,18 +157,49 @@ const acceptSellerOrder = asyncHandler(async (req, res) => {
 
 const rejectSellerOrder = asyncHandler(async (req, res) => {
   await updateSellerOrderStatus(req, res, "cancelled", {
-    allowed: ["placed", "pending", "accepted"],
+    allowed: ["placed", "pending", "accepted", "packed"],
     deliveryStatus: "cancelled",
     note: req.body.reason || "Seller rejected order.",
   });
 });
 
 const packSellerOrder = asyncHandler(async (req, res) => {
-  await updateSellerOrderStatus(req, res, "packed", {
-    allowed: ["accepted", "confirmed", "packed"],
-    deliveryStatus: "packed",
-    note: "Seller packed order.",
+  const { seller, order } = await getSellerOrder(req);
+  if (!["accepted", "confirmed", "packed"].includes(order.status)) {
+    res.status(400).json({ ok: false, message: `Order cannot be packed from ${order.status}.` });
+    return;
+  }
+
+  const shipment = await createShiprocketShipment({
+    order,
+    seller,
+    customerAddress: order.shippingAddress || {},
   });
+
+  order.status = "packed";
+  order.deliveryStatus = "waiting_for_pickup";
+  order.shipmentStatus = "waiting_for_pickup";
+  order.awbNumber = shipment.awbNumber || "";
+  order.courierName = shipment.courierName || "";
+  order.trackingUrl = shipment.trackingUrl || "";
+  pushTimeline(order, "waiting_for_pickup", "Order packed. Waiting for pickup agent.");
+  await order.save();
+
+  await Delivery.findOneAndUpdate(
+    { orderId: order.orderId },
+    {
+      orderId: order.orderId,
+      partnerName: shipment.courierName || "Shiprocket",
+      courierName: shipment.courierName || "Shiprocket",
+      trackingNumber: shipment.awbNumber || "",
+      awbNumber: shipment.awbNumber || "",
+      trackingUrl: shipment.trackingUrl || "",
+      status: "waiting_for_pickup",
+    },
+    { upsert: true, new: true }
+  );
+
+  success(res, { order: sellerOrderView(order.toObject()), shipment });
 });
 
 const packAndShipSellerOrder = asyncHandler(async (req, res) => {
@@ -209,6 +245,57 @@ const packAndShipSellerOrder = asyncHandler(async (req, res) => {
   );
 
   success(res, { order: sellerOrderView(order.toObject()), shipment });
+});
+
+function normalizeShipmentStatus(status = "") {
+  const normalized = String(status).toLowerCase().replace(/\s+/g, "_");
+  if (["picked_up", "pickup_done", "in_transit", "shipped"].includes(normalized)) return { orderStatus: "shipped", deliveryStatus: "shipped" };
+  if (["delivered", "delivery_done"].includes(normalized)) return { orderStatus: "delivered", deliveryStatus: "delivered" };
+  if (["rto", "rto_delivered", "returned", "undelivered", "customer_refused"].includes(normalized)) {
+    return { orderStatus: "returned", deliveryStatus: "returned" };
+  }
+  return { orderStatus: "packed", deliveryStatus: "waiting_for_pickup" };
+}
+
+async function applyShipmentStatus(order, status, reason = "") {
+  const next = normalizeShipmentStatus(status);
+  order.status = next.orderStatus;
+  order.deliveryStatus = next.deliveryStatus;
+  order.shipmentStatus = next.deliveryStatus;
+  if (next.orderStatus === "delivered" && order.paymentMethod === "cod") {
+    order.paymentStatus = "paid";
+    order.payoutStatus = "pending";
+  }
+  if (next.orderStatus === "returned") {
+    order.returnReason = reason || "Customer did not accept delivery.";
+    order.refundStatus = order.paymentMethod === "cod" ? "none" : "scheduled";
+    order.refundDueDate = order.paymentMethod === "cod" ? null : new Date(Date.now() + 24 * 60 * 60 * 1000);
+    if (order.paymentMethod !== "cod") order.paymentStatus = "refunded";
+  }
+  pushTimeline(order, next.deliveryStatus, reason || `Shipment status updated to ${next.deliveryStatus}.`);
+  await order.save();
+  await Delivery.findOneAndUpdate({ orderId: order.orderId }, { status: next.deliveryStatus }, { upsert: false });
+  return order;
+}
+
+const syncSellerShipmentStatus = asyncHandler(async (req, res) => {
+  const { order } = await getSellerOrder(req);
+  const updated = await applyShipmentStatus(order, req.body.status || "shipped", req.body.reason || "");
+  success(res, { order: sellerOrderView(updated.toObject()) });
+});
+
+const shiprocketStatusWebhook = asyncHandler(async (req, res) => {
+  const orderId = req.body.order_id || req.body.orderId;
+  const awb = req.body.awb || req.body.awb_code || req.body.awbNumber;
+  const order = await Order.findOne({
+    $or: [orderId ? { orderId } : null, awb ? { awbNumber: awb } : null].filter(Boolean),
+  });
+  if (!order) {
+    res.status(404).json({ ok: false, message: "Order not found for shipment update." });
+    return;
+  }
+  const updated = await applyShipmentStatus(order, req.body.current_status || req.body.status || "shipped", req.body.reason || "");
+  success(res, { order: sellerOrderView(updated.toObject()) });
 });
 
 async function buildOrderFinanceFromRequest(req) {
@@ -480,6 +567,8 @@ module.exports = {
   packAndShipSellerOrder,
   packSellerOrder,
   rejectSellerOrder,
+  shiprocketStatusWebhook,
+  syncSellerShipmentStatus,
   listCustomerOrders,
   listSellerOrders,
   verifyRazorpayPayment,

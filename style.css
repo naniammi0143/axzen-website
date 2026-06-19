@@ -5149,6 +5149,7 @@ h1 {
 .seller-status-badge.new,
 .seller-status-badge.pending,
 .seller-status-badge.payment-pending,
+.seller-status-badge.waiting_for_pickup,
 .seller-status-badge.packed,
 .seller-status-badge.shipped {
   color: #075985;

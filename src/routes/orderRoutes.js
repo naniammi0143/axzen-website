@@ -8,6 +8,8 @@ const {
   packAndShipSellerOrder,
   packSellerOrder,
   rejectSellerOrder,
+  shiprocketStatusWebhook,
+  syncSellerShipmentStatus,
   listCustomerOrders,
   listSellerOrders,
   verifyRazorpayPayment,
@@ -26,6 +28,8 @@ router.post("/seller/orders/:id/accept", authenticate, authorize("seller"), acce
 router.post("/seller/orders/:id/reject", authenticate, authorize("seller"), rejectSellerOrder);
 router.post("/seller/orders/:id/pack", authenticate, authorize("seller"), packSellerOrder);
 router.post("/seller/orders/:id/pack-and-ship", authenticate, authorize("seller"), packAndShipSellerOrder);
+router.post("/seller/orders/:id/sync-shipment", authenticate, authorize("seller"), syncSellerShipmentStatus);
+router.post("/shiprocket/status", shiprocketStatusWebhook);
 router.get("/:id/invoice", authenticate, getOrderInvoice);
 router.get("/:id/delivery-label", authenticate, getDeliveryLabel);
 

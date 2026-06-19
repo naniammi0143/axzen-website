@@ -10,7 +10,7 @@ const deliverySchema = new mongoose.Schema(
     awbNumber: { type: String, trim: true, default: "" },
     status: {
       type: String,
-      enum: ["created", "ready_to_ship", "assigned", "packed", "shipped", "picked", "delivered", "cancelled", "returned"],
+      enum: ["created", "ready_to_ship", "waiting_for_pickup", "assigned", "packed", "shipped", "picked", "delivered", "cancelled", "returned"],
       default: "created",
     },
   },

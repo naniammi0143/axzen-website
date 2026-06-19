@@ -887,7 +887,8 @@ function sellerOrderProductTitle(order = {}) {
 
 function sellerStatusBadge(value = "") {
   const normalized = normalizeSellerOrderStatus(value);
-  return `<span class="seller-status-badge ${escapeHtml(normalized)}">${escapeHtml(normalized.replace(/_/g, " "))}</span>`;
+  const label = normalized === "waiting_for_pickup" ? "Waiting for pickup agent" : normalized.replace(/_/g, " ");
+  return `<span class="seller-status-badge ${escapeHtml(normalized)}">${escapeHtml(label)}</span>`;
 }
 
 function sellerPaymentBadge(order = {}) {
@@ -901,13 +902,14 @@ function getSellerOrderActions(order = {}) {
   if (status === "new") {
     return [
       ["accept", "Accept"],
-      ["reject", "Reject"],
+      ["reject", "Cancel"],
     ];
   }
-  if (status === "accepted") return [["pack", "Pack Order"]];
-  if (status === "packed") return [["pack-and-ship", "Packing Complete"]];
+  if (status === "accepted") return [["pack", "Pack Order"], ["reject", "Cancel"]];
+  if (status === "packed") return [["track", "Track Pickup"], ["reject", "Cancel"]];
   if (status === "shipped") return [["track", "Track Shipment"]];
-  if (status === "delivered") return [["settlement", "View Settlement"]];
+  if (status === "delivered") return [["details", "Delivery Details"]];
+  if (status === "returned") return [["details", "Return Details"]];
   return [];
 }
 
@@ -951,7 +953,6 @@ function renderSellerOrdersRows() {
           <td>${escapeHtml(sellerOrderCustomerName(order))}</td>
           <td>${escapeHtml(sellerOrderProductTitle(order))}</td>
           <td>${Number(item.quantity) || 1}</td>
-          <td>${rupees(order.customerPaid || order.productTotal)}</td>
           <td>${sellerPaymentBadge(order)}</td>
           <td>${sellerStatusBadge(order.status)}</td>
           <td>${sellerStatusBadge(order.shipmentStatus || order.deliveryStatus || "created")}</td>
@@ -992,14 +993,11 @@ function renderSellerOrderDrawer(order = {}) {
             <h4>Product details</h4>
             <p>${escapeHtml(item.title || "Product")}</p>
             <p>SKU: ${escapeHtml(item.sku || "-")} | Qty: ${Number(item.quantity) || 1}</p>
-            <p>${rupees((Number(item.pricePaise) || 0) * (Number(item.quantity) || 1))}</p>
           </section>
           <section>
             <h4>Payment details</h4>
             <p>Method: ${escapeHtml(order.paymentMethod || "-")}</p>
             <p>Status: ${escapeHtml(order.paymentStatus || "pending")}</p>
-            <p>Transaction: ${escapeHtml(order.transactionId || "-")}</p>
-            <p>Amount: ${rupees(order.customerPaid || order.productTotal)}</p>
           </section>
           <section>
             <h4>Shipment details</h4>
@@ -1007,6 +1005,9 @@ function renderSellerOrderDrawer(order = {}) {
             <p>Courier: ${escapeHtml(order.courierName || "-")}</p>
             <p>AWB: ${escapeHtml(order.awbNumber || "-")}</p>
             ${order.trackingUrl ? `<a href="${escapeHtml(order.trackingUrl)}" target="_blank" rel="noopener noreferrer">Open tracking</a>` : ""}
+            ${order.cancelReason ? `<p>Cancel reason: ${escapeHtml(order.cancelReason)}</p>` : ""}
+            ${order.returnReason ? `<p>Return reason: ${escapeHtml(order.returnReason)}</p>` : ""}
+            ${order.refundStatus && order.refundStatus !== "none" ? `<p>Refund: ${escapeHtml(order.refundStatus)}${order.refundDueDate ? ` by ${formatDate(order.refundDueDate)}` : ""}</p>` : ""}
           </section>
         </div>
         <div class="seller-order-timeline">
@@ -1054,7 +1055,6 @@ function renderOrderInvoicePanel(orders = [], role = "customer") {
       acc[key] = orders.filter((order) => normalizeSellerOrderStatus(order.status) === key).length;
       return acc;
     }, {});
-    const totalAmount = orders.reduce((sum, order) => sum + Number(order.customerPaid || order.productTotal || 0), 0);
     const pendingCount = orders.filter((order) => ["new", "accepted"].includes(normalizeSellerOrderStatus(order.status))).length;
     return `
       <article class="dashboard-panel seller-orders-page" id="orderInvoicePanel" data-seller-section="orders" data-active-tab="new">
@@ -1067,7 +1067,7 @@ function renderOrderInvoicePanel(orders = [], role = "customer") {
           <div class="seller-orders-kpis">
             <span><small>Total orders</small><strong>${orders.length}</strong></span>
             <span><small>Open orders</small><strong>${pendingCount}</strong></span>
-            <span><small>Sales value</small><strong>${rupees(totalAmount)}</strong></span>
+            <span><small>Shipment ready</small><strong>${counts.packed || 0}</strong></span>
           </div>
         </div>
         <div class="seller-new-order-alert" ${pendingCount ? "" : "hidden"}>
@@ -1111,7 +1111,6 @@ function renderOrderInvoicePanel(orders = [], role = "customer") {
                 <th>Customer</th>
                 <th>Product</th>
                 <th>Qty</th>
-                <th>Amount</th>
                 <th>Payment Status</th>
                 <th>Order Status</th>
                 <th>Shipment Status</th>
@@ -1225,7 +1224,7 @@ async function updateSellerSetting(key, value) {
   await loadRoleOrders("seller");
 }
 
-async function updateSellerOrderAction(orderId, action) {
+async function updateSellerOrderAction(orderId, action, reason = "") {
   const token = localStorage.getItem("axzenToken");
   const response = await fetch(`/api/seller/orders/${encodeURIComponent(orderId)}/${encodeURIComponent(action)}`, {
     method: "POST",
@@ -1233,7 +1232,7 @@ async function updateSellerOrderAction(orderId, action) {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ reason: "Rejected by seller." }),
+    body: JSON.stringify({ reason }),
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.message || "Unable to update order.");
@@ -1694,15 +1693,19 @@ document.addEventListener("click", async (event) => {
       else showSellerOrdersToast("Tracking URL is not available yet.", true);
       return;
     }
-    if (action === "settlement") {
+    if (action === "settlement" || action === "details") {
       openSellerOrderDrawer(orderId);
-      showSellerOrdersToast("Settlement details are shown inside order details.");
       return;
     }
+    const reason =
+      action === "reject"
+        ? window.prompt("Cancel reason enter cheyyandi. Example: item unavailable / stock issue / address issue", "Item unavailable")
+        : "";
+    if (action === "reject" && !reason) return;
     orderAction.disabled = true;
     orderAction.textContent = "Updating...";
     try {
-      await updateSellerOrderAction(orderId, action);
+      await updateSellerOrderAction(orderId, action, reason);
       showSellerOrdersToast("Order status updated successfully.");
       await loadRoleOrders("seller");
     } catch (error) {
