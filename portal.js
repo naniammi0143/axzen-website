@@ -41,6 +41,7 @@ let sellerOrderPollTimer = null;
 const CART_KEY = "axzenCustomerCart";
 const ADDRESS_KEY = "axzenCustomerAddress";
 const DELIVERY_CHARGE_PAISE = 4000;
+const RAZORPAY_CHECKOUT_SRC = "https://checkout.razorpay.com/v1/checkout.js";
 
 const sellerSectionLabels = {
   dashboard: "Dashboard",
@@ -193,6 +194,24 @@ function cartSupportsCod(cart = getCustomerCart()) {
   return cart.length > 0 && cart.every((item) => item.codEnabled !== false);
 }
 
+function cartSupportsOnlinePayment(cart = getCustomerCart()) {
+  return cart.length > 0 && cart.every((item) => item.onlinePaymentEnabled !== false);
+}
+
+function getCheckoutAvailability(cart = getCustomerCart()) {
+  const sellerIds = getCartSellerIds(cart);
+  const singleSeller = sellerIds.length === 1;
+  return {
+    singleSeller,
+    codAvailable: singleSeller && cartSupportsCod(cart),
+    onlineAvailable: singleSeller && cartSupportsOnlinePayment(cart),
+    blockReason:
+      sellerIds.length > 1
+        ? "Checkout supports one seller per order. Place separate orders for each seller."
+        : "This seller has not enabled payment collection.",
+  };
+}
+
 function setCartMessage(message, isError = false) {
   document.querySelectorAll("[data-cart-message]").forEach((node) => {
     node.textContent = message;
@@ -241,10 +260,9 @@ function renderCartSummary(showCheckout = false) {
 
 function renderCheckoutPanel(cart = getCustomerCart()) {
   const address = getSavedCustomerAddress();
-  const sellerIds = getCartSellerIds(cart);
   const isCustomerLoggedIn = localStorage.getItem("axzenToken") && localStorage.getItem("axzenRole") === "customer";
-  const codAvailable = cartSupportsCod(cart) && sellerIds.length === 1;
-  const blockReason = sellerIds.length > 1 ? "Checkout supports one seller per order. Place separate orders for each seller." : "Seller does not accept Cash on Delivery.";
+  const { codAvailable, onlineAvailable, blockReason } = getCheckoutAvailability(cart);
+  const canPlaceOrder = codAvailable || onlineAvailable;
 
   if (!isCustomerLoggedIn) {
     return `
@@ -272,18 +290,24 @@ function renderCheckoutPanel(cart = getCustomerCart()) {
       </div>
       <div class="checkout-payment">
         <h4>Payment</h4>
-        <label class="payment-option ${codAvailable ? "selected" : "disabled"}">
-          <input type="radio" name="paymentMethod" value="cod" ${codAvailable ? "checked" : "disabled"}>
-          <span>
-            <strong>Cash on Delivery</strong>
-            <small>${codAvailable ? "Available for this seller" : blockReason}</small>
-          </span>
-        </label>
-        <label class="payment-option disabled">
-          <input type="radio" name="paymentMethod" value="online" disabled>
+        ${
+          codAvailable
+            ? `<label class="payment-option selected">
+                <input type="radio" name="paymentMethod" value="cod" checked>
+                <span>
+                  <strong>Cash on Delivery</strong>
+                  <small>Available for this seller</small>
+                </span>
+              </label>`
+            : `<p class="payment-note">Cash on Delivery is not available for this seller.</p>`
+        }
+        <label class="payment-option ${onlineAvailable ? "" : "disabled"}">
+          <input type="radio" name="paymentMethod" value="razorpay" ${!codAvailable && onlineAvailable ? "checked" : ""} ${
+            onlineAvailable ? "" : "disabled"
+          }>
           <span>
             <strong>Online payment</strong>
-            <small>Razorpay checkout will be enabled next.</small>
+            <small>${onlineAvailable ? "Pay securely with Razorpay test checkout." : blockReason}</small>
           </span>
         </label>
       </div>
@@ -292,7 +316,7 @@ function renderCheckoutPanel(cart = getCustomerCart()) {
         <span>Delivery charge</span><b>${rupees(DELIVERY_CHARGE_PAISE)}</b>
         <strong>Customer paid</strong><strong>${rupees(getCartTotalPaise(cart) + DELIVERY_CHARGE_PAISE)}</strong>
       </div>
-      <button type="submit" data-place-order ${codAvailable ? "" : "disabled"}>Place order</button>
+      <button type="submit" data-place-order ${canPlaceOrder ? "" : "disabled"}>${codAvailable ? "Place order" : "Pay online and place order"}</button>
     </form>
   `;
 }
@@ -327,6 +351,83 @@ function addProductToCart(productId) {
   setCartMessage(`${product.title || "Product"} added to cart.`);
 }
 
+function buildOrderItems(cart = getCustomerCart()) {
+  return cart.map((item) => ({
+    productId: item.productId || item.id,
+    sellerId: item.sellerId,
+    sku: item.sku,
+    title: item.title,
+    pricePaise: item.pricePaise,
+    quantity: item.quantity,
+  }));
+}
+
+function loadRazorpayCheckout() {
+  if (window.Razorpay) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${RAZORPAY_CHECKOUT_SRC}"]`);
+    if (existing) {
+      existing.addEventListener("load", resolve, { once: true });
+      existing.addEventListener("error", () => reject(new Error("Unable to load Razorpay checkout.")), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = RAZORPAY_CHECKOUT_SRC;
+    script.async = true;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("Unable to load Razorpay checkout."));
+    document.head.appendChild(script);
+  });
+}
+
+async function collectRazorpayPayment({ token, payload, shippingAddress }) {
+  const response = await fetch("/api/orders/razorpay/order", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.message || "Unable to start online payment.");
+
+  await loadRazorpayCheckout();
+
+  return new Promise((resolve, reject) => {
+    const checkout = new window.Razorpay({
+      key: result.keyId,
+      amount: result.amountPaise,
+      currency: "INR",
+      name: "Axzen",
+      description: "Axzen order payment",
+      order_id: result.razorpayOrder?.id,
+      prefill: {
+        name: shippingAddress.fullName || "",
+        contact: shippingAddress.phone || localStorage.getItem("axzenPhone") || "",
+      },
+      theme: {
+        color: "#0b2f57",
+      },
+      handler(payment) {
+        resolve({
+          razorpayOrderId: payment.razorpay_order_id,
+          razorpayPaymentId: payment.razorpay_payment_id,
+          razorpaySignature: payment.razorpay_signature,
+        });
+      },
+      modal: {
+        ondismiss() {
+          reject(new Error("Online payment was cancelled."));
+        },
+      },
+    });
+    checkout.open();
+  });
+}
+
 async function placeCustomerOrder(form) {
   const cart = getCustomerCart();
   const token = localStorage.getItem("axzenToken");
@@ -342,39 +443,44 @@ async function placeCustomerOrder(form) {
     pincode: formData.get("pincode"),
   };
   saveCustomerAddress(shippingAddress);
+  const paymentMethod = formData.get("paymentMethod") || "cod";
+  const orderPayload = {
+    items: buildOrderItems(cart),
+    deliveryCharge: DELIVERY_CHARGE_PAISE / 100,
+    paymentMethod,
+    shippingAddress,
+  };
 
   const submitButton = form.querySelector("[data-place-order]");
   if (submitButton) {
     submitButton.disabled = true;
-    submitButton.textContent = "Placing order...";
+    submitButton.textContent = paymentMethod === "razorpay" ? "Opening payment..." : "Placing order...";
   }
 
   try {
+    if (paymentMethod === "razorpay") {
+      const payment = await collectRazorpayPayment({ token, payload: orderPayload, shippingAddress });
+      Object.assign(orderPayload, payment, { paymentMethod: "razorpay" });
+      if (submitButton) submitButton.textContent = "Payment done. Placing order...";
+    }
+
     const response = await fetch("/api/customer/orders", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({
-        items: cart.map((item) => ({
-          productId: item.productId || item.id,
-          sellerId: item.sellerId,
-          sku: item.sku,
-          title: item.title,
-          pricePaise: item.pricePaise,
-          quantity: item.quantity,
-        })),
-        deliveryCharge: DELIVERY_CHARGE_PAISE / 100,
-        paymentMethod: "cod",
-        shippingAddress,
-      }),
+      body: JSON.stringify(orderPayload),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || "Unable to place order.");
     saveCustomerCart([]);
     renderCartSummary(false);
-    setCartMessage(`Order placed. ${result.order?.statusLabel || "Seller accepted order"}.`);
+    setCartMessage(
+      paymentMethod === "razorpay"
+        ? `Payment successful. Order placed. ${result.order?.statusLabel || "Seller accepted order"}.`
+        : `Order placed. ${result.order?.statusLabel || "Seller accepted order"}.`
+    );
     await loadRoleOrders("customer");
   } catch (error) {
     setCartMessage(error.message || "Unable to place order.", true);
