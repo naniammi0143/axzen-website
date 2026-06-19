@@ -34,7 +34,9 @@ const sellerRegisterLink = document.querySelector("#sellerRegisterLink");
 const sellerLoginLink = document.querySelector("#sellerLoginLink");
 const sellerAboutLink = document.querySelector("#sellerAboutLink");
 const sellerSidebarCompany = document.querySelector("#sellerSidebarCompany");
+const sellerTopbarInitial = document.querySelector("#sellerTopbarInitial");
 let sellerProductsCache = [];
+let sellerOrdersCache = [];
 let storefrontProductsCache = [];
 let sellerOrderPollTimer = null;
 
@@ -98,13 +100,16 @@ function updateSellerHeader(user = null) {
   sellerBrandText.textContent = isSellerLoggedIn ? seller.businessName || seller.fullName || "Seller" : "Seller";
   document.body.classList.toggle("seller-session-active", isSellerLoggedIn);
   if (sellerSidebarCompany) sellerSidebarCompany.textContent = isSellerLoggedIn ? seller.businessName || seller.fullName || "Seller company" : "Seller company";
+  if (sellerTopbarInitial) sellerTopbarInitial.textContent = (seller.businessName || seller.fullName || "Seller").trim().charAt(0).toUpperCase();
   if (sellerRegisterLink) sellerRegisterLink.hidden = isSellerLoggedIn;
   if (sellerLoginLink) sellerLoginLink.hidden = isSellerLoggedIn;
   if (sellerAboutLink) sellerAboutLink.hidden = !isSellerLoggedIn;
 }
 
 function getSellerSectionFromHash() {
-  return sellerHashSections[window.location.hash] || "dashboard";
+  if (sellerHashSections[window.location.hash]) return sellerHashSections[window.location.hash];
+  if (window.location.pathname.toLowerCase().includes("/seller/orders") || document.body.classList.contains("seller-page")) return "orders";
+  return "dashboard";
 }
 
 function setSellerSection(section = "dashboard", updateHash = false) {
@@ -393,6 +398,15 @@ async function collectRazorpayPayment({ token, payload, shippingAddress }) {
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.message || "Unable to start online payment.");
+
+  if (result.mockPayment) {
+    return {
+      razorpayOrderId: result.razorpayOrder?.id || `mock_order_${Date.now()}`,
+      razorpayPaymentId: `mock_pay_${Date.now()}`,
+      razorpaySignature: "mock_signature",
+      mockPayment: true,
+    };
+  }
 
   await loadRazorpayCheckout();
 
@@ -824,48 +838,276 @@ function startSellerOrderPolling() {
   }, 20000);
 }
 
+const sellerOrderTabs = [
+  ["new", "New"],
+  ["accepted", "Accepted"],
+  ["packed", "Packed"],
+  ["shipped", "Shipped"],
+  ["delivered", "Delivered"],
+  ["cancelled", "Cancelled"],
+  ["returned", "Returned"],
+];
+
+function normalizeSellerOrderStatus(status = "") {
+  if (["placed", "pending"].includes(status)) return "new";
+  if (["confirmed", "accepted"].includes(status)) return "accepted";
+  return status || "new";
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+  return new Date(value).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function sellerOrderFirstItem(order = {}) {
+  return order.items?.[0] || {};
+}
+
+function sellerOrderCustomerName(order = {}) {
+  return order.customer?.name || order.shippingAddress?.fullName || "Customer";
+}
+
+function sellerOrderProductTitle(order = {}) {
+  return sellerOrderFirstItem(order).title || "Product";
+}
+
+function sellerStatusBadge(value = "") {
+  const normalized = normalizeSellerOrderStatus(value);
+  return `<span class="seller-status-badge ${escapeHtml(normalized)}">${escapeHtml(normalized.replace(/_/g, " "))}</span>`;
+}
+
+function getSellerOrderActions(order = {}) {
+  const status = normalizeSellerOrderStatus(order.status);
+  if (status === "new") {
+    return [
+      ["accept", "Accept"],
+      ["reject", "Reject"],
+    ];
+  }
+  if (status === "accepted") return [["pack", "Pack Order"]];
+  if (status === "packed") return [["pack-and-ship", "Packing Complete"]];
+  if (status === "shipped") return [["track", "Track Shipment"]];
+  if (status === "delivered") return [["settlement", "View Settlement"]];
+  return [];
+}
+
+function getSellerFilteredOrders() {
+  const panel = document.querySelector("#orderInvoicePanel");
+  const activeTab = panel?.dataset.activeTab || "new";
+  const search = (panel?.querySelector("[data-seller-order-search]")?.value || "").trim().toLowerCase();
+  const paymentStatus = panel?.querySelector("[data-seller-payment-filter]")?.value || "";
+  const orderStatus = panel?.querySelector("[data-seller-status-filter]")?.value || "";
+  const date = panel?.querySelector("[data-seller-date-filter]")?.value || "";
+
+  return sellerOrdersCache.filter((order) => {
+    const tabMatch = activeTab === "all" || normalizeSellerOrderStatus(order.status) === activeTab;
+    const paymentMatch = !paymentStatus || order.paymentStatus === paymentStatus;
+    const statusMatch = !orderStatus || normalizeSellerOrderStatus(order.status) === orderStatus;
+    const dateMatch = !date || new Date(order.createdAt).toISOString().slice(0, 10) === date;
+    const haystack = [order.orderId, sellerOrderCustomerName(order), sellerOrderProductTitle(order), sellerOrderFirstItem(order).sku]
+      .join(" ")
+      .toLowerCase();
+    return tabMatch && paymentMatch && statusMatch && dateMatch && (!search || haystack.includes(search));
+  });
+}
+
+function renderSellerOrdersRows() {
+  const tbody = document.querySelector("[data-seller-orders-body]");
+  const empty = document.querySelector("[data-seller-orders-empty]");
+  if (!tbody) return;
+  const orders = getSellerFilteredOrders();
+
+  if (empty) empty.hidden = orders.length > 0;
+  tbody.innerHTML = orders
+    .map((order) => {
+      const item = sellerOrderFirstItem(order);
+      const actions = getSellerOrderActions(order)
+        .map(([action, label]) => `<button type="button" data-seller-order-action="${action}" data-order-id="${escapeHtml(order._id || order.orderId)}">${escapeHtml(label)}</button>`)
+        .join("");
+      return `
+        <tr>
+          <td><button class="seller-order-link" type="button" data-order-details="${escapeHtml(order._id || order.orderId)}">${escapeHtml(order.orderId)}</button></td>
+          <td>${formatDate(order.createdAt)}</td>
+          <td>${escapeHtml(sellerOrderCustomerName(order))}</td>
+          <td>${escapeHtml(sellerOrderProductTitle(order))}</td>
+          <td>${Number(item.quantity) || 1}</td>
+          <td>${rupees(order.customerPaid || order.productTotal)}</td>
+          <td>${sellerStatusBadge(order.paymentStatus || "pending")}</td>
+          <td>${sellerStatusBadge(order.status)}</td>
+          <td>${sellerStatusBadge(order.shipmentStatus || order.deliveryStatus || "created")}</td>
+          <td><div class="seller-order-actions">${actions}<button type="button" data-order-details="${escapeHtml(order._id || order.orderId)}">Details</button></div></td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+function renderSellerOrderDrawer(order = {}) {
+  const item = sellerOrderFirstItem(order);
+  const address = order.shippingAddress || {};
+  const timeline = order.timeline?.length
+    ? order.timeline
+    : [
+        {
+          status: order.status || "accepted",
+          note: "Order received in seller panel.",
+          at: order.createdAt,
+        },
+      ];
+
+  return `
+    <aside class="seller-order-drawer is-open" data-seller-order-drawer>
+      <div class="seller-order-drawer-card">
+        <button class="seller-drawer-close" type="button" data-close-order-drawer>Close</button>
+        <p class="eyebrow">Order details</p>
+        <h3>${escapeHtml(order.orderId)}</h3>
+        <div class="seller-drawer-grid">
+          <section>
+            <h4>Customer details</h4>
+            <p>${escapeHtml(sellerOrderCustomerName(order))}</p>
+            <p>${escapeHtml(order.customer?.phone || address.phone || "-")}</p>
+            <p>${escapeHtml([address.address, address.city, address.state, address.pincode].filter(Boolean).join(", ") || "-")}</p>
+          </section>
+          <section>
+            <h4>Product details</h4>
+            <p>${escapeHtml(item.title || "Product")}</p>
+            <p>SKU: ${escapeHtml(item.sku || "-")} | Qty: ${Number(item.quantity) || 1}</p>
+            <p>${rupees((Number(item.pricePaise) || 0) * (Number(item.quantity) || 1))}</p>
+          </section>
+          <section>
+            <h4>Payment details</h4>
+            <p>Method: ${escapeHtml(order.paymentMethod || "-")}</p>
+            <p>Status: ${escapeHtml(order.paymentStatus || "pending")}</p>
+            <p>Transaction: ${escapeHtml(order.transactionId || "-")}</p>
+            <p>Amount: ${rupees(order.customerPaid || order.productTotal)}</p>
+          </section>
+          <section>
+            <h4>Shipment details</h4>
+            <p>Status: ${escapeHtml(order.shipmentStatus || order.deliveryStatus || "created")}</p>
+            <p>Courier: ${escapeHtml(order.courierName || "-")}</p>
+            <p>AWB: ${escapeHtml(order.awbNumber || "-")}</p>
+            ${order.trackingUrl ? `<a href="${escapeHtml(order.trackingUrl)}" target="_blank" rel="noopener noreferrer">Open tracking</a>` : ""}
+          </section>
+        </div>
+        <div class="seller-order-timeline">
+          <h4>Order timeline</h4>
+          ${timeline
+            .map(
+              (event) => `
+                <div>
+                  <strong>${escapeHtml(event.status)}</strong>
+                  <span>${escapeHtml(event.note || "")}</span>
+                  <small>${formatDate(event.at)}</small>
+                </div>
+              `
+            )
+            .join("")}
+        </div>
+      </div>
+    </aside>
+  `;
+}
+
+function openSellerOrderDrawer(orderId) {
+  const order = sellerOrdersCache.find((entry) => String(entry._id || entry.orderId) === String(orderId));
+  if (!order) return;
+  document.querySelector("[data-seller-order-drawer]")?.remove();
+  document.body.insertAdjacentHTML("beforeend", renderSellerOrderDrawer(order));
+}
+
+function showSellerOrdersToast(message, isError = false) {
+  const panel = document.querySelector("#orderInvoicePanel");
+  const toast = panel?.querySelector("[data-seller-order-toast]");
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.toggle("error", isError);
+  toast.hidden = false;
+  window.setTimeout(() => {
+    toast.hidden = true;
+  }, 3500);
+}
+
 function renderOrderInvoicePanel(orders = [], role = "customer") {
   if (role === "seller") {
-    const newOrders = orders.filter((order) => ["accepted", "placed", "pending"].includes(order.status || ""));
+    sellerOrdersCache = orders;
+    const counts = sellerOrderTabs.reduce((acc, [key]) => {
+      acc[key] = orders.filter((order) => normalizeSellerOrderStatus(order.status) === key).length;
+      return acc;
+    }, {});
+    const totalAmount = orders.reduce((sum, order) => sum + Number(order.customerPaid || order.productTotal || 0), 0);
+    const pendingCount = orders.filter((order) => ["new", "accepted"].includes(normalizeSellerOrderStatus(order.status))).length;
     return `
-      <article class="dashboard-panel order-invoice-panel seller-payout-panel" id="orderInvoicePanel" data-seller-section="orders">
-        <div class="order-invoice-heading">
+      <article class="dashboard-panel seller-orders-page" id="orderInvoicePanel" data-seller-section="orders" data-active-tab="new">
+        <div class="seller-orders-header">
           <div>
             <p class="eyebrow">Seller orders</p>
-            <h3>Order payout details</h3>
+            <h3>Orders</h3>
+            <p>Accept, pack, ship and track seller orders from one workspace.</p>
           </div>
-          <span>${newOrders.length ? `${newOrders.length} new orders` : `${orders.length} orders`}</span>
+          <div class="seller-orders-kpis">
+            <span><small>Total orders</small><strong>${orders.length}</strong></span>
+            <span><small>Open orders</small><strong>${pendingCount}</strong></span>
+            <span><small>Sales value</small><strong>${rupees(totalAmount)}</strong></span>
+          </div>
         </div>
-        ${
-          newOrders.length
-            ? `<div class="seller-new-order-alert"><strong>New order received</strong><span>Orders are automatically accepted and ready for packing.</span></div>`
-            : ""
-        }
-        ${
-          orders.length
-            ? `<div class="seller-payout-list">
-                ${orders
-                  .map(
-                    (order) => `
-                      <div class="seller-payout-card">
-                        <div class="seller-payout-title">
-                          <strong>${escapeHtml(order.orderId)}</strong>
-                          <span>${escapeHtml(order.status === "accepted" ? "Seller accepted order" : order.status || "placed")} | payout ${escapeHtml(order.payoutStatus || "pending")}</span>
-                        </div>
-                        <div class="seller-payout-breakup">
-                          <span><small>Product total</small><b>${rupees(order.productTotal)}</b></span>
-                          <span><small>Platform fee</small><b>- ${rupees(order.platformFee)}</b></span>
-                          <span><small>Online payment charge</small><b>- ${rupees(order.paymentCharge)}</b></span>
-                          <span class="net"><small>Seller payout</small><b>${rupees(order.sellerPayout)}</b></span>
-                        </div>
-                        <button class="seller-label-button" type="button" data-print-label="${escapeHtml(order._id || order.orderId)}">Print delivery label</button>
-                      </div>
-                    `
-                  )
-                  .join("")}
-              </div>`
-            : `<p class="order-invoice-empty">No seller orders yet. Order payout details will appear here after customers place orders.</p>`
-        }
+        <div class="seller-new-order-alert" ${pendingCount ? "" : "hidden"}>
+          <strong>${pendingCount} order${pendingCount === 1 ? "" : "s"} need attention</strong>
+          <span>New customer orders are automatically accepted and ready for packing.</span>
+        </div>
+        <div class="seller-order-tabs">
+          ${sellerOrderTabs
+            .map(
+              ([key, label]) => `
+                <button type="button" class="${key === "new" ? "active" : ""}" data-seller-order-tab="${key}">
+                  ${escapeHtml(label)} <span>${counts[key] || 0}</span>
+                </button>
+              `
+            )
+            .join("")}
+        </div>
+        <div class="seller-order-filters">
+          <input type="search" data-seller-order-search placeholder="Search order ID, customer, product">
+          <input type="date" data-seller-date-filter>
+          <select data-seller-payment-filter>
+            <option value="">Payment status</option>
+            <option value="pending">Pending</option>
+            <option value="paid">Paid</option>
+            <option value="failed">Failed</option>
+            <option value="refunded">Refunded</option>
+          </select>
+          <select data-seller-status-filter>
+            <option value="">Order status</option>
+            ${sellerOrderTabs.map(([key, label]) => `<option value="${escapeHtml(key)}">${escapeHtml(label)}</option>`).join("")}
+          </select>
+          <button type="button" data-clear-seller-order-filters>Clear</button>
+        </div>
+        <div class="seller-order-toast" data-seller-order-toast hidden></div>
+        <div class="seller-orders-table-wrap">
+          <table class="seller-orders-table">
+            <thead>
+              <tr>
+                <th>Order ID</th>
+                <th>Date</th>
+                <th>Customer</th>
+                <th>Product</th>
+                <th>Qty</th>
+                <th>Amount</th>
+                <th>Payment Status</th>
+                <th>Order Status</th>
+                <th>Shipment Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody data-seller-orders-body></tbody>
+          </table>
+        </div>
+        <div class="seller-orders-empty" data-seller-orders-empty hidden>
+          No report data found for selected filters.
+        </div>
       </article>
     `;
   }
@@ -909,7 +1151,7 @@ function renderOrderInvoicePanel(orders = [], role = "customer") {
 async function loadRoleOrders(role) {
   if (!["customer", "seller"].includes(role) || !dashboardPanels) return;
   const token = localStorage.getItem("axzenToken");
-  const endpoint = role === "seller" ? "/api/orders/seller" : "/api/orders/customer";
+  const endpoint = role === "seller" ? "/api/seller/orders" : "/api/orders/customer";
   try {
     const [ordersResponse, sellerResponse] = await Promise.all([
       fetch(endpoint, {
@@ -935,12 +1177,18 @@ async function loadRoleOrders(role) {
       dashboardPanels.insertAdjacentHTML("beforeend", renderSellerPaymentSettings(sellerResult?.seller || {}));
     }
     dashboardPanels.insertAdjacentHTML("beforeend", renderOrderInvoicePanel(result.orders || [], role));
-    if (role === "seller") setSellerSection(getSellerSectionFromHash());
+    if (role === "seller") {
+      renderSellerOrdersRows();
+      setSellerSection(getSellerSectionFromHash());
+    }
   } catch (error) {
     document.querySelector("#orderInvoicePanel")?.remove();
     document.querySelector(".seller-payment-settings")?.remove();
     dashboardPanels.insertAdjacentHTML("beforeend", renderOrderInvoicePanel([], role));
-    if (role === "seller") setSellerSection(getSellerSectionFromHash());
+    if (role === "seller") {
+      renderSellerOrdersRows();
+      setSellerSection(getSellerSectionFromHash());
+    }
   }
 }
 
@@ -959,6 +1207,21 @@ async function updateSellerSetting(key, value) {
     throw new Error(result.message || "Unable to update seller settings.");
   }
   await loadRoleOrders("seller");
+}
+
+async function updateSellerOrderAction(orderId, action) {
+  const token = localStorage.getItem("axzenToken");
+  const response = await fetch(`/api/seller/orders/${encodeURIComponent(orderId)}/${encodeURIComponent(action)}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ reason: "Rejected by seller." }),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.message || "Unable to update order.");
+  return result;
 }
 
 function getRecaptcha(form) {
@@ -1257,6 +1520,65 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const orderTab = event.target.closest("[data-seller-order-tab]");
+  if (orderTab) {
+    const panel = document.querySelector("#orderInvoicePanel");
+    if (panel) panel.dataset.activeTab = orderTab.dataset.sellerOrderTab;
+    document.querySelectorAll("[data-seller-order-tab]").forEach((tab) => tab.classList.toggle("active", tab === orderTab));
+    renderSellerOrdersRows();
+    return;
+  }
+
+  const clearOrderFilters = event.target.closest("[data-clear-seller-order-filters]");
+  if (clearOrderFilters) {
+    const panel = document.querySelector("#orderInvoicePanel");
+    panel?.querySelectorAll("input, select").forEach((field) => {
+      field.value = "";
+    });
+    renderSellerOrdersRows();
+    return;
+  }
+
+  const orderDetails = event.target.closest("[data-order-details]");
+  if (orderDetails) {
+    openSellerOrderDrawer(orderDetails.dataset.orderDetails);
+    return;
+  }
+
+  const drawerClose = event.target.closest("[data-close-order-drawer]");
+  if (drawerClose) {
+    document.querySelector("[data-seller-order-drawer]")?.remove();
+    return;
+  }
+
+  const orderAction = event.target.closest("[data-seller-order-action]");
+  if (orderAction) {
+    const action = orderAction.dataset.sellerOrderAction;
+    const orderId = orderAction.dataset.orderId;
+    if (action === "track") {
+      const order = sellerOrdersCache.find((entry) => String(entry._id || entry.orderId) === String(orderId));
+      if (order?.trackingUrl) window.open(order.trackingUrl, "_blank", "noopener,noreferrer");
+      else showSellerOrdersToast("Tracking URL is not available yet.", true);
+      return;
+    }
+    if (action === "settlement") {
+      openSellerOrderDrawer(orderId);
+      showSellerOrdersToast("Settlement details are shown inside order details.");
+      return;
+    }
+    orderAction.disabled = true;
+    orderAction.textContent = "Updating...";
+    try {
+      await updateSellerOrderAction(orderId, action);
+      showSellerOrdersToast("Order status updated successfully.");
+      await loadRoleOrders("seller");
+    } catch (error) {
+      showSellerOrdersToast(error.message || "Unable to update order.", true);
+      orderAction.disabled = false;
+    }
+    return;
+  }
+
   const sellerNav = event.target.closest("[data-seller-nav]");
   if (sellerNav) {
     event.preventDefault();
@@ -1325,6 +1647,10 @@ document.addEventListener("input", (event) => {
     filterSellerProducts(productSearch.value);
   }
 
+  if (event.target.closest("[data-seller-order-search]")) {
+    renderSellerOrdersRows();
+  }
+
   const checkoutForm = event.target.closest("[data-checkout-form]");
   if (checkoutForm) {
     const formData = new FormData(checkoutForm);
@@ -1341,9 +1667,19 @@ document.addEventListener("input", (event) => {
 
 document.addEventListener("change", (event) => {
   const categoryChoice = event.target.closest("[data-product-category-choice]");
-  if (!categoryChoice) return;
-  const otherField = categoryChoice.form?.querySelector(".seller-other-category");
-  if (otherField) otherField.hidden = categoryChoice.value !== "Other";
+  if (categoryChoice) {
+    const otherField = categoryChoice.form?.querySelector(".seller-other-category");
+    if (otherField) otherField.hidden = categoryChoice.value !== "Other";
+    return;
+  }
+
+  if (
+    event.target.closest("[data-seller-payment-filter]") ||
+    event.target.closest("[data-seller-status-filter]") ||
+    event.target.closest("[data-seller-date-filter]")
+  ) {
+    renderSellerOrdersRows();
+  }
 });
 
 document.addEventListener("submit", async (event) => {

@@ -13,7 +13,14 @@ const sellerRoutes = require("./routes/sellerRoutes");
 const wishlistRoutes = require("./routes/wishlistRoutes");
 const { getDashboard } = require("./controllers/dashboardController");
 const { saveCart } = require("./controllers/cartController");
-const { createOrder } = require("./controllers/orderController");
+const {
+  acceptSellerOrder,
+  createOrder,
+  listSellerOrders,
+  packAndShipSellerOrder,
+  packSellerOrder,
+  rejectSellerOrder,
+} = require("./controllers/orderController");
 const { createSellerProduct, listProducts, listSellerProducts } = require("./controllers/productController");
 const { financeSummary } = require("./controllers/adminController");
 const { errorHandler, notFound } = require("./middleware/errorHandler");
@@ -84,6 +91,11 @@ app.get(
 app.get("/api/customer/catalog", listProducts);
 app.post("/api/customer/cart", authenticate, authorize("customer"), saveCart);
 app.post("/api/customer/orders", authenticate, authorize("customer"), createOrder);
+app.get("/api/seller/orders", authenticate, authorize("seller"), listSellerOrders);
+app.post("/api/seller/orders/:id/accept", authenticate, authorize("seller"), acceptSellerOrder);
+app.post("/api/seller/orders/:id/reject", authenticate, authorize("seller"), rejectSellerOrder);
+app.post("/api/seller/orders/:id/pack", authenticate, authorize("seller"), packSellerOrder);
+app.post("/api/seller/orders/:id/pack-and-ship", authenticate, authorize("seller"), packAndShipSellerOrder);
 app.get("/api/seller/products", authenticate, authorize("seller"), listSellerProducts);
 app.post("/api/seller/products", authenticate, authorize("seller"), multipartForm({ optional: true, maxBytes: 30 * 1024 * 1024 }), createSellerProduct);
 app.get("/api/admin/finance/summary", authenticate, authorize("admin", "superadmin"), financeSummary);
@@ -94,7 +106,7 @@ function resolvePage(req) {
 
   if (route === "/seller/register" || (host === "seller.axzen.in" && route === "/register")) return "seller-register.html";
   if (route === "/admin" || host === "admin.axzen.in") return "admin.html";
-  if (route === "/seller" || host === "seller.axzen.in") return "seller.html";
+  if (route === "/seller" || route === "/seller/orders" || host === "seller.axzen.in") return "seller.html";
   if (host === "api.axzen.in") return null;
   return "index.html";
 }

@@ -28,9 +28,24 @@ const orderSchema = new mongoose.Schema(
     paymentMethod: { type: String, trim: true, default: "" },
     invoiceNumber: { type: String, trim: true, default: "" },
     invoiceDate: { type: Date, default: null },
-    deliveryStatus: { type: String, enum: ["created", "assigned", "picked", "delivered"], default: "created" },
+    deliveryStatus: {
+      type: String,
+      enum: ["created", "ready_to_ship", "assigned", "packed", "shipped", "picked", "delivered", "cancelled", "returned"],
+      default: "created",
+    },
+    awbNumber: { type: String, trim: true, default: "" },
+    courierName: { type: String, trim: true, default: "" },
+    trackingUrl: { type: String, trim: true, default: "" },
+    shipmentStatus: { type: String, trim: true, default: "" },
     finance: { type: Object, required: true },
     shippingAddress: { type: Object, default: null },
+    timeline: [
+      {
+        status: { type: String, trim: true, required: true },
+        note: { type: String, trim: true, default: "" },
+        at: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true }
 );

@@ -10,7 +10,8 @@ const { success } = require("../utils/apiResponse");
 const { buildDeliveryLabelHtml } = require("../utils/deliveryLabel");
 const { buildInvoiceHtml } = require("../utils/invoice");
 const { calculateOrderFinance, formatRupees, getPaymentChargePercent, getSellerCommission, toPaise } = require("../utils/money");
-const { createRazorpayOrder, razorpayConfig, verifyRazorpaySignature } = require("../utils/razorpay");
+const { createRazorpayOrder, hasRazorpayCredentials, razorpayConfig, verifyRazorpaySignature } = require("../utils/razorpay");
+const { createShiprocketShipment } = require("../utils/shiprocket");
 
 const adminRoles = ["admin", "superadmin", "support", "finance", "delivery_manager"];
 
@@ -49,10 +50,30 @@ function sellerOrderView(order) {
     payoutStatus: order.payoutStatus,
     paymentMethod: order.paymentMethod,
     productTotal,
+    customerPaid: financeValue(order, "customerPaid", "customerPaidPaise") || financeValue(order, "customerPaid", "totalPaise"),
     platformFee,
     paymentCharge,
     sellerPayout,
     items: order.items,
+    customer: order.customerId
+      ? {
+          name: order.customerId.name || order.shippingAddress?.fullName || "Customer",
+          phone: order.customerId.phone || order.shippingAddress?.phone || "",
+          email: order.customerId.email || "",
+        }
+      : {
+          name: order.shippingAddress?.fullName || "Customer",
+          phone: order.shippingAddress?.phone || "",
+          email: "",
+        },
+    shippingAddress: order.shippingAddress || null,
+    shipmentStatus: order.shipmentStatus || order.deliveryStatus || "created",
+    deliveryStatus: order.deliveryStatus || "created",
+    awbNumber: order.awbNumber || "",
+    courierName: order.courierName || "",
+    trackingUrl: order.trackingUrl || "",
+    transactionId: order.transactionId || "",
+    timeline: order.timeline || [],
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
   };
@@ -63,10 +84,130 @@ const listCustomerOrders = asyncHandler(async (req, res) => {
   success(res, { orders });
 });
 
-const listSellerOrders = asyncHandler(async (req, res) => {
+async function getSellerForUser(req) {
   const seller = await Seller.findOne({ userId: req.user.id });
-  const orders = seller ? await Order.find({ sellerId: seller._id }).sort({ createdAt: -1 }).lean() : [];
+  if (!seller) {
+    const error = new Error("Seller profile not found.");
+    error.statusCode = 404;
+    throw error;
+  }
+  return seller;
+}
+
+const listSellerOrders = asyncHandler(async (req, res) => {
+  const seller = await getSellerForUser(req);
+  const orders = await Order.find({ sellerId: seller._id }).populate("customerId", "name phone email").sort({ createdAt: -1 }).lean();
   success(res, { orders: orders.map(sellerOrderView) });
+});
+
+async function getSellerOrder(req) {
+  const seller = await getSellerForUser(req);
+  const order = await Order.findOne({
+    sellerId: seller._id,
+    $or: [mongoose.Types.ObjectId.isValid(req.params.id) ? { _id: req.params.id } : null, { orderId: req.params.id }].filter(Boolean),
+  }).populate("customerId", "name phone email");
+
+  if (!order) {
+    const error = new Error("Seller order not found.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return { seller, order };
+}
+
+function pushTimeline(order, status, note) {
+  order.timeline = [
+    ...(Array.isArray(order.timeline) ? order.timeline : []),
+    {
+      status,
+      note,
+      at: new Date(),
+    },
+  ];
+}
+
+async function updateSellerOrderStatus(req, res, nextStatus, options = {}) {
+  const { order } = await getSellerOrder(req);
+  const allowed = options.allowed || [];
+  if (allowed.length && !allowed.includes(order.status)) {
+    res.status(400).json({ ok: false, message: `Order cannot move from ${order.status} to ${nextStatus}.` });
+    return;
+  }
+
+  order.status = nextStatus;
+  if (options.deliveryStatus) order.deliveryStatus = options.deliveryStatus;
+  if (nextStatus === "cancelled" && order.paymentStatus === "pending") order.payoutStatus = "failed";
+  pushTimeline(order, nextStatus, options.note || `Seller marked order as ${nextStatus}.`);
+  await order.save();
+  success(res, { order: sellerOrderView(order.toObject()) });
+}
+
+const acceptSellerOrder = asyncHandler(async (req, res) => {
+  await updateSellerOrderStatus(req, res, "accepted", {
+    allowed: ["placed", "pending", "accepted"],
+    note: "Seller accepted order.",
+  });
+});
+
+const rejectSellerOrder = asyncHandler(async (req, res) => {
+  await updateSellerOrderStatus(req, res, "cancelled", {
+    allowed: ["placed", "pending", "accepted"],
+    deliveryStatus: "cancelled",
+    note: req.body.reason || "Seller rejected order.",
+  });
+});
+
+const packSellerOrder = asyncHandler(async (req, res) => {
+  await updateSellerOrderStatus(req, res, "packed", {
+    allowed: ["accepted", "confirmed", "packed"],
+    deliveryStatus: "packed",
+    note: "Seller packed order.",
+  });
+});
+
+const packAndShipSellerOrder = asyncHandler(async (req, res) => {
+  const { seller, order } = await getSellerOrder(req);
+  if (order.paymentStatus !== "paid") {
+    res.status(400).json({ ok: false, message: "Packing complete requires paymentStatus = paid." });
+    return;
+  }
+
+  if (!["packed", "accepted", "confirmed"].includes(order.status)) {
+    res.status(400).json({ ok: false, message: `Order cannot be shipped from ${order.status}.` });
+    return;
+  }
+
+  const shipment = await createShiprocketShipment({
+    order,
+    seller,
+    customerAddress: order.shippingAddress || {},
+  });
+
+  order.status = "shipped";
+  order.deliveryStatus = "shipped";
+  order.shipmentStatus = shipment.shipmentStatus || "shipped";
+  order.awbNumber = shipment.awbNumber || "";
+  order.courierName = shipment.courierName || "";
+  order.trackingUrl = shipment.trackingUrl || "";
+  pushTimeline(order, "shipped", "Shipment created with Shiprocket.");
+  await order.save();
+
+  await Delivery.findOneAndUpdate(
+    { orderId: order.orderId },
+    {
+      orderId: order.orderId,
+      partnerName: shipment.courierName || "Shiprocket",
+      courierName: shipment.courierName || "Shiprocket",
+      trackingNumber: shipment.awbNumber || "",
+      awbNumber: shipment.awbNumber || "",
+      trackingUrl: shipment.trackingUrl || "",
+      status: "shipped",
+    },
+    { upsert: true, new: true }
+  );
+
+  success(res, { order: sellerOrderView(order.toObject()), shipment });
 });
 
 async function buildOrderFinanceFromRequest(req) {
@@ -114,6 +255,7 @@ const createRazorpayCheckoutOrder = asyncHandler(async (req, res) => {
     razorpayOrder,
     amountPaise: context.finance.customerPaidPaise,
     amount: formatRupees(context.finance.customerPaidPaise),
+    mockPayment: Boolean(razorpayOrder.mock || !hasRazorpayCredentials()),
   });
 });
 
@@ -139,16 +281,22 @@ const createOrder = asyncHandler(async (req, res) => {
     return;
   }
 
-  const isOnlinePaid =
+  const isMockOnlinePaid =
     paymentMethod !== "cod" &&
-    req.body.razorpayOrderId &&
-    req.body.razorpayPaymentId &&
-    req.body.razorpaySignature &&
-    verifyRazorpaySignature({
-      razorpayOrderId: req.body.razorpayOrderId,
-      razorpayPaymentId: req.body.razorpayPaymentId,
-      razorpaySignature: req.body.razorpaySignature,
-    });
+    !hasRazorpayCredentials() &&
+    req.body.mockPayment === true &&
+    String(req.body.razorpayPaymentId || "").startsWith("mock_pay_");
+  const isOnlinePaid =
+    isMockOnlinePaid ||
+    (paymentMethod !== "cod" &&
+      req.body.razorpayOrderId &&
+      req.body.razorpayPaymentId &&
+      req.body.razorpaySignature &&
+      verifyRazorpaySignature({
+        razorpayOrderId: req.body.razorpayOrderId,
+        razorpayPaymentId: req.body.razorpayPaymentId,
+        razorpaySignature: req.body.razorpaySignature,
+      }));
   const transactionId = req.body.razorpayPaymentId || req.body.transactionId || (paymentMethod === "cod" ? `COD-${orderId}` : `PAY-${orderId}`);
   const order = await Order.create({
     orderId,
@@ -175,6 +323,13 @@ const createOrder = asyncHandler(async (req, res) => {
     deliveryStatus: "created",
     finance,
     shippingAddress: req.body.shippingAddress || null,
+    timeline: [
+      {
+        status: "accepted",
+        note: "Order placed and automatically accepted by seller workflow.",
+        at: new Date(),
+      },
+    ],
   });
 
   await Payment.create({
@@ -312,10 +467,14 @@ const getDeliveryLabel = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  acceptSellerOrder,
   createOrder,
   createRazorpayCheckoutOrder,
   getDeliveryLabel,
   getOrderInvoice,
+  packAndShipSellerOrder,
+  packSellerOrder,
+  rejectSellerOrder,
   listCustomerOrders,
   listSellerOrders,
   verifyRazorpayPayment,

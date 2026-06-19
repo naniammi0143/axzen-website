@@ -96,13 +96,18 @@
         </aside>
         <div class="dashboard-main">
           <header class="seller-dashboard-topbar">
-            <div>
-              <p class="eyebrow">Seller workspace</p>
-              <h1>Dashboard</h1>
+            <div class="seller-topbar-brand">
+              <img src="assets/logo.png" alt="Axzen" onerror="this.hidden=true">
+              <div>
+                <p class="eyebrow">Seller workspace</p>
+                <h1>Orders</h1>
+              </div>
             </div>
             <div class="seller-topbar-actions">
-              <a class="secondary-button" href="/seller/register">Update profile</a>
               <a class="secondary-button" href="https://axzen.in" target="_blank" rel="noopener noreferrer">Customer site</a>
+              <button class="seller-profile-chip" type="button" data-seller-nav="profile" aria-label="Open seller profile">
+                <span id="sellerTopbarInitial">S</span>
+              </button>
             </div>
           </header>
           <div class="dashboard-metrics" id="dashboardMetrics"></div>

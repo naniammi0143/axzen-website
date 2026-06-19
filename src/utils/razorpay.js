@@ -8,12 +8,27 @@ function razorpayConfig() {
   };
 }
 
+function hasRazorpayCredentials() {
+  const { keyId, keySecret } = razorpayConfig();
+  return Boolean(keyId && keySecret);
+}
+
+function createMockRazorpayOrder({ amountPaise, receipt, notes = {} }) {
+  return {
+    id: `mock_order_${Date.now()}`,
+    amount: amountPaise,
+    currency: "INR",
+    receipt,
+    notes,
+    status: "created",
+    mock: true,
+  };
+}
+
 function createRazorpayOrder({ amountPaise, receipt, notes = {} }) {
   const { keyId, keySecret } = razorpayConfig();
   if (!keyId || !keySecret) {
-    const error = new Error("Razorpay credentials are not configured.");
-    error.statusCode = 503;
-    throw error;
+    return Promise.resolve(createMockRazorpayOrder({ amountPaise, receipt, notes }));
   }
 
   const payload = JSON.stringify({
@@ -73,6 +88,7 @@ function verifyRazorpaySignature({ razorpayOrderId, razorpayPaymentId, razorpayS
 
 module.exports = {
   createRazorpayOrder,
+  hasRazorpayCredentials,
   razorpayConfig,
   verifyRazorpaySignature,
 };
