@@ -1006,14 +1006,9 @@ function playSellerOrderNotification(orderCount = 1) {
     if (!sellerNotificationAudio) sellerNotificationAudio = new Audio(SELLER_SIREN_SRC);
     sellerNotificationAudio.pause();
     sellerNotificationAudio.currentTime = 0;
-    sellerNotificationAudio.loop = true;
+    sellerNotificationAudio.loop = false;
     const playback = sellerNotificationAudio.play();
     if (playback?.catch) playback.catch(() => playSellerFallbackBeep(orderCount));
-    window.setTimeout(() => {
-      sellerNotificationAudio.pause();
-      sellerNotificationAudio.currentTime = 0;
-      sellerNotificationAudio.loop = false;
-    }, 4200);
   } catch (error) {
     playSellerFallbackBeep(orderCount);
   }
