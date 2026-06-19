@@ -115,6 +115,20 @@
                 <a href="#sellerReturns" data-seller-nav="returns" data-owner-menu>Returns</a>
                 <a href="#sellerEmployees" data-seller-nav="employees" data-owner-menu>Employees</a>
               </nav>
+              <button class="seller-notification-bell" type="button" data-seller-notification-bell aria-label="Open order notifications">
+                <span aria-hidden="true">🔔</span>
+                <b data-seller-unread-badge hidden>0</b>
+              </button>
+              <div class="seller-notification-panel" data-seller-notification-panel hidden>
+                <div>
+                  <strong>Order notifications</strong>
+                  <button type="button" data-seller-notification-mute>Mute</button>
+                </div>
+                <div data-seller-notification-list>
+                  <p>No notifications yet.</p>
+                </div>
+                <button type="button" data-seller-notification-clear>Clear history</button>
+              </div>
               <button class="seller-profile-chip" type="button" data-seller-profile-menu aria-label="Open seller profile">
                 <span id="sellerTopbarInitial">S</span>
               </button>
@@ -146,6 +160,7 @@
     </section>
   </main>
 
+  <script defer src="/socket.io/socket.io.js"></script>
   <script type="module" src="portal.js"></script>
 </body>
 </html>

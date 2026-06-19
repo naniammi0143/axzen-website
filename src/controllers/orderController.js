@@ -11,6 +11,7 @@ const { buildDeliveryLabelHtml } = require("../utils/deliveryLabel");
 const { buildInvoiceHtml } = require("../utils/invoice");
 const { calculateOrderFinance, formatRupees, getPaymentChargePercent, getSellerCommission, toPaise } = require("../utils/money");
 const { createRazorpayOrder, hasRazorpayCredentials, razorpayConfig, verifyRazorpaySignature } = require("../utils/razorpay");
+const { emitSellerNewOrder } = require("../utils/realtime");
 const { createShiprocketShipment } = require("../utils/shiprocket");
 
 const adminRoles = ["admin", "superadmin", "support", "finance", "delivery_manager"];
@@ -479,6 +480,7 @@ const createOrder = asyncHandler(async (req, res) => {
   });
   await Delivery.create({ orderId, status: "created" });
   await Cart.deleteOne({ customerId: req.user.id });
+  emitSellerNewOrder(order.sellerId, sellerOrderView(order.toObject()));
 
   success(
     res,

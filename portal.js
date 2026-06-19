@@ -42,12 +42,18 @@ let sellerOrdersCache = [];
 let sellerTicketsCache = [];
 let storefrontProductsCache = [];
 let sellerOrderPollTimer = null;
+let sellerSocket = null;
+let sellerNotificationAudio = null;
 
 const CART_KEY = "axzenCustomerCart";
 const ADDRESS_KEY = "axzenCustomerAddress";
 const SELLER_OWNER_KEY = "axzenSellerOwnerMode";
+const SELLER_NOTIFICATION_MUTE_KEY = "axzenSellerNotificationsMuted";
+const SELLER_NOTIFICATION_HISTORY_KEY = "axzenSellerNotificationHistory";
+const SELLER_NOTIFICATION_UNREAD_KEY = "axzenSellerNotificationUnread";
 const DELIVERY_CHARGE_PAISE = 4000;
 const RAZORPAY_CHECKOUT_SRC = "https://checkout.razorpay.com/v1/checkout.js";
+const SELLER_SIREN_SRC = "/assets/siren.mp3";
 
 const sellerSectionLabels = {
   dashboard: "Dashboard",
@@ -944,7 +950,7 @@ function filterSellerProducts(term = "") {
   list.innerHTML = renderSellerProductList(filtered);
 }
 
-function playSellerOrderNotification(orderCount = 1) {
+function playSellerFallbackBeep(orderCount = 1) {
   try {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (!AudioContext) return;
@@ -969,13 +975,179 @@ function playSellerOrderNotification(orderCount = 1) {
   }
 }
 
+function playSellerOrderNotification(orderCount = 1) {
+  if (localStorage.getItem(SELLER_NOTIFICATION_MUTE_KEY) === "true") return;
+  try {
+    if (!sellerNotificationAudio) sellerNotificationAudio = new Audio(SELLER_SIREN_SRC);
+    sellerNotificationAudio.pause();
+    sellerNotificationAudio.currentTime = 0;
+    sellerNotificationAudio.loop = true;
+    const playback = sellerNotificationAudio.play();
+    if (playback?.catch) playback.catch(() => playSellerFallbackBeep(orderCount));
+    window.setTimeout(() => {
+      sellerNotificationAudio.pause();
+      sellerNotificationAudio.currentTime = 0;
+      sellerNotificationAudio.loop = false;
+    }, 4200);
+  } catch (error) {
+    playSellerFallbackBeep(orderCount);
+  }
+}
+
+function getSellerNotificationHistory() {
+  try {
+    const history = JSON.parse(localStorage.getItem(SELLER_NOTIFICATION_HISTORY_KEY) || "[]");
+    return Array.isArray(history) ? history : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSellerNotificationHistory(history) {
+  localStorage.setItem(SELLER_NOTIFICATION_HISTORY_KEY, JSON.stringify(history.slice(0, 30)));
+}
+
+function sellerNotificationAmount(order = {}) {
+  return order.customerPaid || order.finance?.customerPaidPaise || order.totalPaise || order.productTotal || 0;
+}
+
+function updateSellerNotificationBadge() {
+  const badge = document.querySelector("[data-seller-unread-badge]");
+  const count = Number(localStorage.getItem(SELLER_NOTIFICATION_UNREAD_KEY) || 0);
+  if (!badge) return;
+  badge.textContent = String(count);
+  badge.hidden = count <= 0;
+}
+
+function renderSellerNotificationHistory() {
+  const list = document.querySelector("[data-seller-notification-list]");
+  const muteButton = document.querySelector("[data-seller-notification-mute]");
+  if (muteButton) muteButton.textContent = localStorage.getItem(SELLER_NOTIFICATION_MUTE_KEY) === "true" ? "Unmute" : "Mute";
+  if (!list) return;
+  const history = getSellerNotificationHistory();
+  list.innerHTML = history.length
+    ? history
+        .map(
+          (entry) => `
+            <article>
+              <strong>🔔 New Order Received</strong>
+              <span>${escapeHtml(entry.orderId || "Order")} - ${escapeHtml(entry.customerName || "Customer")}</span>
+              <small>${escapeHtml(entry.amount || "")} - ${formatDate(entry.createdAt)}</small>
+            </article>
+          `
+        )
+        .join("")
+    : "<p>No notifications yet.</p>";
+}
+
+function requestSellerNotificationPermission() {
+  if (!("Notification" in window) || Notification.permission !== "default") return;
+  Notification.requestPermission().catch(() => {});
+}
+
+function showSellerBrowserNotification(order = {}) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const customerName = sellerOrderCustomerName(order);
+  const amount = rupees(sellerNotificationAmount(order));
+  new Notification("🔔 New Order Received", {
+    body: `Order ID: ${order.orderId}\nCustomer: ${customerName}\nAmount: ${amount}`,
+    icon: "/assets/favicon.png",
+    tag: order.orderId || `axzen-order-${Date.now()}`,
+  });
+}
+
+function showSellerRealtimeToast(order = {}) {
+  let toast = document.querySelector("[data-seller-realtime-toast]");
+  if (!toast) {
+    document.body.insertAdjacentHTML("beforeend", `<div class="seller-realtime-toast" data-seller-realtime-toast hidden></div>`);
+    toast = document.querySelector("[data-seller-realtime-toast]");
+  }
+  toast.innerHTML = `
+    <strong>🔔 New Order Received</strong>
+    <span>${escapeHtml(order.orderId || "New order")} - ${escapeHtml(sellerOrderCustomerName(order))}</span>
+    <small>${rupees(sellerNotificationAmount(order))}</small>
+  `;
+  toast.hidden = false;
+  window.setTimeout(() => {
+    toast.hidden = true;
+  }, 5000);
+}
+
+function addSellerNotificationHistory(order = {}) {
+  const history = getSellerNotificationHistory();
+  const alreadySeen = history.some((item) => item.orderId && item.orderId === order.orderId);
+  const entry = {
+    orderId: order.orderId,
+    customerName: sellerOrderCustomerName(order),
+    amount: rupees(sellerNotificationAmount(order)),
+    createdAt: order.createdAt || new Date().toISOString(),
+  };
+  saveSellerNotificationHistory([entry, ...history.filter((item) => item.orderId !== entry.orderId)]);
+  if (!alreadySeen) {
+    localStorage.setItem(SELLER_NOTIFICATION_UNREAD_KEY, String(Number(localStorage.getItem(SELLER_NOTIFICATION_UNREAD_KEY) || 0) + 1));
+  }
+  updateSellerNotificationBadge();
+  renderSellerNotificationHistory();
+}
+
+function refreshSellerOrdersPanelFromCache() {
+  const panel = document.querySelector("#orderInvoicePanel");
+  if (!panel) return;
+  const section = dashboardSection?.dataset.sellerSection || "orders";
+  panel.outerHTML = renderOrderInvoicePanel(sellerOrdersCache, "seller");
+  renderSellerOrdersRows();
+  setSellerSection(section);
+}
+
+function handleSellerRealtimeOrder(order = {}) {
+  const key = String(order._id || order.orderId || "");
+  if (key) {
+    const existingIndex = sellerOrdersCache.findIndex((entry) => String(entry._id || entry.orderId) === key);
+    if (existingIndex >= 0) sellerOrdersCache[existingIndex] = order;
+    else sellerOrdersCache = [order, ...sellerOrdersCache];
+  }
+  addSellerNotificationHistory(order);
+  localStorage.setItem(
+    "axzenSellerLastOrderSeen",
+    String(Math.max(Number(localStorage.getItem("axzenSellerLastOrderSeen") || 0), new Date(order.createdAt || order.updatedAt || Date.now()).getTime()))
+  );
+  refreshSellerOrdersPanelFromCache();
+  showSellerRealtimeToast(order);
+  showSellerBrowserNotification(order);
+  playSellerOrderNotification(1);
+}
+
 function notifyNewSellerOrders(orders = []) {
   const latestOrderTime = orders.reduce((latest, order) => Math.max(latest, new Date(order.createdAt || order.updatedAt || 0).getTime()), 0);
   const storageKey = "axzenSellerLastOrderSeen";
   const previous = Number(localStorage.getItem(storageKey) || 0);
   const newOrders = orders.filter((order) => new Date(order.createdAt || order.updatedAt || 0).getTime() > previous);
-  if (previous && newOrders.length) playSellerOrderNotification(newOrders.length);
+  if (previous && newOrders.length) {
+    newOrders.forEach((order) => {
+      addSellerNotificationHistory(order);
+      showSellerRealtimeToast(order);
+      showSellerBrowserNotification(order);
+    });
+    playSellerOrderNotification(newOrders.length);
+  }
   if (latestOrderTime) localStorage.setItem(storageKey, String(latestOrderTime));
+}
+
+function disconnectSellerRealtime() {
+  if (sellerSocket) {
+    sellerSocket.disconnect();
+    sellerSocket = null;
+  }
+}
+
+function connectSellerRealtime() {
+  const token = localStorage.getItem("axzenToken");
+  if (!token || localStorage.getItem("axzenRole") !== "seller" || !window.io) return;
+  disconnectSellerRealtime();
+  sellerSocket = window.io({
+    auth: { token },
+  });
+  sellerSocket.on("newOrder", handleSellerRealtimeOrder);
 }
 
 function stopSellerOrderPolling() {
@@ -1565,6 +1737,10 @@ function renderDashboard(payload) {
     setSellerSection(getSellerSectionFromHash());
     loadSellerProducts();
     loadSellerTickets();
+    requestSellerNotificationPermission();
+    updateSellerNotificationBadge();
+    renderSellerNotificationHistory();
+    connectSellerRealtime();
     startSellerOrderPolling();
   }
 
@@ -1736,6 +1912,37 @@ document.addEventListener("click", async (event) => {
   const profileMenuButton = event.target.closest("[data-seller-profile-menu]");
   if (profileMenuButton) {
     if (sellerProfilePopover) sellerProfilePopover.hidden = !sellerProfilePopover.hidden;
+    return;
+  }
+
+  const notificationBell = event.target.closest("[data-seller-notification-bell]");
+  if (notificationBell) {
+    const panel = document.querySelector("[data-seller-notification-panel]");
+    if (panel) {
+      panel.hidden = !panel.hidden;
+      if (!panel.hidden) {
+        localStorage.setItem(SELLER_NOTIFICATION_UNREAD_KEY, "0");
+        updateSellerNotificationBadge();
+        renderSellerNotificationHistory();
+      }
+    }
+    return;
+  }
+
+  const muteNotifications = event.target.closest("[data-seller-notification-mute]");
+  if (muteNotifications) {
+    const muted = localStorage.getItem(SELLER_NOTIFICATION_MUTE_KEY) === "true";
+    localStorage.setItem(SELLER_NOTIFICATION_MUTE_KEY, muted ? "false" : "true");
+    renderSellerNotificationHistory();
+    return;
+  }
+
+  const clearNotifications = event.target.closest("[data-seller-notification-clear]");
+  if (clearNotifications) {
+    saveSellerNotificationHistory([]);
+    localStorage.setItem(SELLER_NOTIFICATION_UNREAD_KEY, "0");
+    updateSellerNotificationBadge();
+    renderSellerNotificationHistory();
     return;
   }
 
@@ -2153,6 +2360,7 @@ window.addEventListener("hashchange", () => {
 if (logoutButton) {
   logoutButton.addEventListener("click", () => {
     stopSellerOrderPolling();
+    disconnectSellerRealtime();
     localStorage.removeItem("axzenToken");
     localStorage.removeItem("axzenRole");
     localStorage.removeItem("axzenPhone");
@@ -2188,6 +2396,7 @@ loadStorefrontCatalog();
 if (savedToken && savedRole && savedRole === pageRole) {
   loadDashboard(savedRole, savedToken).catch(() => {
     stopSellerOrderPolling();
+    disconnectSellerRealtime();
     localStorage.removeItem("axzenToken");
     localStorage.removeItem("axzenRole");
     localStorage.removeItem("axzenPhone");
