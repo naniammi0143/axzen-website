@@ -179,7 +179,7 @@ async function openDeliveryLabel(orderId) {
 
 function renderSellerPaymentSettings(seller = {}) {
   return `
-    <article class="dashboard-panel seller-payment-settings">
+    <article class="dashboard-panel seller-payment-settings" id="sellerPayments">
       <div class="order-invoice-heading">
         <div>
           <p class="eyebrow">Seller Payment Agent</p>
@@ -221,10 +221,19 @@ function renderSellerWorkspace(user = {}) {
     ["Tax compliance", seller.agreements?.taxCompliance],
     ["Payout policy", seller.agreements?.payoutPolicy],
   ];
-  const modules = ["Dashboard", "Products", "Orders", "Shipments", "Payments", "Inventory", "Returns", "Profile", "Support"];
+  const modules = [
+    ["sellerShipments", "Shipments", "Delivery labels and shipment readiness"],
+    ["sellerInventory", "Inventory", "Stock, low-stock alerts and product availability"],
+    ["sellerReturns", "Returns", "Return requests, refund status and issue handling"],
+    ["sellerSupport", "Support", "Admin support and seller helpdesk"],
+  ];
   return `
     <nav class="seller-workspace-tabs" aria-label="Seller workspace sections">
-      ${modules.map((item) => `<a href="#seller${item}">${escapeHtml(item)}</a>`).join("")}
+      <a href="#dashboard">Dashboard</a>
+      <a href="#sellerProducts">Products</a>
+      <a href="#orderInvoicePanel">Orders</a>
+      <a href="#sellerPayments">Payments</a>
+      <a href="#sellerAbout">Profile</a>
     </nav>
     <article class="dashboard-panel seller-about-panel" id="sellerAbout">
       <div class="seller-about-heading">
@@ -257,8 +266,7 @@ function renderSellerWorkspace(user = {}) {
     </article>
     <section class="seller-module-grid">
       ${modules
-        .filter((item) => item !== "Dashboard" && item !== "Profile")
-        .map((item) => `<article id="seller${item}"><span>${escapeHtml(item)}</span><strong>${escapeHtml(item)} workspace</strong><small>Manage ${escapeHtml(item.toLowerCase())} from this seller panel.</small></article>`)
+        .map(([id, title, detail]) => `<article id="${escapeHtml(id)}"><span>${escapeHtml(title)}</span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></article>`)
         .join("")}
     </section>
   `;
@@ -597,7 +605,7 @@ function renderDashboard(payload) {
 
   if (user.role === "seller") {
     dashboardPanels.insertAdjacentHTML("afterbegin", renderSellerWorkspace(user));
-    dashboardPanels.insertAdjacentHTML("beforeend", renderSellerProductManager());
+    dashboardPanels.insertAdjacentHTML("afterbegin", renderSellerProductManager());
   }
 
   if (protectedContent) {

@@ -4427,6 +4427,8 @@ h1 {
   align-items: start;
   gap: 0;
   max-width: none;
+  width: 100%;
+  margin: 0;
 }
 
 .seller-page .dashboard-sidebar {
@@ -4475,13 +4477,20 @@ h1 {
 .seller-page .seller-workspace-tabs {
   position: static;
   z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px;
   border-radius: 20px;
   background: #fff;
   box-shadow: 0 12px 34px rgba(15, 23, 42, 0.05);
 }
 
 .seller-page .seller-workspace-tabs a {
-  min-width: 112px;
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 38px;
+  padding: 9px 13px;
   justify-content: center;
   text-align: center;
 }
@@ -4496,9 +4505,33 @@ h1 {
   display: none !important;
 }
 
-.seller-dashboard-app {
-  padding: 18px;
+.seller-page .seller-dashboard-app {
+  display: block;
+  min-height: calc(100vh - 76px);
+  padding: 0 18px 18px;
   background: #eef3f8;
+}
+
+.seller-page .dashboard-panels {
+  grid-template-columns: 1fr;
+}
+
+.seller-page .seller-product-manager,
+.seller-page .seller-workspace-tabs,
+.seller-page .seller-about-panel,
+.seller-page .seller-module-grid,
+.seller-page .seller-payment-settings,
+.seller-page .order-invoice-panel {
+  grid-column: 1 / -1;
+  scroll-margin-top: 18px;
+}
+
+.seller-page .seller-module-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.seller-page .seller-about-panel .seller-detail-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .seller-sidebar-logo {
@@ -4522,7 +4555,7 @@ h1 {
   margin: 4px 0 auto;
 }
 
-.seller-sidebar-menu span {
+.seller-sidebar-menu a {
   min-height: 40px;
   display: flex;
   align-items: center;
@@ -4534,7 +4567,13 @@ h1 {
   font-weight: 850;
 }
 
-.seller-sidebar-menu span:first-child {
+.seller-sidebar-menu a:hover,
+.seller-sidebar-menu a:focus {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.seller-sidebar-menu a:first-child {
   color: #06162d;
   background: #fff;
 }
