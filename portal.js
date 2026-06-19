@@ -39,6 +39,7 @@ const sellerProfilePopover = document.querySelector("[data-seller-profile-popove
 const ownerLoginModal = document.querySelector("[data-owner-login-modal]");
 let sellerProductsCache = [];
 let sellerOrdersCache = [];
+let sellerTicketsCache = [];
 let storefrontProductsCache = [];
 let sellerOrderPollTimer = null;
 
@@ -110,6 +111,8 @@ function updateSellerHeader(user = null) {
   if (sellerSidebarCompany) sellerSidebarCompany.textContent = isSellerLoggedIn ? seller.businessName || seller.fullName || "Seller company" : "Seller company";
   if (sellerTopbarInitial) sellerTopbarInitial.textContent = (seller.businessName || seller.fullName || "Seller").trim().charAt(0).toUpperCase();
   if (sellerProfilePopover) sellerProfilePopover.hidden = true;
+  document.querySelector("[data-login-owner]")?.toggleAttribute("hidden", isOwnerMode);
+  document.querySelector("[data-return-seller-orders]")?.toggleAttribute("hidden", !isOwnerMode);
   if (sellerRegisterLink) sellerRegisterLink.hidden = isSellerLoggedIn;
   if (sellerLoginLink) sellerLoginLink.hidden = isSellerLoggedIn;
   if (sellerAboutLink) sellerAboutLink.hidden = !isSellerLoggedIn;
@@ -611,18 +614,22 @@ function renderSellerPaymentSettings(seller = {}) {
         </div>
         <span>${seller.codEnabled ? "COD on" : "COD off"}</span>
       </div>
-      <div class="seller-payment-toggle-grid">
-        <button type="button" data-seller-setting="codEnabled" data-value="${seller.codEnabled ? "false" : "true"}">
+      <form class="seller-payment-toggle-grid" data-seller-payment-form>
+        <label class="seller-payment-box ${seller.codEnabled ? "enabled" : "disabled"}">
           <span>Cash on Delivery</span>
           <strong>${seller.codEnabled ? "Enabled" : "Disabled"}</strong>
+          <input type="checkbox" name="codEnabled" ${seller.codEnabled ? "checked" : ""}>
           <small>Seller can allow or stop COD orders.</small>
-        </button>
-        <button type="button" data-seller-setting="onlinePaymentEnabled" data-value="${seller.onlinePaymentEnabled ? "false" : "true"}">
+        </label>
+        <label class="seller-payment-box ${seller.onlinePaymentEnabled ? "enabled" : "disabled"}">
           <span>Online Payment</span>
           <strong>${seller.onlinePaymentEnabled ? "Enabled" : "Disabled"}</strong>
+          <input type="checkbox" name="onlinePaymentEnabled" ${seller.onlinePaymentEnabled ? "checked" : ""}>
           <small>Ready for Razorpay/payment gateway integration.</small>
-        </button>
-      </div>
+        </label>
+        <button class="seller-payment-save" type="submit">Save payment options</button>
+        <p class="seller-payment-message" data-seller-payment-message></p>
+      </form>
     </article>
   `;
 }
@@ -647,10 +654,8 @@ function renderSellerWorkspace(user = {}) {
   ];
   const modules = [
     ["sellerShipments", "Shipments", "Delivery labels and shipment readiness"],
-    ["sellerInventory", "Inventory", "Stock, low-stock alerts and product availability"],
     ["sellerReturns", "Returns", "Return requests, refund status and issue handling"],
     ["sellerEmployees", "Employees", "Add seller staff, assign work and manage access"],
-    ["sellerSupport", "Support", "Admin support and seller helpdesk"],
   ];
   return `
     <article class="dashboard-panel seller-about-panel" id="sellerAbout" data-seller-section="profile">
@@ -687,6 +692,8 @@ function renderSellerWorkspace(user = {}) {
         .map(([id, title, detail]) => `<article class="dashboard-panel seller-module-card" id="${escapeHtml(id)}" data-seller-section="${escapeHtml(title.toLowerCase())}"><span>${escapeHtml(title)}</span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></article>`)
         .join("")}
     </section>
+    ${renderSellerInventory(sellerProductsCache)}
+    ${renderSellerSupportPanel(sellerTicketsCache)}
   `;
 }
 
@@ -762,6 +769,85 @@ function renderSellerProductList(products = []) {
     .join("");
 }
 
+function renderSellerInventory(products = []) {
+  return `
+    <article class="dashboard-panel seller-inventory-panel" id="sellerInventory" data-seller-section="inventory">
+      <div class="seller-about-heading">
+        <div>
+          <p class="eyebrow">Inventory</p>
+          <h3>Stock and low-stock control</h3>
+          <p>Update stock, low-stock level, and investment value for your products.</p>
+        </div>
+        <span>${products.length} products</span>
+      </div>
+      <div class="seller-inventory-list" data-seller-inventory-list>
+        ${renderSellerInventoryRows(products)}
+      </div>
+    </article>
+  `;
+}
+
+function renderSellerInventoryRows(products = []) {
+  if (!products.length) return `<p class="order-invoice-empty">No products available for inventory updates.</p>`;
+  return products
+    .map(
+      (product) => `
+        <form class="seller-inventory-row ${Number(product.stock || 0) <= Number(product.lowStockThreshold ?? 5) ? "low" : ""}" data-inventory-update="${escapeHtml(product._id)}">
+          <strong>${escapeHtml(product.title)}</strong>
+          <span>${escapeHtml(product.sku)} | ${escapeHtml(product.status || "pending")}</span>
+          <label>Stock<input name="stock" type="number" min="0" value="${Number(product.stock || 0)}"></label>
+          <label>Low stock<input name="lowStockThreshold" type="number" min="0" value="${Number(product.lowStockThreshold ?? 5)}"></label>
+          <label>Investment<input name="investment" type="number" min="0" step="0.01" value="${((Number(product.investmentPaise) || 0) / 100).toFixed(2)}"></label>
+          <button type="submit">Save</button>
+        </form>
+      `
+    )
+    .join("");
+}
+
+function renderSellerSupportPanel(tickets = []) {
+  return `
+    <article class="dashboard-panel seller-support-panel" id="sellerSupport" data-seller-section="support">
+      <div class="seller-about-heading">
+        <div>
+          <p class="eyebrow">Seller help</p>
+          <h3>Raise a complaint</h3>
+          <p>Create a support token and track complaint status from Axzen admin.</p>
+        </div>
+        <span>${tickets.filter((ticket) => ticket.status !== "closed").length} open</span>
+      </div>
+      <form class="seller-support-form" data-seller-ticket-create>
+        <label>Category
+          <select name="category">
+            ${["orders", "payments", "shipments", "products", "inventory", "technical", "other"].map((category) => `<option value="${category}">${category}</option>`).join("")}
+          </select>
+        </label>
+        <label>Message<textarea name="message" required placeholder="Mention your complaint clearly"></textarea></label>
+        <button type="submit">Create token</button>
+        <p data-seller-ticket-message></p>
+      </form>
+      <h3>Complaint status</h3>
+      <div class="seller-ticket-list" data-seller-ticket-list>${renderSellerTickets(tickets)}</div>
+    </article>
+  `;
+}
+
+function renderSellerTickets(tickets = []) {
+  if (!tickets.length) return `<p class="order-invoice-empty">No support tokens yet.</p>`;
+  return tickets
+    .map(
+      (ticket) => `
+        <article class="seller-ticket-card ${escapeHtml(ticket.status)}">
+          <strong>${escapeHtml(ticket.ticketId)}</strong>
+          <span>${escapeHtml(ticket.category)} | ${escapeHtml(ticket.status)}</span>
+          <p>${escapeHtml(ticket.message)}</p>
+          ${ticket.departmentNote ? `<small>${escapeHtml(ticket.departmentNote)}</small>` : ""}
+        </article>
+      `
+    )
+    .join("");
+}
+
 async function loadSellerProducts() {
   if (!dashboardPanels || !document.querySelector("#sellerProducts")) return;
   const token = localStorage.getItem("axzenToken");
@@ -777,6 +863,8 @@ async function loadSellerProducts() {
     const count = document.querySelector("#sellerProducts .seller-product-actions > span");
     sellerProductsCache = result.products || [];
     if (list) list.innerHTML = renderSellerProductList(sellerProductsCache);
+    const inventoryList = document.querySelector("[data-seller-inventory-list]");
+    if (inventoryList) inventoryList.innerHTML = renderSellerInventoryRows(sellerProductsCache);
     if (count) count.textContent = `${result.products?.length || 0} products`;
   } catch (error) {
     const message = document.querySelector("[data-seller-product-message]");
@@ -784,6 +872,23 @@ async function loadSellerProducts() {
       message.textContent = error.message || "Unable to load products.";
       message.classList.add("error");
     }
+  }
+}
+
+async function loadSellerTickets() {
+  const panel = document.querySelector("[data-seller-ticket-list]");
+  if (!panel) return;
+  const token = localStorage.getItem("axzenToken");
+  try {
+    const response = await fetch("/api/seller/support-tickets", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Unable to load support tickets.");
+    sellerTicketsCache = result.tickets || [];
+    panel.innerHTML = renderSellerTickets(sellerTicketsCache);
+  } catch (error) {
+    panel.innerHTML = `<p class="order-invoice-empty">${escapeHtml(error.message || "Unable to load support tickets.")}</p>`;
   }
 }
 
@@ -1056,6 +1161,7 @@ function showSellerOrdersToast(message, isError = false) {
 
 function renderOrderInvoicePanel(orders = [], role = "customer") {
   if (role === "seller") {
+    const previousTab = document.querySelector("#orderInvoicePanel")?.dataset.activeTab || "new";
     sellerOrdersCache = orders;
     const counts = sellerOrderTabs.reduce((acc, [key]) => {
       acc[key] = orders.filter((order) => normalizeSellerOrderStatus(order.status) === key).length;
@@ -1063,7 +1169,7 @@ function renderOrderInvoicePanel(orders = [], role = "customer") {
     }, {});
     const pendingCount = orders.filter((order) => ["new", "accepted"].includes(normalizeSellerOrderStatus(order.status))).length;
     return `
-      <article class="dashboard-panel seller-orders-page" id="orderInvoicePanel" data-seller-section="orders" data-active-tab="new">
+      <article class="dashboard-panel seller-orders-page" id="orderInvoicePanel" data-seller-section="orders" data-active-tab="${escapeHtml(previousTab)}">
         <div class="seller-orders-kpis">
           <span><small>Total orders</small><strong>${orders.length}</strong></span>
           <span><small>Open orders</small><strong>${pendingCount}</strong></span>
@@ -1073,7 +1179,7 @@ function renderOrderInvoicePanel(orders = [], role = "customer") {
           ${sellerOrderTabs
             .map(
               ([key, label]) => `
-                <button type="button" class="${key === "new" ? "active" : ""}" data-seller-order-tab="${key}">
+                <button type="button" class="${key === previousTab ? "active" : ""} ${key === "new" && (counts[key] || 0) ? "has-new" : ""}" data-seller-order-tab="${key}">
                   ${escapeHtml(label)} <span>${counts[key] || 0}</span>
                 </button>
               `
@@ -1202,7 +1308,7 @@ async function loadRoleOrders(role) {
   }
 }
 
-async function updateSellerSetting(key, value) {
+async function updateSellerSetting(key, value, reload = true) {
   const token = localStorage.getItem("axzenToken");
   const response = await fetch("/api/sellers/me", {
     method: "PUT",
@@ -1216,7 +1322,7 @@ async function updateSellerSetting(key, value) {
   if (!response.ok) {
     throw new Error(result.message || "Unable to update seller settings.");
   }
-  await loadRoleOrders("seller");
+  if (reload) await loadRoleOrders("seller");
 }
 
 async function updateSellerOrderAction(orderId, action, reason = "") {
@@ -1414,6 +1520,7 @@ function renderDashboard(payload) {
   if (user.role === "seller") {
     setSellerSection(getSellerSectionFromHash());
     loadSellerProducts();
+    loadSellerTickets();
     startSellerOrderPolling();
   }
 
@@ -1592,6 +1699,17 @@ document.addEventListener("click", async (event) => {
   if (ownerLoginButton) {
     if (sellerProfilePopover) sellerProfilePopover.hidden = true;
     openOwnerLoginModal();
+    return;
+  }
+
+  const returnSellerOrders = event.target.closest("[data-return-seller-orders]");
+  if (returnSellerOrders) {
+    localStorage.removeItem(SELLER_OWNER_KEY);
+    document.body.classList.remove("seller-owner-mode");
+    document.querySelector("[data-login-owner]")?.removeAttribute("hidden");
+    document.querySelector("[data-return-seller-orders]")?.setAttribute("hidden", "");
+    if (sellerProfilePopover) sellerProfilePopover.hidden = true;
+    setSellerSection("orders", true);
     return;
   }
 
@@ -1818,6 +1936,15 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("change", (event) => {
+  const paymentCheckbox = event.target.closest("[data-seller-payment-form] input[type='checkbox']");
+  if (paymentCheckbox) {
+    const box = paymentCheckbox.closest(".seller-payment-box");
+    box?.classList.toggle("enabled", paymentCheckbox.checked);
+    box?.classList.toggle("disabled", !paymentCheckbox.checked);
+    const strong = box?.querySelector("strong");
+    if (strong) strong.textContent = paymentCheckbox.checked ? "Enabled" : "Disabled";
+  }
+
   const categoryChoice = event.target.closest("[data-product-category-choice]");
   if (categoryChoice) {
     const otherField = categoryChoice.form?.querySelector(".seller-other-category");
@@ -1839,6 +1966,72 @@ document.addEventListener("submit", async (event) => {
   if (checkoutForm) {
     event.preventDefault();
     await placeCustomerOrder(checkoutForm);
+    return;
+  }
+
+  const paymentForm = event.target.closest("[data-seller-payment-form]");
+  if (paymentForm) {
+    event.preventDefault();
+    const message = paymentForm.querySelector("[data-seller-payment-message]");
+    try {
+      const codEnabled = paymentForm.querySelector("[name='codEnabled']")?.checked;
+      const onlinePaymentEnabled = paymentForm.querySelector("[name='onlinePaymentEnabled']")?.checked;
+      await updateSellerSetting("codEnabled", String(Boolean(codEnabled)), false);
+      await updateSellerSetting("onlinePaymentEnabled", String(Boolean(onlinePaymentEnabled)), false);
+      await loadRoleOrders("seller");
+      if (message) message.textContent = "Payment options saved.";
+    } catch (error) {
+      if (message) {
+        message.textContent = error.message || "Unable to save payment options.";
+        message.classList.add("error");
+      }
+    }
+    return;
+  }
+
+  const ticketForm = event.target.closest("[data-seller-ticket-create]");
+  if (ticketForm) {
+    event.preventDefault();
+    const message = ticketForm.querySelector("[data-seller-ticket-message]");
+    const payload = Object.fromEntries(new FormData(ticketForm).entries());
+    try {
+      const token = localStorage.getItem("axzenToken");
+      const response = await fetch("/api/seller/support-tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Unable to create complaint token.");
+      ticketForm.reset();
+      if (message) message.textContent = `Token created: ${result.ticket?.ticketId || ""}`;
+      await loadSellerTickets();
+    } catch (error) {
+      if (message) {
+        message.textContent = error.message || "Unable to create complaint token.";
+        message.classList.add("error");
+      }
+    }
+    return;
+  }
+
+  const inventoryForm = event.target.closest("[data-inventory-update]");
+  if (inventoryForm) {
+    event.preventDefault();
+    const payload = Object.fromEntries(new FormData(inventoryForm).entries());
+    try {
+      const token = localStorage.getItem("axzenToken");
+      const response = await fetch(`/api/seller/products/${encodeURIComponent(inventoryForm.dataset.inventoryUpdate)}/inventory`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Unable to update inventory.");
+      await loadSellerProducts();
+    } catch (error) {
+      alert(error.message || "Unable to update inventory.");
+    }
     return;
   }
 

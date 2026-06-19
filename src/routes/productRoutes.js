@@ -4,6 +4,7 @@ const {
   createSellerProduct,
   listProducts,
   listSellerProducts,
+  updateSellerInventory,
 } = require("../controllers/productController");
 const { authenticate, authorize } = require("../middleware/auth");
 const { multipartForm } = require("../middleware/multipartUpload");
@@ -13,6 +14,7 @@ const router = express.Router();
 
 router.get("/", listProducts);
 router.get("/seller", authenticate, authorize("seller"), listSellerProducts);
+router.patch("/seller/:id/inventory", authenticate, authorize("seller"), updateSellerInventory);
 router.post(
   "/seller",
   authenticate,

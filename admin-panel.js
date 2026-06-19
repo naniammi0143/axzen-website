@@ -20,6 +20,7 @@
     payments: "Payments and Commission",
     customers: "Customers",
     delivery: "Delivery Management",
+    helpdesk: "Helpdesk",
     employees: "Employee Roles",
     reports: "Reports",
     audit: "Audit Logs",
@@ -32,6 +33,7 @@
     payments: "/api/admin/payments",
     customers: "/api/admin/customers",
     delivery: "/api/admin/deliveries",
+    helpdesk: "/api/admin/helpdesk",
     employees: "/api/admin/employees",
     audit: "/api/admin/audit-logs",
   };
@@ -44,15 +46,16 @@
     payments: "finance",
     customers: "customers",
     delivery: "delivery",
+    helpdesk: "customers",
     employees: "employees",
     reports: "reports",
     audit: "audit",
   };
 
   const roleViewAccess = {
-    superadmin: ["dashboard", "sellers", "products", "orders", "payments", "customers", "delivery", "employees", "reports", "audit"],
-    admin: ["dashboard", "sellers", "products", "orders", "customers", "delivery", "employees", "reports"],
-    support: ["dashboard", "orders", "customers"],
+    superadmin: ["dashboard", "sellers", "products", "orders", "payments", "customers", "delivery", "helpdesk", "employees", "reports", "audit"],
+    admin: ["dashboard", "sellers", "products", "orders", "customers", "delivery", "helpdesk", "employees", "reports"],
+    support: ["dashboard", "orders", "customers", "helpdesk"],
     finance: ["dashboard", "payments", "reports"],
     delivery_manager: ["dashboard", "orders", "delivery"],
   };
@@ -855,6 +858,30 @@
     );
   }
 
+  function renderHelpdesk(data) {
+    qs('[data-view-panel="helpdesk"]').innerHTML = panel(
+      "Seller helpdesk tickets",
+      table(
+        [
+          { label: "Token", render: (row) => `<strong>${escapeHtml(row.ticketId)}</strong><small>${escapeHtml(row.sellerName || "-")}</small>` },
+          { label: "Category", render: (row) => escapeHtml(row.category) },
+          { label: "Message", render: (row) => escapeHtml(row.message) },
+          { label: "Status", render: (row) => statusBadge(row.status) },
+          { label: "Department Note", render: (row) => escapeHtml(row.departmentNote || "-") },
+          { label: "Created", render: (row) => new Date(row.createdAt).toLocaleString() },
+        ],
+        data.tickets || data.items || [],
+        (row) => `
+          <select data-helpdesk-status="${row._id}">
+            ${["open", "in_progress", "closed"].map((status) => `<option value="${status}" ${status === row.status ? "selected" : ""}>${status}</option>`).join("")}
+          </select>
+          <input data-helpdesk-note="${row._id}" placeholder="Department note" value="${escapeHtml(row.departmentNote || "")}">
+          <button data-action="helpdesk-update" data-id="${row._id}">Update</button>
+        `
+      )
+    );
+  }
+
   function renderEmployees(data) {
     const roleNames = Object.keys(data.roleMatrix || {});
     state.employeeRows = data.items || [];
@@ -1180,7 +1207,7 @@
         return renderReports(await api(`/api/admin/reports/${state.reportType}${query}`));
       }
       const data = await listView(view, state.filterQuery || "");
-      const renderers = { sellers: renderSellers, products: renderProducts, orders: renderOrders, customers: renderCustomers, delivery: renderDelivery, employees: renderEmployees, audit: renderAudit };
+      const renderers = { sellers: renderSellers, products: renderProducts, orders: renderOrders, customers: renderCustomers, delivery: renderDelivery, helpdesk: renderHelpdesk, employees: renderEmployees, audit: renderAudit };
       renderers[view]?.(data);
     } catch (error) {
       qs(`[data-view-panel="${view}"]`).innerHTML = panel(titles[view], emptyState(error.message));
@@ -1342,6 +1369,11 @@
       if (action === "settlement-hold") return patch(`/api/admin/settlements/${id}`, { status: "hold" });
       if (action === "delivery-next") return patch(`/api/admin/deliveries/${id}`, { status: "out_for_delivery" });
       if (action === "delivery-failed") return patch(`/api/admin/deliveries/${id}`, { status: "failed", failedReason: "Marked failed by admin" });
+      if (action === "helpdesk-update") {
+        const status = qs(`[data-helpdesk-status="${id}"]`)?.value || "open";
+        const departmentNote = qs(`[data-helpdesk-note="${id}"]`)?.value || "";
+        return patch(`/api/admin/helpdesk/${id}`, { status, departmentNote });
+      }
       if (action === "employee-role-update") {
         const select = qs(`[data-employee-role="${id}"]`);
         return patch(`/api/admin/employees/${id}`, { displayRole: select?.value });

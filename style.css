@@ -4054,15 +4054,30 @@ h1 {
   gap: 12px;
 }
 
-.seller-payment-toggle-grid button {
+.seller-payment-box {
   display: grid;
   gap: 7px;
   padding: 16px;
   text-align: left;
   color: #111827;
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), #fff);
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 18px;
+}
+
+.seller-payment-box.enabled {
+  background: #ecfdf5;
+  border-color: #86efac;
+}
+
+.seller-payment-box.disabled {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.seller-payment-box input {
+  width: 22px;
+  height: 22px;
+  accent-color: #16a34a;
 }
 
 .seller-payment-toggle-grid span {
@@ -4080,6 +4095,22 @@ h1 {
 .seller-payment-toggle-grid small {
   color: #64748b;
   font-weight: 750;
+}
+
+.seller-payment-save {
+  min-height: 44px;
+  color: #fff;
+  background: #0071e3;
+  border: 0;
+  border-radius: 999px;
+  font-weight: 950;
+}
+
+.seller-payment-message {
+  align-self: center;
+  margin: 0;
+  color: #047857;
+  font-weight: 850;
 }
 
 .seller-payout-card {
@@ -4952,6 +4983,14 @@ h1 {
   background: #e8f3ff;
 }
 
+.seller-profile-menu [data-seller-logout] {
+  display: none;
+}
+
+.seller-owner-mode .seller-profile-menu [data-seller-logout] {
+  display: block;
+}
+
 .seller-owner-modal {
   position: fixed;
   inset: 0;
@@ -5200,6 +5239,81 @@ h1 {
 .seller-order-toast.error {
   color: #b91c1c;
   background: #fef2f2;
+}
+
+.seller-inventory-list,
+.seller-ticket-list,
+.seller-support-form {
+  display: grid;
+  gap: 12px;
+}
+
+.seller-inventory-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(120px, 0.8fr) repeat(3, minmax(110px, 0.6fr)) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+}
+
+.seller-inventory-row.low {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.seller-inventory-row label,
+.seller-support-form label {
+  display: grid;
+  gap: 6px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.seller-inventory-row input,
+.seller-support-form select,
+.seller-support-form textarea {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 800;
+}
+
+.seller-support-form textarea {
+  min-height: 100px;
+  padding-top: 10px;
+}
+
+.seller-inventory-row button,
+.seller-support-form button {
+  min-height: 40px;
+  color: #fff;
+  background: #0071e3;
+  border: 0;
+  border-radius: 999px;
+  font-weight: 950;
+}
+
+.seller-ticket-card {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+}
+
+.seller-ticket-card.closed {
+  background: #ecfdf5;
+}
+
+.seller-ticket-card.in_progress {
+  background: #eff6ff;
 }
 
 .seller-order-drawer {
@@ -6132,6 +6246,10 @@ h1 {
   }
 
   .seller-order-row {
+    grid-template-columns: 1fr;
+  }
+
+  .seller-inventory-row {
     grid-template-columns: 1fr;
   }
 

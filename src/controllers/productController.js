@@ -69,6 +69,26 @@ const listSellerProducts = asyncHandler(async (req, res) => {
   success(res, { products });
 });
 
+const updateSellerInventory = asyncHandler(async (req, res) => {
+  const seller = await Seller.findOne({ userId: req.user.id });
+  if (!seller) {
+    res.status(404).json({ ok: false, message: "Seller profile not found." });
+    return;
+  }
+
+  const update = {};
+  if (req.body.stock !== undefined) update.stock = Math.max(Number.parseInt(req.body.stock, 10) || 0, 0);
+  if (req.body.lowStockThreshold !== undefined) update.lowStockThreshold = Math.max(Number.parseInt(req.body.lowStockThreshold, 10) || 0, 0);
+  if (req.body.investment !== undefined) update.investmentPaise = toPaise(req.body.investment);
+
+  const product = await Product.findOneAndUpdate({ _id: req.params.id, sellerId: seller._id }, update, { new: true, runValidators: true });
+  if (!product) {
+    res.status(404).json({ ok: false, message: "Product not found." });
+    return;
+  }
+  success(res, { product });
+});
+
 const createSellerProduct = asyncHandler(async (req, res) => {
   const seller = await Seller.findOne({ userId: req.user.id });
 
@@ -138,4 +158,5 @@ module.exports = {
   createSellerProduct,
   listProducts,
   listSellerProducts,
+  updateSellerInventory,
 };

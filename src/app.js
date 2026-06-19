@@ -11,6 +11,7 @@ const orderRoutes = require("./routes/orderRoutes");
 const productRoutes = require("./routes/productRoutes");
 const sellerRoutes = require("./routes/sellerRoutes");
 const wishlistRoutes = require("./routes/wishlistRoutes");
+const { createSellerTicket, listAdminTickets, listSellerTickets, updateAdminTicket } = require("./controllers/supportController");
 const { getDashboard } = require("./controllers/dashboardController");
 const { saveCart } = require("./controllers/cartController");
 const {
@@ -21,7 +22,7 @@ const {
   packSellerOrder,
   rejectSellerOrder,
 } = require("./controllers/orderController");
-const { createSellerProduct, listProducts, listSellerProducts } = require("./controllers/productController");
+const { createSellerProduct, listProducts, listSellerProducts, updateSellerInventory } = require("./controllers/productController");
 const { financeSummary } = require("./controllers/adminController");
 const { errorHandler, notFound } = require("./middleware/errorHandler");
 const { authenticate, authorize } = require("./middleware/auth");
@@ -98,6 +99,11 @@ app.post("/api/seller/orders/:id/pack", authenticate, authorize("seller"), packS
 app.post("/api/seller/orders/:id/pack-and-ship", authenticate, authorize("seller"), packAndShipSellerOrder);
 app.get("/api/seller/products", authenticate, authorize("seller"), listSellerProducts);
 app.post("/api/seller/products", authenticate, authorize("seller"), multipartForm({ optional: true, maxBytes: 30 * 1024 * 1024 }), createSellerProduct);
+app.patch("/api/seller/products/:id/inventory", authenticate, authorize("seller"), updateSellerInventory);
+app.get("/api/seller/support-tickets", authenticate, authorize("seller"), listSellerTickets);
+app.post("/api/seller/support-tickets", authenticate, authorize("seller"), createSellerTicket);
+app.get("/api/admin/helpdesk", authenticate, authorize("admin", "superadmin", "support"), listAdminTickets);
+app.patch("/api/admin/helpdesk/:id", authenticate, authorize("admin", "superadmin", "support"), updateAdminTicket);
 app.get("/api/admin/finance/summary", authenticate, authorize("admin", "superadmin"), financeSummary);
 
 function resolvePage(req) {

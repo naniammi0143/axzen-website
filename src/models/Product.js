@@ -10,6 +10,8 @@ const productSchema = new mongoose.Schema(
     pricePaise: { type: Number, min: 0, required: true },
     currency: { type: String, default: "INR" },
     stock: { type: Number, min: 0, default: 0 },
+    lowStockThreshold: { type: Number, min: 0, default: 5 },
+    investmentPaise: { type: Number, min: 0, default: 0 },
     images: [{ type: String, trim: true }],
     status: {
       type: String,
