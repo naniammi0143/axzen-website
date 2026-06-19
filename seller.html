@@ -75,9 +75,9 @@
       <div class="dashboard-shell">
         <aside class="dashboard-sidebar">
           <img class="seller-sidebar-logo" src="assets/seller-sidebar-logo.png" alt="Axzen Seller" onerror="this.hidden=true">
-          <p class="eyebrow" id="dashboardRole">Seller</p>
-          <h2 id="dashboardTitle">Welcome</h2>
-          <p id="dashboardSummary"></p>
+          <p class="eyebrow" id="dashboardRole" hidden>Seller</p>
+          <h2 id="dashboardTitle" hidden>Welcome</h2>
+          <p id="dashboardSummary" hidden></p>
           <div class="seller-sidebar-menu" aria-label="Seller sections">
             <a href="#dashboard" data-seller-nav="dashboard">Dashboard</a>
             <a href="#sellerProducts" data-seller-nav="products">Products</a>
@@ -87,11 +87,12 @@
             <a href="#sellerInventory" data-seller-nav="inventory">Inventory</a>
             <a href="#sellerReturns" data-seller-nav="returns">Returns</a>
             <a href="#sellerEmployees" data-seller-nav="employees">Employees</a>
-            <a href="#sellerAbout" data-seller-nav="profile">Profile</a>
             <a href="#sellerSupport" data-seller-nav="support">Support</a>
           </div>
-          <strong class="seller-sidebar-company" id="sellerSidebarCompany">Seller company</strong>
-          <button class="secondary-button logout-button" type="button" id="logoutButton">Logout</button>
+          <div class="seller-sidebar-account">
+            <a class="seller-sidebar-company" id="sellerSidebarCompany" href="#sellerAbout" data-seller-nav="profile">Seller company</a>
+            <button class="secondary-button logout-button" type="button" id="logoutButton">Logout</button>
+          </div>
         </aside>
         <div class="dashboard-main">
           <header class="seller-dashboard-topbar">

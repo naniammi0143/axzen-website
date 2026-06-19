@@ -35,6 +35,12 @@ const sellerLoginLink = document.querySelector("#sellerLoginLink");
 const sellerAboutLink = document.querySelector("#sellerAboutLink");
 const sellerSidebarCompany = document.querySelector("#sellerSidebarCompany");
 let sellerProductsCache = [];
+let storefrontProductsCache = [];
+let sellerOrderPollTimer = null;
+
+const CART_KEY = "axzenCustomerCart";
+const ADDRESS_KEY = "axzenCustomerAddress";
+const DELIVERY_CHARGE_PAISE = 4000;
 
 const sellerSectionLabels = {
   dashboard: "Dashboard",
@@ -146,6 +152,240 @@ function orderTotal(order) {
   return order.customerPaid || order.finance?.customerPaidPaise || order.finance?.totalPaise || 0;
 }
 
+function getCustomerCart() {
+  try {
+    const cart = JSON.parse(localStorage.getItem(CART_KEY) || "[]");
+    return Array.isArray(cart) ? cart : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomerCart(cart) {
+  localStorage.setItem(CART_KEY, JSON.stringify(cart));
+}
+
+function getSavedCustomerAddress() {
+  try {
+    return JSON.parse(localStorage.getItem(ADDRESS_KEY) || "{}") || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveCustomerAddress(address) {
+  localStorage.setItem(ADDRESS_KEY, JSON.stringify(address));
+}
+
+function getCartTotalPaise(cart = getCustomerCart()) {
+  return cart.reduce((total, item) => total + (Number(item.pricePaise) || 0) * (Number(item.quantity) || 1), 0);
+}
+
+function getCartItemCount(cart = getCustomerCart()) {
+  return cart.reduce((total, item) => total + (Number(item.quantity) || 1), 0);
+}
+
+function getCartSellerIds(cart = getCustomerCart()) {
+  return [...new Set(cart.map((item) => String(item.sellerId || "")).filter(Boolean))];
+}
+
+function cartSupportsCod(cart = getCustomerCart()) {
+  return cart.length > 0 && cart.every((item) => item.codEnabled !== false);
+}
+
+function setCartMessage(message, isError = false) {
+  document.querySelectorAll("[data-cart-message]").forEach((node) => {
+    node.textContent = message;
+    node.classList.toggle("error", isError);
+    node.hidden = !message;
+  });
+}
+
+function renderCartSummary(showCheckout = false) {
+  const summaries = document.querySelectorAll(".cart-summary");
+  if (!summaries.length) return;
+  const cart = getCustomerCart();
+  const itemCount = getCartItemCount(cart);
+  const subtotal = getCartTotalPaise(cart);
+  const canCheckout = itemCount > 0;
+
+  summaries.forEach((summary) => {
+    summary.innerHTML = `
+      <h3>Cart</h3>
+      <p>${itemCount ? `${itemCount} item${itemCount === 1 ? "" : "s"} selected` : "Your cart is empty"}</p>
+      <strong>${rupees(subtotal)}</strong>
+      ${
+        cart.length
+          ? `<div class="cart-items">
+              ${cart
+                .map(
+                  (item) => `
+                    <div class="cart-line">
+                      <span>${escapeHtml(item.title)}</span>
+                      <small>${escapeHtml(item.sellerName || "Axzen seller")} | Qty ${Number(item.quantity) || 1}</small>
+                      <b>${rupees((Number(item.pricePaise) || 0) * (Number(item.quantity) || 1))}</b>
+                      <button type="button" data-cart-remove="${escapeHtml(item.id)}">Remove</button>
+                    </div>
+                  `
+                )
+                .join("")}
+            </div>`
+          : `<div class="mini-list"><span>Add products to continue checkout</span><span>OTP login</span><span>Seller order notification</span></div>`
+      }
+      <button type="button" data-checkout ${canCheckout ? "" : "disabled"}>Proceed to checkout</button>
+      <p class="cart-message" data-cart-message hidden></p>
+      ${showCheckout ? renderCheckoutPanel(cart) : ""}
+    `;
+  });
+}
+
+function renderCheckoutPanel(cart = getCustomerCart()) {
+  const address = getSavedCustomerAddress();
+  const sellerIds = getCartSellerIds(cart);
+  const isCustomerLoggedIn = localStorage.getItem("axzenToken") && localStorage.getItem("axzenRole") === "customer";
+  const codAvailable = cartSupportsCod(cart) && sellerIds.length === 1;
+  const blockReason = sellerIds.length > 1 ? "Checkout supports one seller per order. Place separate orders for each seller." : "Seller does not accept Cash on Delivery.";
+
+  if (!isCustomerLoggedIn) {
+    return `
+      <div class="checkout-panel">
+        <h4>Login required</h4>
+        <p>Login with phone OTP to continue checkout and place your order.</p>
+        <a class="primary-button" href="#login">Login with phone OTP</a>
+      </div>
+    `;
+  }
+
+  return `
+    <form class="checkout-panel" data-checkout-form>
+      <div>
+        <h4>Delivery address</h4>
+        <p>Update address before placing the order.</p>
+      </div>
+      <div class="checkout-grid">
+        <label>Full name<input name="fullName" value="${escapeHtml(address.fullName || "")}" required></label>
+        <label>Mobile<input name="phone" type="tel" value="${escapeHtml(address.phone || localStorage.getItem("axzenPhone") || "")}" required></label>
+        <label class="wide">Address<textarea name="address" required>${escapeHtml(address.address || "")}</textarea></label>
+        <label>City<input name="city" value="${escapeHtml(address.city || "")}" required></label>
+        <label>State<input name="state" value="${escapeHtml(address.state || "")}" required></label>
+        <label>Pincode<input name="pincode" inputmode="numeric" value="${escapeHtml(address.pincode || "")}" required></label>
+      </div>
+      <div class="checkout-payment">
+        <h4>Payment</h4>
+        <label class="payment-option ${codAvailable ? "selected" : "disabled"}">
+          <input type="radio" name="paymentMethod" value="cod" ${codAvailable ? "checked" : "disabled"}>
+          <span>
+            <strong>Cash on Delivery</strong>
+            <small>${codAvailable ? "Available for this seller" : blockReason}</small>
+          </span>
+        </label>
+        <label class="payment-option disabled">
+          <input type="radio" name="paymentMethod" value="online" disabled>
+          <span>
+            <strong>Online payment</strong>
+            <small>Razorpay checkout will be enabled next.</small>
+          </span>
+        </label>
+      </div>
+      <div class="checkout-total">
+        <span>Product total</span><b>${rupees(getCartTotalPaise(cart))}</b>
+        <span>Delivery charge</span><b>${rupees(DELIVERY_CHARGE_PAISE)}</b>
+        <strong>Customer paid</strong><strong>${rupees(getCartTotalPaise(cart) + DELIVERY_CHARGE_PAISE)}</strong>
+      </div>
+      <button type="submit" data-place-order ${codAvailable ? "" : "disabled"}>Place order</button>
+    </form>
+  `;
+}
+
+function addProductToCart(productId) {
+  const product = storefrontProductsCache.find((item) => String(item.id) === String(productId));
+  if (!product) {
+    setCartMessage("Product details are still loading. Try again in a moment.", true);
+    return;
+  }
+
+  const cart = getCustomerCart();
+  const existing = cart.find((item) => String(item.id) === String(product.id));
+  if (existing) {
+    existing.quantity = Math.min((Number(existing.quantity) || 1) + 1, 10);
+  } else {
+    cart.push({
+      id: product.id,
+      productId: product.id,
+      sellerId: product.sellerId,
+      sellerName: product.sellerName,
+      sku: product.sku,
+      title: product.title,
+      pricePaise: product.pricePaise,
+      codEnabled: product.codEnabled !== false,
+      onlinePaymentEnabled: product.onlinePaymentEnabled !== false,
+      quantity: 1,
+    });
+  }
+  saveCustomerCart(cart);
+  renderCartSummary(false);
+  setCartMessage(`${product.title || "Product"} added to cart.`);
+}
+
+async function placeCustomerOrder(form) {
+  const cart = getCustomerCart();
+  const token = localStorage.getItem("axzenToken");
+  if (!cart.length || !token) return;
+
+  const formData = new FormData(form);
+  const shippingAddress = {
+    fullName: formData.get("fullName"),
+    phone: formData.get("phone"),
+    address: formData.get("address"),
+    city: formData.get("city"),
+    state: formData.get("state"),
+    pincode: formData.get("pincode"),
+  };
+  saveCustomerAddress(shippingAddress);
+
+  const submitButton = form.querySelector("[data-place-order]");
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "Placing order...";
+  }
+
+  try {
+    const response = await fetch("/api/customer/orders", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        items: cart.map((item) => ({
+          productId: item.productId || item.id,
+          sellerId: item.sellerId,
+          sku: item.sku,
+          title: item.title,
+          pricePaise: item.pricePaise,
+          quantity: item.quantity,
+        })),
+        deliveryCharge: DELIVERY_CHARGE_PAISE / 100,
+        paymentMethod: "cod",
+        shippingAddress,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Unable to place order.");
+    saveCustomerCart([]);
+    renderCartSummary(false);
+    setCartMessage(`Order placed. ${result.order?.statusLabel || "Seller accepted order"}.`);
+    await loadRoleOrders("customer");
+  } catch (error) {
+    setCartMessage(error.message || "Unable to place order.", true);
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = "Place order";
+    }
+  }
+}
+
 function renderStorefrontProduct(product) {
   const image = product.image || product.images?.[0] || "";
   const title = product.title || product.name || "Product";
@@ -161,7 +401,7 @@ function renderStorefrontProduct(product) {
       <h3>${escapeHtml(title)}</h3>
       <p>${escapeHtml(sellerName)} | ${escapeHtml(category)}</p>
       <strong>${escapeHtml(product.price || "Rs. 0")}</strong>
-      <button type="button">Add to cart</button>
+      <button type="button" data-add-cart="${escapeHtml(product.id)}">Add to cart</button>
     </article>
   `;
 }
@@ -174,10 +414,13 @@ async function loadStorefrontCatalog() {
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || "Unable to load products.");
     if (result.products?.length) {
+      storefrontProductsCache = result.products;
       grid.innerHTML = result.products.map(renderStorefrontProduct).join("");
     }
   } catch (error) {
     console.warn(error.message || "Customer catalog unavailable.");
+  } finally {
+    renderCartSummary(false);
   }
 }
 
@@ -459,6 +702,22 @@ function notifyNewSellerOrders(orders = []) {
   if (latestOrderTime) localStorage.setItem(storageKey, String(latestOrderTime));
 }
 
+function stopSellerOrderPolling() {
+  if (sellerOrderPollTimer) {
+    window.clearInterval(sellerOrderPollTimer);
+    sellerOrderPollTimer = null;
+  }
+}
+
+function startSellerOrderPolling() {
+  stopSellerOrderPolling();
+  sellerOrderPollTimer = window.setInterval(() => {
+    if (localStorage.getItem("axzenRole") === "seller" && !dashboardSection?.hidden) {
+      loadRoleOrders("seller");
+    }
+  }, 20000);
+}
+
 function renderOrderInvoicePanel(orders = [], role = "customer") {
   if (role === "seller") {
     const newOrders = orders.filter((order) => ["accepted", "placed", "pending"].includes(order.status || ""));
@@ -614,6 +873,7 @@ function getRecaptcha(form) {
 function renderDashboard(payload) {
   const { user, dashboard } = payload;
   updateSellerHeader(user);
+  if (user.role !== "seller") stopSellerOrderPolling();
 
   if (loginSection) {
     loginSection.hidden = true;
@@ -639,6 +899,7 @@ function renderDashboard(payload) {
     user.role === "seller" &&
     (!user.seller || !user.seller.isActive || user.seller.approvalStatus !== "approved" || user.seller.kycStatus !== "approved")
   ) {
+    stopSellerOrderPolling();
     const sellerStatus = user.seller || {};
     dashboardRole.textContent = "Seller approval status";
     dashboardTitle.textContent = sellerStatus.businessName || "Registration under review";
@@ -734,6 +995,7 @@ function renderDashboard(payload) {
   if (user.role === "seller") {
     setSellerSection(getSellerSectionFromHash());
     loadSellerProducts();
+    startSellerOrderPolling();
   }
 
   if (dashboardSection) {
@@ -784,6 +1046,7 @@ async function createPhoneSession(role, phone, firebaseToken) {
     localStorage.removeItem("axzenSellerStatus");
   }
   await loadDashboard(result.user.role, result.token);
+  if (result.user.role === "customer") renderCartSummary(true);
 }
 
 phoneForms.forEach((form) => {
@@ -863,6 +1126,31 @@ phoneForms.forEach((form) => {
 });
 
 document.addEventListener("click", async (event) => {
+  const addCartButton = event.target.closest("[data-add-cart]");
+  if (addCartButton) {
+    addProductToCart(addCartButton.dataset.addCart);
+    return;
+  }
+
+  const removeCartButton = event.target.closest("[data-cart-remove]");
+  if (removeCartButton) {
+    const nextCart = getCustomerCart().filter((item) => String(item.id) !== String(removeCartButton.dataset.cartRemove));
+    saveCustomerCart(nextCart);
+    renderCartSummary(false);
+    setCartMessage("Product removed from cart.");
+    return;
+  }
+
+  const checkoutButton = event.target.closest("[data-checkout]");
+  if (checkoutButton) {
+    renderCartSummary(true);
+    if (!(localStorage.getItem("axzenToken") && localStorage.getItem("axzenRole") === "customer")) {
+      setCartMessage("Login with phone OTP to continue checkout.", true);
+      loginSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    return;
+  }
+
   const sellerNav = event.target.closest("[data-seller-nav]");
   if (sellerNav) {
     event.preventDefault();
@@ -930,6 +1218,19 @@ document.addEventListener("input", (event) => {
   if (productSearch) {
     filterSellerProducts(productSearch.value);
   }
+
+  const checkoutForm = event.target.closest("[data-checkout-form]");
+  if (checkoutForm) {
+    const formData = new FormData(checkoutForm);
+    saveCustomerAddress({
+      fullName: formData.get("fullName"),
+      phone: formData.get("phone"),
+      address: formData.get("address"),
+      city: formData.get("city"),
+      state: formData.get("state"),
+      pincode: formData.get("pincode"),
+    });
+  }
 });
 
 document.addEventListener("change", (event) => {
@@ -940,6 +1241,13 @@ document.addEventListener("change", (event) => {
 });
 
 document.addEventListener("submit", async (event) => {
+  const checkoutForm = event.target.closest("[data-checkout-form]");
+  if (checkoutForm) {
+    event.preventDefault();
+    await placeCustomerOrder(checkoutForm);
+    return;
+  }
+
   const productForm = event.target.closest("[data-seller-product-create]");
   if (!productForm) return;
 
@@ -1004,6 +1312,7 @@ window.addEventListener("hashchange", () => {
 
 if (logoutButton) {
   logoutButton.addEventListener("click", () => {
+    stopSellerOrderPolling();
     localStorage.removeItem("axzenToken");
     localStorage.removeItem("axzenRole");
     localStorage.removeItem("axzenPhone");
@@ -1024,6 +1333,7 @@ if (logoutButton) {
     }
     updateLoginNavigation(false);
     updateSellerHeader(null);
+    renderCartSummary(false);
   });
 }
 
@@ -1035,6 +1345,7 @@ loadStorefrontCatalog();
 
 if (savedToken && savedRole && savedRole === pageRole) {
   loadDashboard(savedRole, savedToken).catch(() => {
+    stopSellerOrderPolling();
     localStorage.removeItem("axzenToken");
     localStorage.removeItem("axzenRole");
     localStorage.removeItem("axzenPhone");

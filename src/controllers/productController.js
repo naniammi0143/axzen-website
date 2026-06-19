@@ -34,22 +34,32 @@ function validateProductImages(files) {
 }
 
 const listProducts = asyncHandler(async (req, res) => {
-  const products = await Product.find({ status: { $in: ["active", "approved"] } }).sort({ updatedAt: -1 }).limit(48);
+  const products = await Product.find({ status: { $in: ["active", "approved"] } }).sort({ updatedAt: -1 }).limit(48).lean();
+  const sellerIds = [...new Set(products.map((product) => String(product.sellerId)).filter(Boolean))];
+  const sellers = sellerIds.length
+    ? await Seller.find({ _id: { $in: sellerIds } }).select("_id codEnabled onlinePaymentEnabled").lean()
+    : [];
+  const sellerSettings = new Map(sellers.map((seller) => [String(seller._id), seller]));
 
   success(res, {
-    products: products.map((product) => ({
-      id: product._id,
-      sku: product.sku,
-      title: product.title,
-      category: product.category,
-      sellerId: product.sellerId,
-      sellerName: product.sellerName,
-      pricePaise: product.pricePaise,
-      price: formatRupees(product.pricePaise),
-      stock: product.stock,
-      images: product.images || [],
-      image: product.images?.[0] || "",
-    })),
+    products: products.map((product) => {
+      const settings = sellerSettings.get(String(product.sellerId)) || {};
+      return {
+        id: product._id,
+        sku: product.sku,
+        title: product.title,
+        category: product.category,
+        sellerId: product.sellerId,
+        sellerName: product.sellerName,
+        pricePaise: product.pricePaise,
+        price: formatRupees(product.pricePaise),
+        stock: product.stock,
+        images: product.images || [],
+        image: product.images?.[0] || "",
+        codEnabled: settings.codEnabled !== false,
+        onlinePaymentEnabled: settings.onlinePaymentEnabled !== false,
+      };
+    }),
   });
 });
 
