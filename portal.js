@@ -667,10 +667,16 @@ function renderSellerPaymentSettings(seller = {}) {
         </label>
         <label class="seller-payment-box ${freeDeliveryEnabled ? "enabled" : "disabled"}">
           <span>Free Delivery</span>
-          <strong>${freeDeliveryEnabled ? "Enabled" : "Disabled"}</strong>
-          <input type="checkbox" name="freeDeliveryEnabled" ${freeDeliveryEnabled ? "checked" : ""}>
-          <small>Customer sees free delivery after this sale amount. Delivery cost is cut from seller payout.</small>
-          <input type="number" name="freeDeliveryMinOrder" min="0" step="1" value="${freeDeliveryMinOrder}" placeholder="Minimum sale amount">
+          <strong>${freeDeliveryEnabled ? "Accepted" : "Not accepted"}</strong>
+          <div class="seller-payment-choice-row">
+            <label><input type="radio" name="freeDeliveryEnabled" value="true" ${freeDeliveryEnabled ? "checked" : ""}> Accept</label>
+            <label><input type="radio" name="freeDeliveryEnabled" value="false" ${freeDeliveryEnabled ? "" : "checked"}> Not accept</label>
+          </div>
+          <small>Accept means customer gets free delivery above minimum sale. Delivery cost is cut from seller payout.</small>
+          <label class="seller-free-delivery-threshold" ${freeDeliveryEnabled ? "" : "hidden"}>
+            Minimum sale amount
+            <input type="number" name="freeDeliveryMinOrder" min="0" step="1" value="${freeDeliveryMinOrder}" placeholder="Minimum sale amount">
+          </label>
         </label>
         <button class="seller-payment-save" type="submit">Save payment options</button>
         <p class="seller-payment-message" data-seller-payment-message></p>
@@ -1304,6 +1310,12 @@ function updateSellerOrderTopbarTabs(orders = sellerOrdersCache) {
   const container = document.querySelector("[data-seller-order-topbar-tabs]");
   if (!container) return;
   container.innerHTML = renderSellerOrderTabsMarkup(getSellerOrderCounts(orders), getActiveSellerOrderTab());
+}
+
+function syncSellerFreeDeliveryThreshold(form) {
+  const accepted = form?.querySelector("[name='freeDeliveryEnabled']:checked")?.value === "true";
+  const threshold = form?.querySelector(".seller-free-delivery-threshold");
+  if (threshold) threshold.hidden = !accepted;
 }
 
 function renderSellerOrdersRows() {
@@ -2229,6 +2241,12 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("change", (event) => {
+  const freeDeliveryChoice = event.target.closest("[data-seller-payment-form] [name='freeDeliveryEnabled']");
+  if (freeDeliveryChoice) {
+    syncSellerFreeDeliveryThreshold(freeDeliveryChoice.form);
+    return;
+  }
+
   const categoryChoice = event.target.closest("[data-product-category-choice]");
   if (categoryChoice) {
     const otherField = categoryChoice.form?.querySelector(".seller-other-category");
@@ -2259,6 +2277,7 @@ document.addEventListener("submit", async (event) => {
     const message = paymentForm.querySelector("[data-seller-payment-message]");
     if (!window.confirm("Are you sure you want to save these payment options?")) {
       paymentForm.reset();
+      window.requestAnimationFrame(() => syncSellerFreeDeliveryThreshold(paymentForm));
       if (message) {
         message.textContent = "Payment option changes were not saved.";
         message.classList.remove("error");
@@ -2269,8 +2288,8 @@ document.addEventListener("submit", async (event) => {
     try {
       const codEnabled = paymentForm.querySelector("[name='codEnabled']")?.checked;
       const onlinePaymentEnabled = paymentForm.querySelector("[name='onlinePaymentEnabled']")?.checked;
-      const freeDeliveryEnabled = paymentForm.querySelector("[name='freeDeliveryEnabled']")?.checked;
-      const freeDeliveryMinOrder = paymentForm.querySelector("[name='freeDeliveryMinOrder']")?.value || "0";
+      const freeDeliveryEnabled = paymentForm.querySelector("[name='freeDeliveryEnabled']:checked")?.value === "true";
+      const freeDeliveryMinOrder = freeDeliveryEnabled ? paymentForm.querySelector("[name='freeDeliveryMinOrder']")?.value || "0" : "0";
       await updateSellerSettings(
         {
           codEnabled: Boolean(codEnabled),
