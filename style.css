@@ -4516,10 +4516,24 @@ h1 {
   grid-template-columns: 1fr;
 }
 
+.seller-page [data-seller-section] {
+  display: none;
+}
+
+.seller-page [data-seller-section].is-active {
+  display: grid;
+}
+
+.seller-page .seller-dashboard-app:not([data-seller-section="dashboard"]) .dashboard-metrics {
+  display: none;
+}
+
+.seller-page .seller-dashboard-app[data-seller-section="dashboard"] .dashboard-metrics {
+  display: grid;
+}
+
 .seller-page .seller-product-manager,
-.seller-page .seller-workspace-tabs,
 .seller-page .seller-about-panel,
-.seller-page .seller-module-grid,
 .seller-page .seller-payment-settings,
 .seller-page .order-invoice-panel {
   grid-column: 1 / -1;
@@ -4568,12 +4582,13 @@ h1 {
 }
 
 .seller-sidebar-menu a:hover,
-.seller-sidebar-menu a:focus {
+.seller-sidebar-menu a:focus,
+.seller-sidebar-menu a.active {
   color: #fff;
   background: rgba(255, 255, 255, 0.13);
 }
 
-.seller-sidebar-menu a:first-child {
+.seller-sidebar-menu a:first-child.active {
   color: #06162d;
   background: #fff;
 }

@@ -34,6 +34,29 @@ const sellerRegisterLink = document.querySelector("#sellerRegisterLink");
 const sellerLoginLink = document.querySelector("#sellerLoginLink");
 const sellerAboutLink = document.querySelector("#sellerAboutLink");
 
+const sellerSectionLabels = {
+  dashboard: "Dashboard",
+  products: "Products",
+  orders: "Orders",
+  shipments: "Shipments",
+  payments: "Payments",
+  inventory: "Inventory",
+  returns: "Returns",
+  profile: "Profile",
+  support: "Support",
+};
+
+const sellerHashSections = {
+  "#sellerProducts": "products",
+  "#orderInvoicePanel": "orders",
+  "#sellerShipments": "shipments",
+  "#sellerPayments": "payments",
+  "#sellerInventory": "inventory",
+  "#sellerReturns": "returns",
+  "#sellerAbout": "profile",
+  "#sellerSupport": "support",
+};
+
 loginNavLinks.forEach((link) => {
   link.dataset.loginLabel = link.textContent;
 });
@@ -65,6 +88,27 @@ function updateSellerHeader(user = null) {
   if (sellerRegisterLink) sellerRegisterLink.hidden = isSellerLoggedIn;
   if (sellerLoginLink) sellerLoginLink.hidden = isSellerLoggedIn;
   if (sellerAboutLink) sellerAboutLink.hidden = !isSellerLoggedIn;
+}
+
+function getSellerSectionFromHash() {
+  return sellerHashSections[window.location.hash] || "dashboard";
+}
+
+function setSellerSection(section = "dashboard", updateHash = false) {
+  if (!dashboardSection?.classList.contains("seller-dashboard-app")) return;
+  const cleanSection = sellerSectionLabels[section] ? section : "dashboard";
+  dashboardSection.dataset.sellerSection = cleanSection;
+  document.querySelector(".seller-dashboard-topbar h1")?.replaceChildren(document.createTextNode(sellerSectionLabels[cleanSection]));
+  document.querySelectorAll("[data-seller-nav]").forEach((link) => {
+    link.classList.toggle("active", link.dataset.sellerNav === cleanSection);
+  });
+  document.querySelectorAll("[data-seller-section]").forEach((node) => {
+    node.classList.toggle("is-active", node.dataset.sellerSection === cleanSection);
+  });
+  if (updateHash) {
+    const target = document.querySelector(`[data-seller-nav="${cleanSection}"]`)?.getAttribute("href") || "#dashboard";
+    history.replaceState(null, "", target);
+  }
 }
 
 function formatPhoneNumber(value) {
@@ -179,7 +223,7 @@ async function openDeliveryLabel(orderId) {
 
 function renderSellerPaymentSettings(seller = {}) {
   return `
-    <article class="dashboard-panel seller-payment-settings" id="sellerPayments">
+    <article class="dashboard-panel seller-payment-settings" id="sellerPayments" data-seller-section="payments">
       <div class="order-invoice-heading">
         <div>
           <p class="eyebrow">Seller Payment Agent</p>
@@ -228,14 +272,7 @@ function renderSellerWorkspace(user = {}) {
     ["sellerSupport", "Support", "Admin support and seller helpdesk"],
   ];
   return `
-    <nav class="seller-workspace-tabs" aria-label="Seller workspace sections">
-      <a href="#dashboard">Dashboard</a>
-      <a href="#sellerProducts">Products</a>
-      <a href="#orderInvoicePanel">Orders</a>
-      <a href="#sellerPayments">Payments</a>
-      <a href="#sellerAbout">Profile</a>
-    </nav>
-    <article class="dashboard-panel seller-about-panel" id="sellerAbout">
+    <article class="dashboard-panel seller-about-panel" id="sellerAbout" data-seller-section="profile">
       <div class="seller-about-heading">
         <div>
           <p class="eyebrow">About seller</p>
@@ -266,7 +303,7 @@ function renderSellerWorkspace(user = {}) {
     </article>
     <section class="seller-module-grid">
       ${modules
-        .map(([id, title, detail]) => `<article id="${escapeHtml(id)}"><span>${escapeHtml(title)}</span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></article>`)
+        .map(([id, title, detail]) => `<article class="dashboard-panel seller-module-card" id="${escapeHtml(id)}" data-seller-section="${escapeHtml(title.toLowerCase())}"><span>${escapeHtml(title)}</span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></article>`)
         .join("")}
     </section>
   `;
@@ -274,7 +311,7 @@ function renderSellerWorkspace(user = {}) {
 
 function renderSellerProductManager(products = []) {
   return `
-    <article class="dashboard-panel seller-product-manager" id="sellerProducts">
+    <article class="dashboard-panel seller-product-manager" id="sellerProducts" data-seller-section="products">
       <div class="seller-about-heading">
         <div>
           <p class="eyebrow">Products</p>
@@ -353,7 +390,7 @@ async function loadSellerProducts() {
 function renderOrderInvoicePanel(orders = [], role = "customer") {
   if (role === "seller") {
     return `
-      <article class="dashboard-panel order-invoice-panel seller-payout-panel" id="orderInvoicePanel">
+      <article class="dashboard-panel order-invoice-panel seller-payout-panel" id="orderInvoicePanel" data-seller-section="orders">
         <div class="order-invoice-heading">
           <div>
             <p class="eyebrow">Seller orders</p>
@@ -454,10 +491,12 @@ async function loadRoleOrders(role) {
       dashboardPanels.insertAdjacentHTML("beforeend", renderSellerPaymentSettings(sellerResult?.seller || {}));
     }
     dashboardPanels.insertAdjacentHTML("beforeend", renderOrderInvoicePanel(result.orders || [], role));
+    if (role === "seller") setSellerSection(getSellerSectionFromHash());
   } catch (error) {
     document.querySelector("#orderInvoicePanel")?.remove();
     document.querySelector(".seller-payment-settings")?.remove();
     dashboardPanels.insertAdjacentHTML("beforeend", renderOrderInvoicePanel([], role));
+    if (role === "seller") setSellerSection(getSellerSectionFromHash());
   }
 }
 
@@ -591,7 +630,7 @@ function renderDashboard(payload) {
   dashboardPanels.innerHTML = dashboard.panels
     .map(
       (panel) => `
-        <article class="dashboard-panel">
+        <article class="dashboard-panel" ${user.role === "seller" ? 'data-seller-section="dashboard"' : ""}>
           <h3>${panel.title}</h3>
           <ul>
             ${panel.items
@@ -613,7 +652,10 @@ function renderDashboard(payload) {
   }
 
   loadRoleOrders(user.role);
-  if (user.role === "seller") loadSellerProducts();
+  if (user.role === "seller") {
+    setSellerSection(getSellerSectionFromHash());
+    loadSellerProducts();
+  }
 
   if (dashboardSection) {
     dashboardSection.hidden = false;
@@ -742,6 +784,14 @@ phoneForms.forEach((form) => {
 });
 
 document.addEventListener("click", async (event) => {
+  const sellerNav = event.target.closest("[data-seller-nav]");
+  if (sellerNav) {
+    event.preventDefault();
+    setSellerSection(sellerNav.dataset.sellerNav, true);
+    dashboardSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
   const invoiceButton = event.target.closest("[data-print-invoice]");
   const labelButton = event.target.closest("[data-print-label]");
   const settingButton = event.target.closest("[data-seller-setting]");
@@ -838,6 +888,10 @@ document.addEventListener("submit", async (event) => {
       submitButton.textContent = "Submit product for approval";
     }
   }
+});
+
+window.addEventListener("hashchange", () => {
+  setSellerSection(getSellerSectionFromHash());
 });
 
 if (logoutButton) {
