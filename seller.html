@@ -104,10 +104,25 @@
               </div>
             </div>
             <div class="seller-topbar-actions">
+              <nav class="seller-topbar-menu" aria-label="Seller menu">
+                <a href="#orderInvoicePanel" data-seller-nav="orders" data-owner-menu="always">Orders</a>
+                <a href="#dashboard" data-seller-nav="dashboard" data-owner-menu>Dashboard</a>
+                <a href="#sellerProducts" data-seller-nav="products" data-owner-menu>Products</a>
+                <a href="#sellerShipments" data-seller-nav="shipments" data-owner-menu>Shipments</a>
+                <a href="#sellerPayments" data-seller-nav="payments" data-owner-menu>Payments</a>
+                <a href="#sellerInventory" data-seller-nav="inventory" data-owner-menu>Inventory</a>
+                <a href="#sellerReturns" data-seller-nav="returns" data-owner-menu>Returns</a>
+                <a href="#sellerEmployees" data-seller-nav="employees" data-owner-menu>Employees</a>
+              </nav>
               <a class="secondary-button" href="https://axzen.in" target="_blank" rel="noopener noreferrer">Customer site</a>
-              <button class="seller-profile-chip" type="button" data-seller-nav="profile" aria-label="Open seller profile">
+              <button class="seller-profile-chip" type="button" data-seller-profile-menu aria-label="Open seller profile">
                 <span id="sellerTopbarInitial">S</span>
               </button>
+              <div class="seller-profile-menu" data-seller-profile-popover hidden>
+                <button type="button" data-login-owner>Login as owner</button>
+                <button type="button" data-seller-nav="profile">Profile</button>
+                <button type="button" data-seller-logout>Logout</button>
+              </div>
             </div>
           </header>
           <div class="dashboard-metrics" id="dashboardMetrics"></div>

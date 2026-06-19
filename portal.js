@@ -35,6 +35,7 @@ const sellerLoginLink = document.querySelector("#sellerLoginLink");
 const sellerAboutLink = document.querySelector("#sellerAboutLink");
 const sellerSidebarCompany = document.querySelector("#sellerSidebarCompany");
 const sellerTopbarInitial = document.querySelector("#sellerTopbarInitial");
+const sellerProfilePopover = document.querySelector("[data-seller-profile-popover]");
 let sellerProductsCache = [];
 let sellerOrdersCache = [];
 let storefrontProductsCache = [];
@@ -42,6 +43,7 @@ let sellerOrderPollTimer = null;
 
 const CART_KEY = "axzenCustomerCart";
 const ADDRESS_KEY = "axzenCustomerAddress";
+const SELLER_OWNER_KEY = "axzenSellerOwnerMode";
 const DELIVERY_CHARGE_PAISE = 4000;
 const RAZORPAY_CHECKOUT_SRC = "https://checkout.razorpay.com/v1/checkout.js";
 
@@ -97,8 +99,10 @@ function updateSellerHeader(user = null) {
   if (!sellerBrandText) return;
   const seller = user?.seller || {};
   const isSellerLoggedIn = user?.role === "seller";
+  const isOwnerMode = isSellerLoggedIn && localStorage.getItem(SELLER_OWNER_KEY) === "true";
   sellerBrandText.textContent = isSellerLoggedIn ? seller.businessName || seller.fullName || "Seller" : "Seller";
   document.body.classList.toggle("seller-session-active", isSellerLoggedIn);
+  document.body.classList.toggle("seller-owner-mode", isOwnerMode);
   if (sellerSidebarCompany) sellerSidebarCompany.textContent = isSellerLoggedIn ? seller.businessName || seller.fullName || "Seller company" : "Seller company";
   if (sellerTopbarInitial) sellerTopbarInitial.textContent = (seller.businessName || seller.fullName || "Seller").trim().charAt(0).toUpperCase();
   if (sellerRegisterLink) sellerRegisterLink.hidden = isSellerLoggedIn;
@@ -114,7 +118,9 @@ function getSellerSectionFromHash() {
 
 function setSellerSection(section = "dashboard", updateHash = false) {
   if (!dashboardSection?.classList.contains("seller-dashboard-app")) return;
-  const cleanSection = sellerSectionLabels[section] ? section : "dashboard";
+  const ownerMode = localStorage.getItem(SELLER_OWNER_KEY) === "true";
+  const requestedSection = sellerSectionLabels[section] ? section : "dashboard";
+  const cleanSection = ownerMode || requestedSection === "orders" ? requestedSection : "orders";
   dashboardSection.dataset.sellerSection = cleanSection;
   document.querySelector(".seller-dashboard-topbar h1")?.replaceChildren(document.createTextNode(sellerSectionLabels[cleanSection]));
   document.querySelectorAll("[data-seller-nav]").forEach((link) => {
@@ -880,6 +886,12 @@ function sellerStatusBadge(value = "") {
   return `<span class="seller-status-badge ${escapeHtml(normalized)}">${escapeHtml(normalized.replace(/_/g, " "))}</span>`;
 }
 
+function sellerPaymentBadge(order = {}) {
+  const status = order.paymentStatus || "pending";
+  const label = status === "pending" && order.paymentMethod === "cod" ? "COD pending" : status;
+  return `<span class="seller-status-badge payment-${escapeHtml(status)}">${escapeHtml(label.replace(/_/g, " "))}</span>`;
+}
+
 function getSellerOrderActions(order = {}) {
   const status = normalizeSellerOrderStatus(order.status);
   if (status === "new") {
@@ -936,7 +948,7 @@ function renderSellerOrdersRows() {
           <td>${escapeHtml(sellerOrderProductTitle(order))}</td>
           <td>${Number(item.quantity) || 1}</td>
           <td>${rupees(order.customerPaid || order.productTotal)}</td>
-          <td>${sellerStatusBadge(order.paymentStatus || "pending")}</td>
+          <td>${sellerPaymentBadge(order)}</td>
           <td>${sellerStatusBadge(order.status)}</td>
           <td>${sellerStatusBadge(order.shipmentStatus || order.deliveryStatus || "created")}</td>
           <td><div class="seller-order-actions">${actions}<button type="button" data-order-details="${escapeHtml(order._id || order.orderId)}">Details</button></div></td>
@@ -1409,6 +1421,9 @@ async function createPhoneSession(role, phone, firebaseToken) {
   localStorage.setItem("axzenToken", result.token);
   localStorage.setItem("axzenRole", result.user.role);
   localStorage.setItem("axzenPhone", result.user.phone);
+  if (result.user.role === "seller") {
+    localStorage.removeItem(SELLER_OWNER_KEY);
+  }
   if (result.user.seller) {
     localStorage.setItem("axzenSellerStatus", JSON.stringify(result.user.seller));
   } else {
@@ -1517,6 +1532,28 @@ document.addEventListener("click", async (event) => {
       setCartMessage("Login with phone OTP to continue checkout.", true);
       loginSection?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
+    return;
+  }
+
+  const profileMenuButton = event.target.closest("[data-seller-profile-menu]");
+  if (profileMenuButton) {
+    if (sellerProfilePopover) sellerProfilePopover.hidden = !sellerProfilePopover.hidden;
+    return;
+  }
+
+  const ownerLoginButton = event.target.closest("[data-login-owner]");
+  if (ownerLoginButton) {
+    localStorage.setItem(SELLER_OWNER_KEY, "true");
+    document.body.classList.add("seller-owner-mode");
+    if (sellerProfilePopover) sellerProfilePopover.hidden = true;
+    setSellerSection("dashboard", true);
+    dashboardSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  const sellerLogoutButton = event.target.closest("[data-seller-logout]");
+  if (sellerLogoutButton) {
+    logoutButton?.click();
     return;
   }
 
@@ -1759,7 +1796,9 @@ if (logoutButton) {
     localStorage.removeItem("axzenRole");
     localStorage.removeItem("axzenPhone");
     localStorage.removeItem("axzenSellerStatus");
+    localStorage.removeItem(SELLER_OWNER_KEY);
     document.body.classList.remove("admin-session-active");
+    document.body.classList.remove("seller-owner-mode");
 
     if (dashboardSection) {
       dashboardSection.hidden = true;

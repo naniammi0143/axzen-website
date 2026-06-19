@@ -168,8 +168,9 @@ const packSellerOrder = asyncHandler(async (req, res) => {
 
 const packAndShipSellerOrder = asyncHandler(async (req, res) => {
   const { seller, order } = await getSellerOrder(req);
-  if (order.paymentStatus !== "paid") {
-    res.status(400).json({ ok: false, message: "Packing complete requires paymentStatus = paid." });
+  const isCodOrder = order.paymentMethod === "cod" && order.paymentStatus === "pending";
+  if (order.paymentStatus !== "paid" && !isCodOrder) {
+    res.status(400).json({ ok: false, message: "Packing complete requires paid online payment or seller-enabled Cash on Delivery." });
     return;
   }
 
@@ -297,6 +298,10 @@ const createOrder = asyncHandler(async (req, res) => {
         razorpayPaymentId: req.body.razorpayPaymentId,
         razorpaySignature: req.body.razorpaySignature,
       }));
+  if (paymentMethod !== "cod" && !isOnlinePaid) {
+    res.status(400).json({ ok: false, message: "Online payment was not completed. Order was not placed." });
+    return;
+  }
   const transactionId = req.body.razorpayPaymentId || req.body.transactionId || (paymentMethod === "cod" ? `COD-${orderId}` : `PAY-${orderId}`);
   const order = await Order.create({
     orderId,
@@ -305,7 +310,7 @@ const createOrder = asyncHandler(async (req, res) => {
     sellerName: seller?.businessName || "Seller",
     items,
     status: "accepted",
-    paymentStatus: paymentMethod === "cod" ? "pending" : isOnlinePaid ? "paid" : "pending",
+    paymentStatus: paymentMethod === "cod" ? "pending" : "paid",
     payoutStatus: "pending",
     productTotal: finance.productTotalPaise,
     deliveryCharge: finance.deliveryChargePaise,
