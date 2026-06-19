@@ -42,6 +42,22 @@ CLOUDINARY_API_SECRET=
 
 `FIREBASE_SERVICE_ACCOUNT_JSON` is required in production for Firebase ID token verification.
 
+For seller product image uploads, configure Cloudinary in `.env`:
+
+```env
+CLOUDINARY_URL=cloudinary://your_api_key:your_api_secret@your_cloud_name
+```
+
+Or configure individual values:
+
+```env
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+```
+
+Seller product uploads accept up to 5 JPG/PNG images. The backend uploads them to Cloudinary and stores the secure image URLs on the product so customer and admin pages can display them.
+
 ## API Response Format
 
 Success:
@@ -90,7 +106,7 @@ Compatibility endpoints currently used by the frontend:
 - `POST /api/customer/cart`
 - `POST /api/customer/orders`
 - `GET /api/seller/products`
-- `POST /api/seller/products`
+- `POST /api/seller/products` multipart fields: `title`, `sku`, `price`, `category`, `stock`, `productImages` up to 5 files
 - `GET /api/dashboard/:role`
 
 ## Security Notes

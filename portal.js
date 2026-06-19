@@ -96,6 +96,41 @@ function orderTotal(order) {
   return order.customerPaid || order.finance?.customerPaidPaise || order.finance?.totalPaise || 0;
 }
 
+function renderStorefrontProduct(product) {
+  const image = product.image || product.images?.[0] || "";
+  const title = product.title || product.name || "Product";
+  const sellerName = product.sellerName || product.seller || "Axzen seller";
+  const category = product.category || "Product";
+  return `
+    <article class="commerce-product">
+      ${
+        image
+          ? `<img class="commerce-product-image commerce-product-photo" src="${escapeHtml(image)}" alt="${escapeHtml(title)}" loading="lazy">`
+          : `<div class="commerce-product-image">${escapeHtml(category)}</div>`
+      }
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(sellerName)} | ${escapeHtml(category)}</p>
+      <strong>${escapeHtml(product.price || "Rs. 0")}</strong>
+      <button type="button">Add to cart</button>
+    </article>
+  `;
+}
+
+async function loadStorefrontCatalog() {
+  const grid = document.querySelector(".commerce-products");
+  if (!grid) return;
+  try {
+    const response = await fetch("/api/customer/catalog");
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Unable to load products.");
+    if (result.products?.length) {
+      grid.innerHTML = result.products.map(renderStorefrontProduct).join("");
+    }
+  } catch (error) {
+    console.warn(error.message || "Customer catalog unavailable.");
+  }
+}
+
 async function openOrderInvoice(orderId) {
   const token = localStorage.getItem("axzenToken");
   const response = await fetch(`/api/orders/${encodeURIComponent(orderId)}/invoice`, {
@@ -227,6 +262,84 @@ function renderSellerWorkspace(user = {}) {
         .join("")}
     </section>
   `;
+}
+
+function renderSellerProductManager(products = []) {
+  return `
+    <article class="dashboard-panel seller-product-manager" id="sellerProducts">
+      <div class="seller-about-heading">
+        <div>
+          <p class="eyebrow">Products</p>
+          <h3>Upload product with images</h3>
+          <p>Add up to 5 JPG/PNG images. Images are stored in Cloudinary and shown to admin and customers after approval.</p>
+        </div>
+        <span>${products.length} products</span>
+      </div>
+      <form class="seller-product-form" data-seller-product-create>
+        <label>Product title<input name="title" required placeholder="Product name"></label>
+        <label>SKU<input name="sku" required placeholder="SKU-001"></label>
+        <label>Category<input name="category" placeholder="Fashion, Grocery, Electronics"></label>
+        <label>Price<input name="price" type="number" min="0" step="0.01" required placeholder="999"></label>
+        <label>Stock<input name="stock" type="number" min="0" step="1" placeholder="10"></label>
+        <label class="seller-product-file">Product images
+          <input name="productImages" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple required>
+          <small>Maximum 5 images, 5MB each.</small>
+        </label>
+        <button type="submit">Submit product for approval</button>
+      </form>
+      <div class="seller-product-upload-message" data-seller-product-message aria-live="polite"></div>
+      <div class="seller-uploaded-products" data-seller-product-list>
+        ${renderSellerProductList(products)}
+      </div>
+    </article>
+  `;
+}
+
+function renderSellerProductList(products = []) {
+  if (!products.length) return `<p class="order-invoice-empty">No products uploaded yet.</p>`;
+  return products
+    .map((product) => {
+      const images = product.images || [];
+      return `
+        <article class="seller-uploaded-product">
+          ${
+            images[0]
+              ? `<img src="${escapeHtml(images[0])}" alt="${escapeHtml(product.title)}" loading="lazy">`
+              : `<div class="seller-upload-placeholder">${escapeHtml(product.category || "Product")}</div>`
+          }
+          <div>
+            <strong>${escapeHtml(product.title)}</strong>
+            <span>${escapeHtml(product.sku)} | ${escapeHtml(product.category || "General")}</span>
+            <small>${escapeHtml(product.status || "pending_approval")} | ${images.length} image${images.length === 1 ? "" : "s"}</small>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+async function loadSellerProducts() {
+  if (!dashboardPanels || !document.querySelector("#sellerProducts")) return;
+  const token = localStorage.getItem("axzenToken");
+  try {
+    const response = await fetch("/api/seller/products", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Unable to load products.");
+    const list = document.querySelector("[data-seller-product-list]");
+    const count = document.querySelector("#sellerProducts .seller-about-heading > span");
+    if (list) list.innerHTML = renderSellerProductList(result.products || []);
+    if (count) count.textContent = `${result.products?.length || 0} products`;
+  } catch (error) {
+    const message = document.querySelector("[data-seller-product-message]");
+    if (message) {
+      message.textContent = error.message || "Unable to load products.";
+      message.classList.add("error");
+    }
+  }
 }
 
 function renderOrderInvoicePanel(orders = [], role = "customer") {
@@ -484,6 +597,7 @@ function renderDashboard(payload) {
 
   if (user.role === "seller") {
     dashboardPanels.insertAdjacentHTML("afterbegin", renderSellerWorkspace(user));
+    dashboardPanels.insertAdjacentHTML("beforeend", renderSellerProductManager());
   }
 
   if (protectedContent) {
@@ -491,6 +605,7 @@ function renderDashboard(payload) {
   }
 
   loadRoleOrders(user.role);
+  if (user.role === "seller") loadSellerProducts();
 
   if (dashboardSection) {
     dashboardSection.hidden = false;
@@ -663,6 +778,60 @@ document.addEventListener("click", async (event) => {
   }
 });
 
+document.addEventListener("submit", async (event) => {
+  const productForm = event.target.closest("[data-seller-product-create]");
+  if (!productForm) return;
+
+  event.preventDefault();
+  const message = document.querySelector("[data-seller-product-message]");
+  const submitButton = productForm.querySelector("button[type='submit']");
+  const imageInput = productForm.querySelector("[name='productImages']");
+  const files = [...(imageInput?.files || [])];
+
+  if (files.length > 5) {
+    if (message) {
+      message.textContent = "Upload maximum 5 product images.";
+      message.classList.add("error");
+    }
+    return;
+  }
+
+  if (message) {
+    message.textContent = "Uploading product images...";
+    message.classList.remove("error");
+  }
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "Uploading...";
+  }
+
+  try {
+    const token = localStorage.getItem("axzenToken");
+    const response = await fetch("/api/seller/products", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: new FormData(productForm),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Unable to upload product.");
+    productForm.reset();
+    if (message) message.textContent = "Product submitted for admin approval.";
+    await loadSellerProducts();
+  } catch (error) {
+    if (message) {
+      message.textContent = error.message || "Unable to upload product.";
+      message.classList.add("error");
+    }
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = "Submit product for approval";
+    }
+  }
+});
+
 if (logoutButton) {
   logoutButton.addEventListener("click", () => {
     localStorage.removeItem("axzenToken");
@@ -691,6 +860,8 @@ if (logoutButton) {
 const savedToken = localStorage.getItem("axzenToken");
 const savedRole = localStorage.getItem("axzenRole");
 const pageRole = document.querySelector(".firebase-phone-form")?.dataset.role;
+
+loadStorefrontCatalog();
 
 if (savedToken && savedRole && savedRole === pageRole) {
   loadDashboard(savedRole, savedToken).catch(() => {

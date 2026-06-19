@@ -18,6 +18,7 @@ const { createSellerProduct, listProducts, listSellerProducts } = require("./con
 const { financeSummary } = require("./controllers/adminController");
 const { errorHandler, notFound } = require("./middleware/errorHandler");
 const { authenticate, authorize } = require("./middleware/auth");
+const { multipartForm } = require("./middleware/multipartUpload");
 
 const app = express();
 const rootDir = path.join(__dirname, "..");
@@ -84,7 +85,7 @@ app.get("/api/customer/catalog", listProducts);
 app.post("/api/customer/cart", authenticate, authorize("customer"), saveCart);
 app.post("/api/customer/orders", authenticate, authorize("customer"), createOrder);
 app.get("/api/seller/products", authenticate, authorize("seller"), listSellerProducts);
-app.post("/api/seller/products", authenticate, authorize("seller"), createSellerProduct);
+app.post("/api/seller/products", authenticate, authorize("seller"), multipartForm({ optional: true, maxBytes: 30 * 1024 * 1024 }), createSellerProduct);
 app.get("/api/admin/finance/summary", authenticate, authorize("admin", "superadmin"), financeSummary);
 
 function resolvePage(req) {

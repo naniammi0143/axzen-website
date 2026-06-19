@@ -126,6 +126,14 @@ function getInitials(name) {
     .toUpperCase();
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function renderStores(items) {
   storeRail.innerHTML = items
     .map(
@@ -259,7 +267,9 @@ function renderDashboard(payload) {
     .join("");
 
   if (user.role === "customer") {
+    document.querySelector(".customer-marketplace")?.remove();
     dashboardPanels.insertAdjacentHTML("afterend", renderCustomerMarketplace());
+    loadCustomerCatalog();
   }
 
   dashboardSection.hidden = false;
@@ -298,23 +308,8 @@ function renderCustomerMarketplace() {
           </div>
         </aside>
 
-        <div class="customer-product-grid">
-          ${customerProducts
-            .map(
-              (product) => `
-                <article class="customer-product-card">
-                  <div class="product-image">${product.category}</div>
-                  <div class="product-info">
-                    <span>${product.seller}</span>
-                    <h3>${product.name}</h3>
-                    <p>${product.rating} rating | Delivery ${product.delivery}</p>
-                    <strong>${product.price}</strong>
-                    <button type="button">Add to cart</button>
-                  </div>
-                </article>
-              `
-            )
-            .join("")}
+        <div class="customer-product-grid" id="customerProductGrid">
+          ${customerProducts.map(renderCustomerProductCard).join("")}
         </div>
 
         <aside class="cart-summary">
@@ -331,6 +326,45 @@ function renderCustomerMarketplace() {
       </div>
     </div>
   `;
+}
+
+function renderCustomerProductCard(product) {
+  const image = product.image || product.images?.[0] || "";
+  const title = product.title || product.name;
+  const seller = product.sellerName || product.seller;
+  const price = product.price || "Rs. 0";
+  const category = product.category || "Product";
+  return `
+    <article class="customer-product-card">
+      ${
+        image
+          ? `<img class="product-image product-photo" src="${escapeHtml(image)}" alt="${escapeHtml(title)}" loading="lazy">`
+          : `<div class="product-image">${escapeHtml(category)}</div>`
+      }
+      <div class="product-info">
+        <span>${escapeHtml(seller)}</span>
+        <h3>${escapeHtml(title)}</h3>
+        <p>${escapeHtml(product.rating || "Seller")} rating | Delivery ${escapeHtml(product.delivery || "Available")}</p>
+        <strong>${escapeHtml(price)}</strong>
+        <button type="button">Add to cart</button>
+      </div>
+    </article>
+  `;
+}
+
+async function loadCustomerCatalog() {
+  const grid = document.querySelector("#customerProductGrid");
+  if (!grid) return;
+  try {
+    const response = await fetch("/api/customer/catalog");
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Unable to load products.");
+    if (result.products?.length) {
+      grid.innerHTML = result.products.map(renderCustomerProductCard).join("");
+    }
+  } catch (error) {
+    console.warn(error.message || "Customer catalog unavailable.");
+  }
 }
 
 async function loadDashboard(role, token) {

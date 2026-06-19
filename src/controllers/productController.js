@@ -2,7 +2,36 @@ const Product = require("../models/Product");
 const Seller = require("../models/Seller");
 const asyncHandler = require("../utils/asyncHandler");
 const { success } = require("../utils/apiResponse");
+const { uploadProductImages } = require("../utils/cloudinary");
 const { formatRupees, toPaise } = require("../utils/money");
+
+const allowedProductImageTypes = new Set(["image/jpeg", "image/png"]);
+
+function normalizeFiles(value) {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function collectProductImages(files = {}) {
+  const images = [
+    ...normalizeFiles(files.productImages),
+    ...normalizeFiles(files.images),
+    ...normalizeFiles(files.image),
+    ...normalizeFiles(files.image1),
+    ...normalizeFiles(files.image2),
+    ...normalizeFiles(files.image3),
+    ...normalizeFiles(files.image4),
+    ...normalizeFiles(files.image5),
+  ];
+  return images.filter(Boolean);
+}
+
+function validateProductImages(files) {
+  if (files.length > 5) return "A product can have maximum 5 images.";
+  const invalid = files.find((file) => !allowedProductImageTypes.has(file.mimetype));
+  if (invalid) return "Product images must be JPG or PNG.";
+  return "";
+}
 
 const listProducts = asyncHandler(async (req, res) => {
   const products = await Product.find({ status: { $in: ["active", "approved"] } }).sort({ updatedAt: -1 }).limit(48);
@@ -18,6 +47,8 @@ const listProducts = asyncHandler(async (req, res) => {
       pricePaise: product.pricePaise,
       price: formatRupees(product.pricePaise),
       stock: product.stock,
+      images: product.images || [],
+      image: product.images?.[0] || "",
     })),
   });
 });
@@ -46,23 +77,47 @@ const createSellerProduct = asyncHandler(async (req, res) => {
     return;
   }
 
+  const imageFiles = collectProductImages(req.files);
+  const imageError = validateProductImages(imageFiles);
+  if (imageError) {
+    res.status(400).json({ ok: false, message: imageError });
+    return;
+  }
+
+  let uploadedImages = [];
+  if (imageFiles.length) {
+    const cloudinaryImages = await uploadProductImages(imageFiles, {
+      folder: `axzen/products/${seller._id}/${req.body.sku.toUpperCase()}`,
+    });
+    uploadedImages = cloudinaryImages.map((image) => image.url);
+  }
+
+  const update = {
+    sellerId: seller._id,
+    sellerName: seller.businessName,
+    sku: req.body.sku.toUpperCase(),
+    title: req.body.title,
+    category: req.body.category || "General",
+    pricePaise: toPaise(req.body.price),
+    stock: Number.parseInt(req.body.stock, 10) || 0,
+    status: "pending_approval",
+  };
+
+  if (uploadedImages.length) {
+    update.images = uploadedImages;
+  }
+
+  const updateOperation = {
+    $set: update,
+  };
+
+  if (!uploadedImages.length) {
+    updateOperation.$setOnInsert = { images: [] };
+  }
+
   const product = await Product.findOneAndUpdate(
     { sellerId: seller._id, sku: req.body.sku.toUpperCase() },
-    {
-      $set: {
-        sellerId: seller._id,
-        sellerName: seller.businessName,
-        sku: req.body.sku.toUpperCase(),
-        title: req.body.title,
-        category: req.body.category || "General",
-        pricePaise: toPaise(req.body.price),
-        stock: Number.parseInt(req.body.stock, 10) || 0,
-        status: "pending_approval",
-      },
-      $setOnInsert: {
-        images: [],
-      },
-    },
+    updateOperation,
     { new: true, upsert: true }
   );
 

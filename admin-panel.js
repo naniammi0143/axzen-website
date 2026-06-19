@@ -714,11 +714,22 @@
   }
 
   function renderProducts(data) {
+    const productThumb = (row) => {
+      const images = row.images || [];
+      if (!images.length) return `<span class="product-image-empty">No image</span>`;
+      return `
+        <div class="product-thumb-stack">
+          <img src="${escapeHtml(images[0])}" alt="${escapeHtml(row.title)}">
+          <span>${escapeHtml(images.length)} image${images.length > 1 ? "s" : ""}</span>
+        </div>
+      `;
+    };
     qs('[data-view-panel="products"]').innerHTML = panel(
       "Product approval and catalogue control",
       filterBar("products", [{ key: "status", label: "Product status", options: ["pending_approval", "approved", "active", "rejected", "blocked"] }]) +
         table(
           [
+            { label: "Images", render: productThumb },
             { label: "SKU", render: (row) => escapeHtml(row.sku) },
             { label: "Product", render: (row) => `<strong>${escapeHtml(row.title)}</strong><small>${escapeHtml(row.sellerName)}</small>` },
             { label: "Category", render: (row) => escapeHtml(row.category) },

@@ -30,12 +30,17 @@ function sanitizeFileName(name) {
 
 function multipartForm(options = {}) {
   const maxBytes = options.maxBytes || 12 * 1024 * 1024;
+  const optional = Boolean(options.optional);
 
   return (req, res, next) => {
     const contentType = req.headers["content-type"] || "";
     const boundary = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i)?.[1] || contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i)?.[2];
 
     if (!contentType.startsWith("multipart/form-data") || !boundary) {
+      if (optional) {
+        next();
+        return;
+      }
       res.status(400).json({ ok: false, message: "Multipart form-data is required." });
       return;
     }
@@ -92,12 +97,19 @@ function multipartForm(options = {}) {
             throw new Error("Each uploaded file must be 5MB or smaller.");
           }
 
-          req.files[fieldName] = {
+          const file = {
             buffer,
             originalName: filename,
             mimetype,
             size: buffer.length,
           };
+
+          if (req.files[fieldName]) {
+            req.files[fieldName] = Array.isArray(req.files[fieldName]) ? [...req.files[fieldName], file] : [req.files[fieldName], file];
+            return;
+          }
+
+          req.files[fieldName] = file;
         });
 
         next();
