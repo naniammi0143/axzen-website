@@ -35,6 +35,13 @@ const sellerSchema = new mongoose.Schema(
     payoutEnabled: { type: Boolean, default: true },
     codEnabled: { type: Boolean, default: true },
     onlinePaymentEnabled: { type: Boolean, default: true },
+    agreements: {
+      marketplaceTerms: { type: Boolean, default: false },
+      kycConsent: { type: Boolean, default: false },
+      taxCompliance: { type: Boolean, default: false },
+      payoutPolicy: { type: Boolean, default: false },
+      acceptedAt: { type: Date, default: null },
+    },
     kycDocuments: [
       {
         type: { type: String, enum: ["pan", "kyc"], required: true },

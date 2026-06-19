@@ -29,6 +29,10 @@ const logoutButton = document.querySelector("#logoutButton");
 const protectedContent = document.querySelector("#protectedContent");
 const loginSection = document.querySelector("#login");
 const loginNavLinks = document.querySelectorAll("a[href='#login']");
+const sellerBrandText = document.querySelector("#sellerBrandText");
+const sellerRegisterLink = document.querySelector("#sellerRegisterLink");
+const sellerLoginLink = document.querySelector("#sellerLoginLink");
+const sellerAboutLink = document.querySelector("#sellerAboutLink");
 
 loginNavLinks.forEach((link) => {
   link.dataset.loginLabel = link.textContent;
@@ -51,6 +55,16 @@ function updateLoginNavigation(isLoggedIn) {
     link.textContent = isLoggedIn ? "Dashboard" : link.dataset.loginLabel || "Login";
     link.setAttribute("href", isLoggedIn ? dashboardTarget : "#login");
   });
+}
+
+function updateSellerHeader(user = null) {
+  if (!sellerBrandText) return;
+  const seller = user?.seller || {};
+  const isSellerLoggedIn = user?.role === "seller";
+  sellerBrandText.textContent = isSellerLoggedIn ? seller.businessName || seller.fullName || "Seller" : "Seller";
+  if (sellerRegisterLink) sellerRegisterLink.hidden = isSellerLoggedIn;
+  if (sellerLoginLink) sellerLoginLink.hidden = isSellerLoggedIn;
+  if (sellerAboutLink) sellerAboutLink.hidden = !isSellerLoggedIn;
 }
 
 function formatPhoneNumber(value) {
@@ -151,6 +165,67 @@ function renderSellerPaymentSettings(seller = {}) {
         </button>
       </div>
     </article>
+  `;
+}
+
+function sellerDetailTile(label, value) {
+  return `
+    <article>
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value || "-")}</strong>
+    </article>
+  `;
+}
+
+function renderSellerWorkspace(user = {}) {
+  const seller = user.seller || {};
+  const address = [seller.pickupAddress, seller.city, seller.state, seller.pincode].filter(Boolean).join(", ");
+  const agreementLabels = [
+    ["Marketplace terms", seller.agreements?.marketplaceTerms],
+    ["KYC consent", seller.agreements?.kycConsent],
+    ["Tax compliance", seller.agreements?.taxCompliance],
+    ["Payout policy", seller.agreements?.payoutPolicy],
+  ];
+  const modules = ["Dashboard", "Products", "Orders", "Shipments", "Payments", "Inventory", "Returns", "Profile", "Support"];
+  return `
+    <nav class="seller-workspace-tabs" aria-label="Seller workspace sections">
+      ${modules.map((item) => `<a href="#seller${item}">${escapeHtml(item)}</a>`).join("")}
+    </nav>
+    <article class="dashboard-panel seller-about-panel" id="sellerAbout">
+      <div class="seller-about-heading">
+        <div>
+          <p class="eyebrow">About seller</p>
+          <h3>${escapeHtml(seller.businessName || "Seller profile")}</h3>
+          <p>Registration, KYC, payment and agreement details saved with Axzen.</p>
+        </div>
+        <span>${escapeHtml(seller.approvalStatus || "pending")}</span>
+      </div>
+      <div class="seller-detail-grid">
+        ${sellerDetailTile("Company / store", seller.businessName)}
+        ${sellerDetailTile("Contact person", seller.fullName || user.name)}
+        ${sellerDetailTile("Mobile", seller.phone || user.phone)}
+        ${sellerDetailTile("Email", seller.email || user.email)}
+        ${sellerDetailTile("Business type", seller.businessType)}
+        ${sellerDetailTile("GST", seller.gstNumber || "Optional / not added")}
+        ${sellerDetailTile("PAN", seller.panNumber)}
+        ${sellerDetailTile("Aadhaar", seller.aadhaarNumber || "Optional / not added")}
+        ${sellerDetailTile("Pickup address", address)}
+        ${sellerDetailTile("Bank status", seller.bankStatus || "saved")}
+        ${sellerDetailTile("Payout", seller.payoutEnabled ? "Enabled" : "Pending approval")}
+        ${sellerDetailTile("COD", seller.codEnabled ? "Enabled" : "Disabled")}
+        ${sellerDetailTile("Online payment", seller.onlinePaymentEnabled ? "Enabled" : "Disabled")}
+        ${sellerDetailTile("KYC status", seller.kycStatus || "pending")}
+      </div>
+      <div class="seller-agreement-summary">
+        ${agreementLabels.map(([label, accepted]) => `<span class="${accepted ? "accepted" : ""}">${accepted ? "Yes" : "Pending"} - ${escapeHtml(label)}</span>`).join("")}
+      </div>
+    </article>
+    <section class="seller-module-grid">
+      ${modules
+        .filter((item) => item !== "Dashboard" && item !== "Profile")
+        .map((item) => `<article id="seller${item}"><span>${escapeHtml(item)}</span><strong>${escapeHtml(item)} workspace</strong><small>Manage ${escapeHtml(item.toLowerCase())} from this seller panel.</small></article>`)
+        .join("")}
+    </section>
   `;
 }
 
@@ -299,6 +374,7 @@ function getRecaptcha(form) {
 
 function renderDashboard(payload) {
   const { user, dashboard } = payload;
+  updateSellerHeader(user);
 
   if (loginSection) {
     loginSection.hidden = true;
@@ -358,10 +434,11 @@ function renderDashboard(payload) {
           <article><span>4</span><strong>Seller panel</strong><small>Products unlock after approval</small></article>
         </div>
         <div class="seller-pending-actions">
-          <a class="primary-button" href="/seller/register">Update registration</a>
+          <a class="primary-button" href="#sellerAbout">About registration</a>
           <button class="secondary-button logout-button" type="button" id="sellerPendingLogout">Logout</button>
         </div>
       </article>
+      ${renderSellerWorkspace(user)}
     `;
 
     dashboardPanels.querySelector("#sellerPendingLogout")?.addEventListener("click", () => logoutButton?.click());
@@ -404,6 +481,10 @@ function renderDashboard(payload) {
       `
     )
     .join("");
+
+  if (user.role === "seller") {
+    dashboardPanels.insertAdjacentHTML("afterbegin", renderSellerWorkspace(user));
+  }
 
   if (protectedContent) {
     protectedContent.hidden = false;
@@ -603,6 +684,7 @@ if (logoutButton) {
       loginSection.scrollIntoView({ behavior: "smooth" });
     }
     updateLoginNavigation(false);
+    updateSellerHeader(null);
   });
 }
 
@@ -617,5 +699,6 @@ if (savedToken && savedRole && savedRole === pageRole) {
     localStorage.removeItem("axzenPhone");
     localStorage.removeItem("axzenSellerStatus");
     updateLoginNavigation(false);
+    updateSellerHeader(null);
   });
 }

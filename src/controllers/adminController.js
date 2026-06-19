@@ -1138,6 +1138,39 @@ const reportCustomers = asyncHandler(async (req, res) => {
   success(res, reportEnvelope("customers", cards, rows, { primary: rows.slice(0, 8).map((row) => ({ label: row.name, value: row.totalSpent })), secondary: rows.slice(0, 8).map((row) => ({ label: row.name, value: row.totalOrders })) }));
 });
 
+const reportCompliance = asyncHandler(async (req, res) => {
+  if (!allowReport(req, res, "compliance")) return;
+  const [orders, sellers, products, payments, settlements, deliveries] = await Promise.all([
+    Order.countDocuments(),
+    Seller.countDocuments(),
+    Product.countDocuments(),
+    Payment.countDocuments(),
+    Settlement.countDocuments(),
+    Delivery.countDocuments(),
+  ]);
+  const rows = [
+    { area: "Sales invoices", maintain: "Order invoice number, date, customer paid, product total, delivery charge", owner: "Admin / Finance", source: "Orders + invoices", status: orders ? "available" : "pending" },
+    { area: "Seller KYC", maintain: "PAN, GST if available, Aadhaar/KYC document, pickup address, approval status", owner: "Seller Executive", source: "Seller registration", status: sellers ? "available" : "pending" },
+    { area: "GST and tax register", maintain: "Taxable sales, refunds, cancelled orders, GST/PAN references, monthly export", owner: "Finance Executive", source: "Reports -> Sales/Payments", status: "available" },
+    { area: "Payment gateway ledger", maintain: "Transaction ID, gateway charge, GST on gateway charge, net settlement", owner: "Finance Executive", source: "Payments report", status: payments ? "available" : "pending" },
+    { area: "Seller payout ledger", maintain: "Product total, platform commission, gateway charge, payout pending/paid, payout date", owner: "Finance Executive", source: "Settlements", status: settlements ? "available" : "pending" },
+    { area: "Inventory register", maintain: "SKU, product name, seller, stock, low stock alerts, quantity sold", owner: "Product Executive", source: "Products report", status: products ? "available" : "pending" },
+    { area: "Shipment records", maintain: "Pickup pincode, customer pincode, AWB/tracking, courier partner, delivery status", owner: "Shipping Executive", source: "Shipment report", status: deliveries ? "available" : "pending" },
+    { area: "Return/refund file", maintain: "Return reason, refund amount, refund status, loss amount, return pickup status", owner: "Support / Finance", source: "Returns report", status: "available" },
+    { area: "Audit and access logs", maintain: "Admin exports, payout changes, employee access and role changes", owner: "Super Admin", source: "Audit Logs", status: "available" },
+    { area: "Bank and reconciliation", maintain: "Captured payments, COD pending, payout UTR/reference, settlement differences", owner: "Finance Executive", source: "Payments + settlement exports", status: "available" },
+  ];
+  const cards = [
+    reportCard("Compliance Areas", rows.length),
+    reportCard("Orders Maintained", orders),
+    reportCard("Sellers Maintained", sellers),
+    reportCard("Payment Records", payments),
+    reportCard("Shipment Records", deliveries),
+  ];
+  if (req.query.export === "true") return sendCsv(req, res, "axzen-compliance-report", rows);
+  success(res, reportEnvelope("compliance", cards, rows, { primary: rows.map((row) => ({ label: row.area, value: row.status === "available" ? 1 : 0 })), secondary: [{ label: "Orders", value: orders }, { label: "Sellers", value: sellers }, { label: "Payments", value: payments }, { label: "Shipments", value: deliveries }] }));
+});
+
 const exportCsv = asyncHandler(async (req, res) => {
   const type = req.params.type;
   if (type === "finance" && !["superadmin", "finance"].includes(req.user?.role)) {
@@ -1186,6 +1219,7 @@ module.exports = {
   rejectProduct,
   rejectSeller,
   reportCustomers,
+  reportCompliance,
   reportPayments,
   reportProducts,
   reportReturns,

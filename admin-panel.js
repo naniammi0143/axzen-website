@@ -8,6 +8,8 @@
     reportType: "sales",
     reportQuery: "",
     reportRows: [],
+    employeeRows: [],
+    employeeRoles: [],
   };
 
   const titles = {
@@ -844,6 +846,9 @@
 
   function renderEmployees(data) {
     const roleNames = Object.keys(data.roleMatrix || {});
+    state.employeeRows = data.items || [];
+    state.employeeRoles = roleNames;
+    const canEditEmployees = state.user?.role === "superadmin";
     qs('[data-view-panel="employees"]').innerHTML = `
       <section class="employee-page">
         <header class="employee-hero">
@@ -918,10 +923,11 @@
               { label: "Created", render: (row) => new Date(row.createdAt).toLocaleDateString() },
             ],
             data.items,
-            (row) => `
+            (row, index) => `
               <select data-employee-role="${row._id}">
                 ${roleNames.map((role) => `<option value="${escapeHtml(role)}" ${role === row.displayRole ? "selected" : ""}>${escapeHtml(role)}</option>`).join("")}
               </select>
+              ${canEditEmployees ? `<button data-action="employee-edit" data-index="${index}" data-id="${row._id}">Edit</button>` : ""}
               <button data-action="employee-role-update" data-id="${row._id}">Update role</button>
               <button data-action="employee-toggle" data-id="${row._id}" data-status="${row.status === "blocked" ? "active" : "blocked"}">${row.status === "blocked" ? "Activate" : "Block"}</button>
             `
@@ -939,6 +945,7 @@
     ["shipments", "Shipments"],
     ["returns", "Returns"],
     ["customers", "Customers"],
+    ["compliance", "Compliance"],
   ];
 
   const moneyColumns = new Set([
@@ -971,6 +978,7 @@
     shipments: ["orderId", "sellerName", "customerPincode", "pickupPincode", "courierPartner", "awbNumber", "shipmentStatus", "actualShippingCost", "customerDeliveryCharge", "deliveryMargin"],
     returns: ["orderId", "sellerName", "product", "customer", "reason", "refundAmount", "refundStatus", "returnPickupStatus", "lossAmount"],
     customers: ["name", "contact", "totalOrders", "totalSpent", "lastOrderDate", "cancelReturnCount", "status", "signupDate"],
+    compliance: ["area", "maintain", "owner", "source", "status"],
   };
 
   function labelize(key) {
@@ -1054,6 +1062,7 @@
           </div>
           <div class="reports-header-actions">
             <button type="button" data-report-export>Export CSV</button>
+            <button type="button" class="secondary-button" data-report-print>Print</button>
             <button type="button" class="secondary-button" data-report-refresh>Refresh</button>
           </div>
         </header>
@@ -1095,6 +1104,36 @@
           .map(([key, value]) => sellerProfileChip(labelize(key), moneyColumns.has(key) ? rupees(value) : key.toLowerCase().includes("date") ? dateValue(value) : value))
           .join("")}
       </div>
+    `;
+    openReportDrawer(drawer);
+  }
+
+  function openEmployeeEdit(index) {
+    if (state.user?.role !== "superadmin") {
+      toast("Only Super Admin can edit employees.", true);
+      return;
+    }
+    const employee = state.employeeRows[Number(index)];
+    if (!employee) return;
+    const drawer = ensureReportDrawer("employeeEdit", "Edit employee");
+    const roleNames = state.employeeRoles || [];
+    qs(".report-drawer-body", drawer).innerHTML = `
+      <form class="employee-form employee-edit-form" data-employee-edit="${escapeHtml(employee._id)}">
+        <label>Name<input name="name" required value="${escapeHtml(employee.name)}"></label>
+        <label>Email<input name="email" type="email" value="${escapeHtml(employee.email || "")}"></label>
+        <label>Role
+          <select name="displayRole" required>
+            ${roleNames.map((role) => `<option value="${escapeHtml(role)}" ${role === employee.displayRole ? "selected" : ""}>${escapeHtml(role)}</option>`).join("")}
+          </select>
+        </label>
+        <label>Status
+          <select name="status" required>
+            ${["active", "blocked"].map((status) => `<option value="${status}" ${status === employee.status ? "selected" : ""}>${status}</option>`).join("")}
+          </select>
+        </label>
+        <label>New password <input name="password" type="password" minlength="8" placeholder="Leave blank to keep old password"></label>
+        <button type="submit">Save employee</button>
+      </form>
     `;
     openReportDrawer(drawer);
   }
@@ -1210,6 +1249,12 @@
       const reportRefresh = event.target.closest("[data-report-refresh]");
       if (reportRefresh) return loadView("reports");
 
+      const reportPrint = event.target.closest("[data-report-print]");
+      if (reportPrint) {
+        window.print();
+        return;
+      }
+
       const reportClear = event.target.closest("[data-report-clear]");
       if (reportClear) {
         state.reportQuery = "";
@@ -1290,6 +1335,7 @@
         const select = qs(`[data-employee-role="${id}"]`);
         return patch(`/api/admin/employees/${id}`, { displayRole: select?.value });
       }
+      if (action === "employee-edit") return openEmployeeEdit(target.dataset.index);
       if (action === "employee-toggle") return patch(`/api/admin/employees/${id}`, { status: target.dataset.status });
       if (action === "employee-block") return patch(`/api/admin/employees/${id}`, { status: "blocked" });
     });
@@ -1303,6 +1349,22 @@
           await api("/api/admin/employees", { method: "POST", body: JSON.stringify(payload) });
           toast("Employee added successfully.");
           employeeForm.reset();
+          await loadView("employees");
+        } catch (error) {
+          toast(error.message, true);
+        }
+        return;
+      }
+
+      const employeeEditForm = event.target.closest("[data-employee-edit]");
+      if (employeeEditForm) {
+        event.preventDefault();
+        const payload = Object.fromEntries(new FormData(employeeEditForm).entries());
+        if (!payload.password) delete payload.password;
+        try {
+          await api(`/api/admin/employees/${employeeEditForm.dataset.employeeEdit}`, { method: "PATCH", body: JSON.stringify(payload) });
+          toast("Employee updated successfully.");
+          closeTopReportDrawer();
           await loadView("employees");
         } catch (error) {
           toast(error.message, true);

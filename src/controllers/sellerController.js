@@ -51,6 +51,10 @@ function validateRegistration(body, files) {
   if (clean(body.aadhaarNumber) && !/^\d{12}$/.test(clean(body.aadhaarNumber))) return "Aadhaar number must be 12 digits.";
   if (!files.panDocument) return "PAN document upload is required.";
   if (!files.kycDocument) return "Aadhaar/GST/KYC document upload is required.";
+  if (body.marketplaceTerms !== "on") return "Marketplace seller agreement must be accepted.";
+  if (body.kycConsent !== "on") return "KYC consent must be accepted.";
+  if (body.taxCompliance !== "on") return "Tax compliance declaration must be accepted.";
+  if (body.payoutPolicy !== "on") return "Payout and return policy must be accepted.";
   return "";
 }
 
@@ -110,6 +114,13 @@ function buildSellerUpdate(req, phone, email) {
     payoutEnabled: false,
     codEnabled: req.body.codEnabled !== "false",
     onlinePaymentEnabled: req.body.onlinePaymentEnabled !== "false",
+    agreements: {
+      marketplaceTerms: req.body.marketplaceTerms === "on",
+      kycConsent: req.body.kycConsent === "on",
+      taxCompliance: req.body.taxCompliance === "on",
+      payoutPolicy: req.body.payoutPolicy === "on",
+      acceptedAt: new Date(),
+    },
     bankDetails: {
       accountHolderName: clean(req.body.accountHolderName),
       accountNumber: clean(req.body.accountNumber),

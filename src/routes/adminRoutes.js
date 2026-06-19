@@ -19,6 +19,7 @@ const {
   rejectProduct,
   rejectSeller,
   reportCustomers,
+  reportCompliance,
   reportPayments,
   reportProducts,
   reportReturns,
@@ -85,6 +86,7 @@ router.get("/reports/payments", authorizeAdminAccess("reports"), reportPayments)
 router.get("/reports/shipments", authorizeAdminAccess("reports"), reportShipments);
 router.get("/reports/returns", authorizeAdminAccess("reports"), reportReturns);
 router.get("/reports/customers", authorizeAdminAccess("reports"), reportCustomers);
+router.get("/reports/compliance", authorizeAdminAccess("reports"), reportCompliance);
 router.get("/reports/export/:type", authorizeAdminAccess("reports"), exportCsv);
 
 router.get("/audit-logs", authorizeAdminAccess("audit"), listAuditLogs);

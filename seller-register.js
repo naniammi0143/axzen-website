@@ -134,6 +134,10 @@ function validateForm(formData) {
   if (password.length < 8) return "Password must be at least 8 characters.";
   if (!/^\d{6}$/.test(pincode)) return "Pincode must be 6 digits.";
   if (!/^[A-Z]{4}0[A-Z0-9]{6}$/i.test(ifsc)) return "IFSC format is invalid.";
+  if (formData.get("marketplaceTerms") !== "on") return "Accept marketplace seller terms.";
+  if (formData.get("kycConsent") !== "on") return "Accept KYC consent.";
+  if (formData.get("taxCompliance") !== "on") return "Accept tax compliance declaration.";
+  if (formData.get("payoutPolicy") !== "on") return "Accept payout and return policy.";
 
   return (
     validateFile(formData.get("panDocument"), "PAN document") ||

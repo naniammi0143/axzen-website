@@ -111,6 +111,13 @@ a {
   border-radius: 4px;
 }
 
+.commerce-brand .customer-header-logo {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  filter: saturate(1.05) contrast(1.04);
+}
+
 .brand-logo:not([hidden]) + .brand-mark {
   display: none;
 }
@@ -2081,6 +2088,12 @@ button:hover,
   background: rgba(255, 255, 255, 0.72);
 }
 
+.commerce-brand .customer-header-logo {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .brand-mark,
 .login-icon,
 .role-mark,
@@ -3945,6 +3958,148 @@ h1 {
   font-weight: 900;
 }
 
+.seller-workspace-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 18px;
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.05);
+}
+
+.seller-workspace-tabs a {
+  min-height: 38px;
+  padding: 10px 14px;
+  color: #334155;
+  background: #f8fafc;
+  border-radius: 999px;
+  font-weight: 900;
+}
+
+.seller-workspace-tabs a:first-child {
+  color: #fff;
+  background: #0071e3;
+}
+
+.seller-about-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.seller-about-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.seller-about-heading h3,
+.seller-about-heading p {
+  margin: 0;
+}
+
+.seller-about-heading h3 {
+  color: #111827;
+  font-size: 24px;
+}
+
+.seller-about-heading p {
+  margin-top: 5px;
+  color: #64748b;
+  font-weight: 750;
+}
+
+.seller-about-heading > span {
+  padding: 8px 12px;
+  color: #075985;
+  background: #e0f2fe;
+  border-radius: 999px;
+  font-weight: 900;
+  text-transform: capitalize;
+}
+
+.seller-about-panel .seller-detail-grid,
+.seller-module-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.seller-about-panel .seller-detail-grid article,
+.seller-module-grid article {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 16px;
+}
+
+.seller-about-panel .seller-detail-grid span,
+.seller-module-grid span,
+.seller-agreement-summary span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.seller-about-panel .seller-detail-grid strong,
+.seller-module-grid strong {
+  color: #111827;
+  overflow-wrap: anywhere;
+}
+
+.seller-module-grid small {
+  color: #64748b;
+  font-weight: 750;
+}
+
+.seller-agreement-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.seller-agreement-summary span {
+  padding: 8px 10px;
+  color: #92400e;
+  background: #fffbeb;
+  border-radius: 999px;
+}
+
+.seller-agreement-summary span.accepted {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.seller-agreement-block {
+  border-color: rgba(0, 113, 227, 0.16);
+  background: linear-gradient(180deg, #fff, #f8fbff);
+}
+
+.agreement-check {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px;
+  color: #334155;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  font-weight: 750;
+}
+
+.agreement-check input {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  accent-color: #0071e3;
+}
+
 .reports-page {
   display: grid;
   gap: 18px;
@@ -4505,10 +4660,16 @@ h1 {
   .seller-payout-title,
   .seller-payout-breakup,
   .seller-payment-toggle-grid,
+  .seller-detail-grid,
+  .seller-module-grid,
   .report-summary-grid,
   .report-chart-grid,
   .report-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .seller-about-heading {
+    display: grid;
   }
 
   .seller-payout-title {
@@ -4543,5 +4704,36 @@ h1 {
 
   .report-drawer {
     width: 100%;
+  }
+}
+
+@media print {
+  .admin-sidebar,
+  .admin-topbar,
+  .reports-header-actions,
+  .report-tabs,
+  .report-type-select,
+  .report-filter-panel,
+  .report-chart-grid,
+  .row-actions,
+  .report-pagination {
+    display: none !important;
+  }
+
+  .admin-main {
+    margin: 0;
+    padding: 0;
+  }
+
+  .reports-page,
+  .admin-panel,
+  .reports-header,
+  .report-summary-grid article {
+    box-shadow: none !important;
+  }
+
+  .reports-header,
+  .admin-panel {
+    border: 1px solid #d1d5db;
   }
 }

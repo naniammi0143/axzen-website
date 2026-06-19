@@ -113,6 +113,17 @@
           <label>Upload Aadhaar/GST/KYC document<input name="kycDocument" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required></label>
         </div>
 
+        <div class="form-block seller-agreement-block" data-after-otp hidden>
+          <div class="form-block-heading">
+            <p class="eyebrow">Step 7</p>
+            <h2>Seller agreements</h2>
+          </div>
+          <label class="agreement-check"><input name="marketplaceTerms" type="checkbox" required> I agree to Axzen marketplace seller terms, product listing rules, cancellation and return policy.</label>
+          <label class="agreement-check"><input name="kycConsent" type="checkbox" required> I confirm my KYC, PAN, bank, pickup address and uploaded documents are correct.</label>
+          <label class="agreement-check"><input name="taxCompliance" type="checkbox" required> I agree to maintain invoices, GST/PAN records, income-tax records, stock and sales data for audit/compliance.</label>
+          <label class="agreement-check"><input name="payoutPolicy" type="checkbox" required> I agree platform commission, online payment charges, refunds and seller payout rules are understood.</label>
+        </div>
+
         <p class="form-message" id="sellerRegisterMessage" aria-live="polite"></p>
         <button class="primary-button seller-register-submit" type="submit" disabled>Submit seller registration</button>
       </form>
