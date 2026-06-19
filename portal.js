@@ -1437,7 +1437,7 @@ function showSellerOrdersToast(message, isError = false) {
 
 function renderOrderInvoicePanel(orders = [], role = "customer") {
   if (role === "seller") {
-    const previousTab = document.querySelector("#orderInvoicePanel")?.dataset.activeTab || "new";
+    const previousTab = getActiveSellerOrderTab();
     sellerOrdersCache = orders;
     const counts = getSellerOrderCounts(orders);
     const pendingCount = orders.filter((order) => ["new", "accepted"].includes(normalizeSellerOrderStatus(order.status))).length;
