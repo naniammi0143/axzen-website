@@ -4640,13 +4640,10 @@ h1 {
   box-shadow: 0 24px 70px rgba(15, 23, 42, 0.16);
 }
 
-.seller-page .dashboard-sidebar .eyebrow,
-.seller-page .dashboard-sidebar p {
-  color: rgba(226, 232, 240, 0.78);
-}
-
-.seller-page .dashboard-sidebar h2 {
-  color: #fff;
+.seller-page .dashboard-sidebar > .eyebrow,
+.seller-page .dashboard-sidebar > h2,
+.seller-page .dashboard-sidebar > p {
+  display: none;
 }
 
 .seller-page .dashboard-main {
