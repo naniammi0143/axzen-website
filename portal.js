@@ -396,34 +396,80 @@ function renderCartSummary(showCheckout = false) {
   const cart = getCustomerCart();
   const itemCount = getCartItemCount(cart);
   const subtotal = getCartTotalPaise(cart);
+  const mrpTotal = cart.reduce((total, item) => total + (Number(item.mrpPaise || item.pricePaise) || 0) * (Number(item.quantity) || 1), 0);
+  const discount = Math.max(mrpTotal - subtotal, 0);
+  const freeDelivery = getCartFreeDelivery(cart);
+  const customerPaid = subtotal + freeDelivery.customerDeliveryChargePaise;
   const canCheckout = itemCount > 0;
 
   summaries.forEach((summary) => {
     summary.innerHTML = `
-      <h3>Cart</h3>
-      <p>${itemCount ? `${itemCount} item${itemCount === 1 ? "" : "s"} selected` : "Your cart is empty"}</p>
-      <strong>${rupees(subtotal)}</strong>
-      ${
-        cart.length
-          ? `<div class="cart-items">
-              ${cart
-                .map(
-                  (item) => `
-                    <div class="cart-line">
-                      <span>${escapeHtml(item.title)}</span>
-                      <small>${escapeHtml(item.sellerName || "Axzen seller")} | ${escapeHtml(item.unitLabel || "1 pc")} | Qty ${Number(item.quantity) || 1}</small>
-                      <b>${rupees((Number(item.pricePaise) || 0) * (Number(item.quantity) || 1))}</b>
-                      <button type="button" data-cart-remove="${escapeHtml(item.id)}">Remove</button>
-                    </div>
-                  `
-                )
-                .join("")}
-            </div>`
-          : `<div class="mini-list"><span>Add products to continue checkout</span><span>OTP login</span><span>Seller order notification</span></div>`
-      }
-      <button type="button" data-checkout ${canCheckout ? "" : "disabled"}>Proceed to checkout</button>
-      <p class="cart-message" data-cart-message hidden></p>
-      ${showCheckout ? renderCheckoutPanel(cart) : ""}
+      <div class="cart-page-head">
+        <div>
+          <p class="eyebrow">Shopping Cart</p>
+          <h3>${itemCount ? `${itemCount} item${itemCount === 1 ? "" : "s"} in your cart` : "Your cart is empty"}</h3>
+        </div>
+        <button type="button" data-close-cart>Close</button>
+      </div>
+      <div class="cart-page-grid">
+        <div class="cart-items">
+          ${
+            cart.length
+              ? cart
+                  .map(
+                    (item) => {
+                      const qty = Number(item.quantity) || 1;
+                      const price = Number(item.pricePaise) || 0;
+                      const mrp = Number(item.mrpPaise || item.pricePaise) || price;
+                      return `
+                        <article class="cart-line">
+                          <div class="cart-line-media">
+                            ${
+                              item.image
+                                ? `<img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}">`
+                                : `<span>${escapeHtml((item.title || "P").charAt(0))}</span>`
+                            }
+                          </div>
+                          <div class="cart-line-info">
+                            <strong>${escapeHtml(item.title)}</strong>
+                            <small>${escapeHtml(item.sellerName || "Axzen seller")} | ${escapeHtml(item.unitLabel || "1 pc")}</small>
+                            <div class="cart-line-price">
+                              ${mrp > price ? `<del>${rupees(mrp)}</del>` : ""}
+                              <b>${rupees(price)}</b>
+                            </div>
+                            <small class="stock-left">Delivery ${freeDelivery.eligible ? "free" : "charge applied"} for this order</small>
+                          </div>
+                          <div class="cart-line-actions">
+                            <label>Qty
+                              <select data-cart-qty="${escapeHtml(item.id)}">
+                                ${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+                                  .map((value) => `<option value="${value}" ${value === qty ? "selected" : ""}>${value}</option>`)
+                                  .join("")}
+                              </select>
+                            </label>
+                            <button type="button" data-cart-remove="${escapeHtml(item.id)}">Remove</button>
+                            <button type="button" data-buy-now="${escapeHtml(item.id)}">Buy this now</button>
+                          </div>
+                        </article>
+                      `;
+                    }
+                  )
+                  .join("")
+              : `<div class="cart-empty-state"><strong>No items added yet.</strong><span>Add products to continue checkout.</span></div>`
+          }
+        </div>
+        <aside class="cart-price-panel">
+          <h4>Price Details</h4>
+          <div><span>MRP total</span><b>${rupees(mrpTotal || subtotal)}</b></div>
+          <div><span>Discount</span><b class="stock-left">-${rupees(discount)}</b></div>
+          <div><span>Delivery charge</span><b>${freeDelivery.eligible ? "Free" : rupees(freeDelivery.customerDeliveryChargePaise)}</b></div>
+          <div class="cart-total-row"><span>Total Amount</span><strong>${rupees(customerPaid)}</strong></div>
+          ${discount ? `<p class="cart-savings">You saved ${rupees(discount)} on this order.</p>` : ""}
+          <button type="button" data-checkout ${canCheckout ? "" : "disabled"}>${showCheckout ? "Update checkout" : "Proceed to checkout"}</button>
+          <p class="cart-message" data-cart-message hidden></p>
+          ${showCheckout ? renderCheckoutPanel(cart) : ""}
+        </aside>
+      </div>
     `;
   });
 }
@@ -524,6 +570,8 @@ function addProductToCart(productId) {
       sellerName: product.sellerName,
       sku: product.sku,
       title: product.title,
+      image: product.image || product.images?.[0] || "",
+      mrpPaise: product.mrpPaise || product.pricePaise,
       pricePaise: product.pricePaise,
       unitLabel: product.unitLabel || "1 pc",
       codEnabled: product.codEnabled !== false,
@@ -943,6 +991,76 @@ function openCustomerCategoryPage(category) {
   target.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+function customerOrderPrimaryItem(order = {}) {
+  return (order.items || [])[0] || {};
+}
+
+function customerOrderAmount(order = {}) {
+  return order.customerPaid || order.finance?.totalPaise || order.finance?.customerPaidPaise || 0;
+}
+
+function customerOrderStatusLabel(status = "placed") {
+  return String(status || "placed").replaceAll("_", " ");
+}
+
+function customerOrderTimeline(order = {}) {
+  const status = String(order.status || "placed");
+  const statusIndex = {
+    placed: 0,
+    pending: 0,
+    accepted: 1,
+    confirmed: 1,
+    packed: 2,
+    shipped: 3,
+    out_for_delivery: 4,
+    delivered: 5,
+    cancelled: 6,
+    returned: 6,
+  };
+  const activeIndex = statusIndex[status] ?? 0;
+  const steps =
+    status === "cancelled"
+      ? ["Order placed", "Cancelled"]
+      : status === "returned"
+        ? ["Order placed", "Shipped", "Returned"]
+        : ["Order placed", "Seller accepted", "Packed", "Shipped", "Out for delivery", "Delivered"];
+  return steps
+    .map((label, index) => {
+      const done = status === "cancelled" || status === "returned" ? index <= steps.length - 1 : index <= activeIndex;
+      const active = status === "cancelled" || status === "returned" ? index === steps.length - 1 : index === activeIndex;
+      return `
+        <li class="${done ? "done" : ""} ${active ? "active" : ""}">
+          <span></span>
+          <strong>${escapeHtml(label)}</strong>
+          <small>${active ? new Date(order.updatedAt || order.createdAt || Date.now()).toLocaleDateString() : ""}</small>
+        </li>
+      `;
+    })
+    .join("");
+}
+
+function renderCustomerOrderCard(order) {
+  const item = customerOrderPrimaryItem(order);
+  const status = customerOrderStatusLabel(order.status);
+  return `
+    <article class="customer-order-card" data-customer-order-row="${escapeHtml(order.orderId)}">
+      <div class="customer-order-product">
+        <div class="customer-order-thumb">${escapeHtml((item.title || item.name || "P").charAt(0))}</div>
+        <div>
+          <strong>${escapeHtml(item.title || item.name || "Product")}</strong>
+          <small>${escapeHtml(order.sellerName || "Axzen seller")} | Qty ${escapeHtml(item.quantity || item.qty || 1)}</small>
+          <b>${rupees(customerOrderAmount(order))}</b>
+        </div>
+      </div>
+      <ol class="customer-order-timeline mini">${customerOrderTimeline(order)}</ol>
+      <div class="customer-order-card-meta">
+        <span class="status-badge ${escapeHtml(String(order.status || "placed").replaceAll("_", "-"))}">${escapeHtml(status)}</span>
+        <small>${escapeHtml(order.awbNumber || order.trackingId || order.trackingNumber || "Tracking will update after shipment")}</small>
+      </div>
+    </article>
+  `;
+}
+
 async function openCustomerOrdersView() {
   const token = localStorage.getItem("axzenToken");
   if (!token || localStorage.getItem("axzenRole") !== "customer") {
@@ -974,25 +1092,7 @@ async function openCustomerOrdersView() {
       <div class="customer-product-detail wide">
         <p class="eyebrow">My orders</p>
         <h2>Order history</h2>
-        ${
-          orders.length
-            ? `<div class="customer-order-history">
-                ${orders
-                  .map((order) => {
-                    const statusDate = order.deliveredAt || order.cancelledAt || order.updatedAt || order.createdAt;
-                    return `
-                      <button type="button" data-customer-order-row="${escapeHtml(order.orderId)}">
-                        <strong>${escapeHtml(order.orderId)}</strong>
-                        <span>${escapeHtml(order.sellerName || "Axzen seller")}</span>
-                        <small>${escapeHtml((order.status || "placed").replaceAll("_", " "))} - ${new Date(statusDate).toLocaleDateString()}</small>
-                        <b>${rupees(order.customerPaid || order.finance?.totalPaise || 0)}</b>
-                      </button>
-                    `;
-                  })
-                  .join("")}
-              </div>`
-            : `<p class="order-invoice-empty">No orders yet.</p>`
-        }
+        ${orders.length ? `<div class="customer-order-history">${orders.map(renderCustomerOrderCard).join("")}</div>` : `<p class="order-invoice-empty">No orders yet.</p>`}
       </div>
     `;
   } catch (error) {
@@ -1003,36 +1103,64 @@ async function openCustomerOrdersView() {
 function openCustomerOrderDetails(orderId) {
   const order = customerOrdersCache.find((item) => String(item.orderId) === String(orderId));
   if (!order) return;
-  const statusDate = order.deliveredAt || order.cancelledAt || order.updatedAt || order.createdAt;
   const items = order.items || [];
+  const item = customerOrderPrimaryItem(order);
+  const shipping = order.shippingAddress || {};
+  const productTotal = order.productTotal || order.finance?.productTotalPaise || order.finance?.subtotalPaise || 0;
+  const deliveryCharge = order.deliveryCharge || order.finance?.deliveryChargePaise || order.finance?.deliveryFeePaise || 0;
+  const tracking = order.awbNumber || order.trackingId || order.trackingNumber || "";
   const target = document.querySelector("[data-customer-orders-modal] article");
   if (!target) return;
   target.innerHTML = `
     <button type="button" data-close-customer-orders>Close</button>
-    <button type="button" class="secondary-button" data-back-customer-orders>Back to orders</button>
-    <div class="customer-product-detail wide">
-      <p class="eyebrow">Order details</p>
-      <h2>${escapeHtml(order.orderId)}</h2>
-      <div class="report-detail-grid">
-        <button class="seller-profile-chip" type="button"><span>Status</span><strong>${escapeHtml((order.status || "placed").replaceAll("_", " "))}</strong></button>
-        <button class="seller-profile-chip" type="button"><span>Status date</span><strong>${new Date(statusDate).toLocaleDateString()}</strong></button>
-        <button class="seller-profile-chip" type="button"><span>Seller</span><strong>${escapeHtml(order.sellerName || "Axzen seller")}</strong></button>
-        <button class="seller-profile-chip" type="button"><span>Total</span><strong>${rupees(order.customerPaid || order.finance?.totalPaise || 0)}</strong></button>
-      </div>
-      <div class="customer-order-history">
+    <div class="customer-order-detail wide">
+      <button type="button" class="secondary-button" data-back-customer-orders>Back to orders</button>
+      <section class="customer-order-main-card">
+        <div class="customer-order-product large">
+          <div class="customer-order-thumb">${escapeHtml((item.title || item.name || "P").charAt(0))}</div>
+          <div>
+            <p class="eyebrow">Order ${escapeHtml(order.orderId)}</p>
+            <h2>${escapeHtml(item.title || item.name || "Product")}</h2>
+            <p>${escapeHtml(order.sellerName || "Axzen seller")} | ${escapeHtml(item.sku || "SKU")} | Qty ${escapeHtml(item.quantity || item.qty || 1)}</p>
+            <strong>${rupees(customerOrderAmount(order))}</strong>
+          </div>
+        </div>
+        <ol class="customer-order-timeline">${customerOrderTimeline(order)}</ol>
+        <div class="customer-order-actions">
+          ${order.trackingUrl ? `<a href="${escapeHtml(order.trackingUrl)}" target="_blank" rel="noopener noreferrer">Track shipment</a>` : `<span>Tracking updates after courier pickup.</span>`}
+          <button type="button" data-print-invoice="${escapeHtml(order.orderId)}">Invoice</button>
+          <button type="button" data-share-order="${escapeHtml(order.orderId)}">Send order details</button>
+        </div>
+      </section>
+      <aside class="customer-order-side">
+        <article>
+          <h3>Delivery details</h3>
+          <p>${escapeHtml([shipping.fullName, shipping.phone].filter(Boolean).join(" | ") || "Customer")}</p>
+          <p>${escapeHtml([shipping.address, shipping.city, shipping.state, shipping.pincode].filter(Boolean).join(", ") || "Address saved with order")}</p>
+          <small>${tracking ? `AWB / Tracking: ${tracking}` : "AWB will appear after shipment."}</small>
+        </article>
+        <article>
+          <h3>Price details</h3>
+          <div><span>Product total</span><b>${rupees(productTotal || customerOrderAmount(order))}</b></div>
+          <div><span>Delivery charge</span><b>${rupees(deliveryCharge)}</b></div>
+          <div><span>Payment</span><b>${escapeHtml(order.paymentMethod || "COD / Online")}</b></div>
+          <div class="cart-total-row"><span>Total amount</span><strong>${rupees(customerOrderAmount(order))}</strong></div>
+        </article>
+      </aside>
+      <section class="customer-order-items">
+        <h3>Items in this order</h3>
         ${items
           .map(
-            (item) => `
-              <button type="button">
-                <strong>${escapeHtml(item.title || item.name || "Product")}</strong>
-                <span>Qty ${escapeHtml(item.quantity || item.qty || 1)}</span>
-                <small>${escapeHtml(item.sku || "")}</small>
-                <b>${rupees(item.pricePaise || item.price || 0)}</b>
-              </button>
+            (entry) => `
+              <div>
+                <strong>${escapeHtml(entry.title || entry.name || "Product")}</strong>
+                <span>Qty ${escapeHtml(entry.quantity || entry.qty || 1)}</span>
+                <b>${rupees(entry.pricePaise || entry.price || 0)}</b>
+              </div>
             `
           )
           .join("")}
-      </div>
+      </section>
     </div>
   `;
 }
@@ -2532,6 +2660,24 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const closeCartButton = event.target.closest("[data-close-cart]");
+  if (closeCartButton) {
+    const cart = document.querySelector("#cart");
+    if (cart) cart.hidden = true;
+    return;
+  }
+
+  const buyNowButton = event.target.closest("[data-buy-now]");
+  if (buyNowButton) {
+    const cart = getCustomerCart();
+    const item = cart.find((entry) => String(entry.id) === String(buyNowButton.dataset.buyNow));
+    if (item) {
+      saveCustomerCart([item]);
+      renderCartSummary(true);
+    }
+    return;
+  }
+
   const checkoutButton = event.target.closest("[data-checkout]");
   if (checkoutButton) {
     renderCartSummary(true);
@@ -2630,6 +2776,22 @@ document.addEventListener("click", async (event) => {
   const customerOrderRow = event.target.closest("[data-customer-order-row]");
   if (customerOrderRow) {
     openCustomerOrderDetails(customerOrderRow.dataset.customerOrderRow);
+    return;
+  }
+
+  const shareOrder = event.target.closest("[data-share-order]");
+  if (shareOrder) {
+    const order = customerOrdersCache.find((item) => String(item.orderId) === String(shareOrder.dataset.shareOrder));
+    const text = `Axzen order ${order?.orderId || shareOrder.dataset.shareOrder} - ${customerOrderStatusLabel(order?.status || "placed")} - ${rupees(customerOrderAmount(order || {}))}`;
+    try {
+      if (navigator.share) await navigator.share({ title: "Axzen order details", text });
+      else {
+        await navigator.clipboard.writeText(text);
+        setCartMessage("Order details copied.");
+      }
+    } catch {
+      setCartMessage("Order share cancelled.");
+    }
     return;
   }
 
@@ -2998,6 +3160,17 @@ document.addEventListener("input", (event) => {
 
   if (event.target.closest("[data-seller-order-search]")) {
     renderSellerOrdersRows();
+  }
+
+  const cartQty = event.target.closest("[data-cart-qty]");
+  if (cartQty) {
+    const cart = getCustomerCart();
+    const item = cart.find((entry) => String(entry.id) === String(cartQty.dataset.cartQty));
+    if (item) {
+      item.quantity = Math.max(1, Math.min(Number(cartQty.value) || 1, 10));
+      saveCustomerCart(cart);
+      renderCartSummary(false);
+    }
   }
 
   const customerSellerSearch = event.target.closest("[data-customer-seller-search]");
