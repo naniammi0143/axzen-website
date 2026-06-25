@@ -108,6 +108,7 @@ function setLoginMessage(form, message, isError = false) {
 
 function openLoginArea() {
   if (!loginSection) return;
+  closeCustomerPopovers();
   loginSection.hidden = false;
   if (loginSection.classList.contains("customer-login-section")) {
     document.body.classList.add("customer-login-open");
@@ -121,6 +122,18 @@ function closeLoginArea() {
   if (!loginSection?.classList.contains("customer-login-section")) return;
   loginSection.hidden = true;
   document.body.classList.remove("customer-login-open");
+}
+
+function closeCustomerPopovers(except = "") {
+  if (except !== "profile" && customerProfilePopover) customerProfilePopover.hidden = true;
+  if (except !== "notifications") {
+    const notificationPanel = document.querySelector("[data-customer-notification-panel]");
+    if (notificationPanel) notificationPanel.hidden = true;
+  }
+  if (except !== "cart") {
+    const cart = document.querySelector("#cart");
+    if (cart) cart.hidden = true;
+  }
 }
 
 function updateLoginNavigation(isLoggedIn) {
@@ -749,20 +762,27 @@ function renderStorefrontProduct(product) {
   const stock = Number(product.stock) || 0;
   return `
     <article class="commerce-product" data-product-card="${escapeHtml(product.id)}">
-      ${
-        image
-          ? `<img class="commerce-product-image commerce-product-photo" src="${escapeHtml(image)}" alt="${escapeHtml(title)}" loading="lazy">`
-          : `<div class="commerce-product-image">${escapeHtml(category)}</div>`
-      }
-      <h3>${escapeHtml(title)}</h3>
-      <p><button class="seller-hash-link" type="button" data-open-seller="${escapeHtml(product.sellerId)}">#${escapeHtml(sellerName)}</button> | ${escapeHtml(category)}</p>
-      <div class="customer-price-row">
-        ${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}
-        <strong>${escapeHtml(product.price || "Rs. 0")}</strong>
+      <div class="commerce-product-media">
+        <span class="product-popular-badge">Popular</span>
+        ${
+          image
+            ? `<img class="commerce-product-image commerce-product-photo" src="${escapeHtml(image)}" alt="${escapeHtml(title)}" loading="lazy">`
+            : `<div class="commerce-product-image">${escapeHtml(category)}</div>`
+        }
       </div>
-      <small>${escapeHtml(product.unitLabel || "1 pc")} | ${rating} rating (${Number(product.ratingCount) || 0})</small>
-      <small class="${stock > 0 ? "stock-left" : "stock-out"}">${stock > 0 ? `${Math.min(stock, 5)} items left` : "Currently not available"}</small>
-      <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"}>Add to cart</button>
+      <div class="commerce-product-body">
+        <button class="product-wishlist" type="button" aria-label="Add ${escapeHtml(title)} to wishlist">♡</button>
+        <h3>${escapeHtml(title)}</h3>
+        <p class="commerce-product-category">${escapeHtml(category)}</p>
+        <p class="commerce-product-seller"><button class="seller-hash-link" type="button" data-open-seller="${escapeHtml(product.sellerId)}">#${escapeHtml(sellerName)}</button></p>
+        <div class="customer-price-row">
+          ${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}
+          <strong>${escapeHtml(product.price || "Rs. 0")}</strong>
+        </div>
+        <small>${escapeHtml(product.unitLabel || "1 pc")} | ${rating} rating (${Number(product.ratingCount) || 0})</small>
+        <small class="${stock > 0 ? "stock-left" : "stock-out"}">${stock > 0 ? `${Math.min(stock, 5)} items left` : "Currently not available"}</small>
+        <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"}>Add to cart</button>
+      </div>
     </article>
   `;
 }
@@ -785,11 +805,18 @@ function getStorefrontSellers() {
 function renderCustomerCategories(products = storefrontProductsCache) {
   const rail = document.querySelector("[data-customer-category-rail]");
   if (!rail) return;
-  const configured = Array.isArray(customerAppConfig.categoryOrder) ? customerAppConfig.categoryOrder : [];
+  const baseCategories = ["Electronics", "Fashion", "Home & Living", "Beauty", "Sports", "Automotive"];
+  const configured = Array.isArray(customerAppConfig.categoryOrder) && customerAppConfig.categoryOrder.length ? customerAppConfig.categoryOrder : baseCategories;
   const detected = [...new Set(products.map((product) => product.category || "General").filter(Boolean))];
   const categories = ["All", ...new Set([...configured, ...detected])].slice(0, 12);
   rail.innerHTML = categories
-    .map((category, index) => `<button type="button" class="${index === 0 ? "active" : ""}" data-customer-category-pill="${escapeHtml(category)}">${escapeHtml(category)}</button>`)
+    .map(
+      (category, index) => `
+        <button type="button" class="${index === 0 ? "active" : ""}" data-customer-category-pill="${escapeHtml(category)}">
+          <span class="category-chip-icon">${escapeHtml(category.charAt(0).toUpperCase())}</span>${escapeHtml(category)}
+        </button>
+      `
+    )
     .join("");
 }
 
@@ -861,7 +888,7 @@ function renderCategorySections(products = storefrontProductsCache) {
         <article class="customer-category-block" data-category-block="${escapeHtml(category)}">
           <header>
             <h2>${escapeHtml(category)}</h2>
-            <button type="button" data-open-category="${escapeHtml(category)}">More</button>
+            <button type="button" data-open-category="${escapeHtml(category)}">View all <span aria-hidden="true">></span></button>
           </header>
           <div class="commerce-products category-products-row">
             ${categoryProducts.slice(0, 5).map(renderStorefrontProduct).join("")}
@@ -927,6 +954,7 @@ function openCustomerSellerPage(sellerId) {
 async function openCustomerFollowsView() {
   const target = document.querySelector("[data-customer-main]");
   if (!target) return;
+  closeCustomerPopovers();
   let follows = getFollowedSellers();
   const token = localStorage.getItem("axzenToken");
   if (token && localStorage.getItem("axzenRole") === "customer") {
@@ -1067,6 +1095,7 @@ async function openCustomerOrdersView() {
     openLoginArea();
     return;
   }
+  closeCustomerPopovers();
   document.querySelector("[data-customer-orders-modal]")?.remove();
   document.body.insertAdjacentHTML(
     "beforeend",
@@ -1168,31 +1197,63 @@ function openCustomerOrderDetails(orderId) {
 function openCustomerProductModal(productId) {
   const product = storefrontProductsCache.find((item) => String(item.id) === String(productId));
   if (!product) return;
+  closeCustomerPopovers();
   document.querySelector("[data-customer-product-modal]")?.remove();
   const images = product.images?.length ? product.images : [product.image].filter(Boolean);
   const mrp = Number(product.mrpPaise) > Number(product.pricePaise) ? product.mrp || rupees(product.mrpPaise) : "";
   const stock = Number(product.stock) || 0;
+  const productTitle = product.title || "Product";
+  const sellerName = product.sellerName || "Seller";
+  const fallbackImage = `<div class="commerce-product-image">${escapeHtml(product.category || "Product")}</div>`;
+  const mainImage = images[0]
+    ? `<img src="${escapeHtml(images[0])}" alt="${escapeHtml(productTitle)}">`
+    : fallbackImage;
   document.body.insertAdjacentHTML(
     "beforeend",
     `<aside class="customer-product-modal" data-customer-product-modal>
       <article>
         <button type="button" data-close-customer-product>Close</button>
         <div class="customer-product-gallery">
-          ${
-            images.length
-              ? images.slice(0, 5).map((image) => `<img src="${escapeHtml(image)}" alt="${escapeHtml(product.title)}">`).join("")
-              : `<div class="commerce-product-image">${escapeHtml(product.category || "Product")}</div>`
-          }
+          <div class="customer-product-thumbs">
+            ${
+              images.length
+                ? images
+                    .slice(0, 4)
+                    .map((image, index) => `<button type="button" class="${index === 0 ? "active" : ""}"><img src="${escapeHtml(image)}" alt="${escapeHtml(productTitle)} thumbnail ${index + 1}"></button>`)
+                    .join("")
+                : `<button type="button" class="active">${fallbackImage}</button>`
+            }
+            ${images.length > 4 ? `<span>+${images.length - 4}</span>` : ""}
+          </div>
+          <div class="customer-product-main-image">
+            <span class="product-popular-badge">Popular</span>
+            <button class="product-wishlist" type="button" aria-label="Add ${escapeHtml(productTitle)} to wishlist">♡</button>
+            ${mainImage}
+          </div>
         </div>
         <div class="customer-product-detail">
-          <p class="eyebrow">${escapeHtml(product.sellerName || "Seller")}</p>
-          <h2>${escapeHtml(product.title || "Product")}</h2>
+          <p class="customer-product-seller-badge">${escapeHtml(sellerName)} <span>✓</span></p>
+          <h2>${escapeHtml(productTitle)}</h2>
           <p>${escapeHtml(product.description || "Seller verified product on Axzen.")}</p>
           <div class="customer-price-row">${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}<strong>${escapeHtml(product.price || "Rs. 0")}</strong></div>
-          <p>${escapeHtml(product.unitLabel || "1 pc")} | ${Number(product.ratingAverage || 0).toFixed(1)} rating (${Number(product.ratingCount) || 0})</p>
-          <p class="${stock > 0 ? "stock-left" : "stock-out"}">${stock > 0 ? `${Math.min(stock, 5)} items left` : "Currently not available"}</p>
-          <button type="button" class="secondary-button" data-share-product="${escapeHtml(product.id)}">Share product</button>
-          <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"}>Add to cart</button>
+          <p class="customer-product-rating">${escapeHtml(product.unitLabel || "1 pc")} | ${Number(product.ratingAverage || 0).toFixed(1)} rating (${Number(product.ratingCount) || 0}) <span>(0 Reviews)</span></p>
+          <p class="${stock > 0 ? "stock-left" : "stock-out"} customer-product-stock">${stock > 0 ? `${Math.min(stock, 5)} items left` : "Currently not available"}</p>
+          <div class="customer-product-trusted">
+            <strong>Trusted Seller</strong>
+            <span>This product is quality-checked and shipped by ${escapeHtml(sellerName)}.</span>
+          </div>
+          <div class="customer-product-actions">
+            <button type="button" class="secondary-button" data-share-product="${escapeHtml(product.id)}">Share product</button>
+            <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"}>Add to cart</button>
+          </div>
+        </div>
+        <div class="customer-product-trust-row">
+          <span>100% Original</span>
+          <span>Secure Payment</span>
+          <span>7 Days Return</span>
+          <span>Pan India Delivery</span>
+          <span>Best Price</span>
+          <span>24x7 Support</span>
         </div>
       </article>
     </aside>`
@@ -2644,6 +2705,25 @@ document.addEventListener("click", async (event) => {
   ) {
     customerProfilePopover.hidden = true;
   }
+  const customerNotificationPanel = document.querySelector("[data-customer-notification-panel]");
+  if (
+    customerNotificationPanel &&
+    !customerNotificationPanel.hidden &&
+    !event.target.closest("[data-customer-notification-bell]") &&
+    !event.target.closest("[data-customer-notification-panel]")
+  ) {
+    customerNotificationPanel.hidden = true;
+  }
+  const customerCart = document.querySelector("#cart");
+  if (
+    customerCart &&
+    !customerCart.hidden &&
+    !event.target.closest("#cart") &&
+    !event.target.closest("a[href='#cart']") &&
+    !event.target.closest("[data-add-cart]")
+  ) {
+    customerCart.hidden = true;
+  }
 
   const addCartButton = event.target.closest("[data-add-cart]");
   if (addCartButton) {
@@ -2662,8 +2742,7 @@ document.addEventListener("click", async (event) => {
 
   const closeCartButton = event.target.closest("[data-close-cart]");
   if (closeCartButton) {
-    const cart = document.querySelector("#cart");
-    if (cart) cart.hidden = true;
+    closeCustomerPopovers();
     return;
   }
 
@@ -2683,6 +2762,7 @@ document.addEventListener("click", async (event) => {
     renderCartSummary(true);
     if (!(localStorage.getItem("axzenToken") && localStorage.getItem("axzenRole") === "customer")) {
       setCartMessage("Login with phone OTP to continue checkout.", true);
+      closeCustomerPopovers();
       openLoginArea();
     }
     return;
@@ -2690,7 +2770,9 @@ document.addEventListener("click", async (event) => {
 
   const customerProfileButton = event.target.closest("[data-customer-profile-menu]");
   if (customerProfileButton) {
-    if (customerProfilePopover) customerProfilePopover.hidden = !customerProfilePopover.hidden;
+    const willOpen = customerProfilePopover?.hidden !== false;
+    closeCustomerPopovers(willOpen ? "profile" : "");
+    if (customerProfilePopover) customerProfilePopover.hidden = !willOpen;
     return;
   }
 
@@ -2705,8 +2787,8 @@ document.addEventListener("click", async (event) => {
   const customerLoginLink = event.target.closest("a[href='#login']");
   if (customerLoginLink && loginSection?.classList.contains("customer-login-section")) {
     event.preventDefault();
+    closeCustomerPopovers();
     openLoginArea();
-    if (customerProfilePopover) customerProfilePopover.hidden = true;
     return;
   }
 
@@ -2737,21 +2819,21 @@ document.addEventListener("click", async (event) => {
   if (customerCartLink && document.body.classList.contains("storefront-page")) {
     event.preventDefault();
     const cart = document.querySelector("#cart");
+    const willOpen = cart?.hidden !== false;
+    closeCustomerPopovers(willOpen ? "cart" : "");
     if (cart) {
-      cart.hidden = !cart.hidden;
-      if (!cart.hidden) {
+      cart.hidden = !willOpen;
+      if (willOpen) {
         renderCartSummary(false);
         cart.scrollIntoView({ behavior: "smooth", block: "nearest" });
       }
     }
-    if (customerProfilePopover) customerProfilePopover.hidden = true;
     return;
   }
 
   const customerOrdersLink = event.target.closest("a[href='#orders']");
   if (customerOrdersLink && document.body.classList.contains("storefront-page")) {
     event.preventDefault();
-    if (customerProfilePopover) customerProfilePopover.hidden = true;
     await openCustomerOrdersView();
     return;
   }
@@ -2824,9 +2906,11 @@ document.addEventListener("click", async (event) => {
   const customerNotificationBell = event.target.closest("[data-customer-notification-bell]");
   if (customerNotificationBell) {
     const panel = document.querySelector("[data-customer-notification-panel]");
+    const willOpen = panel?.hidden !== false;
+    closeCustomerPopovers(willOpen ? "notifications" : "");
     if (panel) {
-      panel.hidden = !panel.hidden;
-      if (!panel.hidden) {
+      panel.hidden = !willOpen;
+      if (willOpen) {
         await fetch("/api/customer/notifications/read", {
           method: "POST",
           headers: { Authorization: `Bearer ${localStorage.getItem("axzenToken") || ""}` },
@@ -2845,7 +2929,7 @@ document.addEventListener("click", async (event) => {
   }
 
   const productCard = event.target.closest("[data-product-card]");
-  if (productCard && !event.target.closest("[data-add-cart]") && !event.target.closest("[data-open-seller]")) {
+  if (productCard && !event.target.closest("[data-add-cart]") && !event.target.closest("[data-open-seller]") && !event.target.closest(".product-wishlist")) {
     openCustomerProductModal(productCard.dataset.productCard);
     saveRecentProduct(productCard.dataset.productCard);
     return;
