@@ -11,6 +11,7 @@ const User = require("../models/User");
 const asyncHandler = require("../utils/asyncHandler");
 const { success } = require("../utils/apiResponse");
 const { formatRupees, getPaymentChargePercent } = require("../utils/money");
+const { notifyFollowersForProduct } = require("./notificationController");
 const { hashPassword } = require("../utils/password");
 
 const orderStatuses = ["pending", "confirmed", "packed", "shipped", "out_for_delivery", "delivered", "cancelled", "returned"];
@@ -543,8 +544,19 @@ const updateProduct = asyncHandler(async (req, res) => {
 });
 
 const approveProduct = asyncHandler(async (req, res) => {
-  req.body.status = "approved";
-  return updateProduct(req, res);
+  const product = await Product.findByIdAndUpdate(req.params.id, { status: "approved" }, { new: true, runValidators: true });
+  if (!product) {
+    res.status(404).json({ ok: false, message: "Product not found." });
+    return;
+  }
+  const seller = await Seller.findById(product.sellerId).select("_id businessName").lean();
+  if (seller) {
+    notifyFollowersForProduct(seller, product).catch((error) => {
+      console.warn("Unable to notify product followers:", error.message);
+    });
+  }
+  await audit(req, "product.approve", "product", req.params.id, { status: "approved" });
+  success(res, { product });
 });
 
 const rejectProduct = asyncHandler(async (req, res) => {

@@ -48,7 +48,12 @@
       <a href="#orders">Orders</a>
       <a href="#follows" data-customer-follows-link>Follows</a>
       <a href="#cart">Cart</a>
+      <button class="customer-notification-button" type="button" data-customer-notification-bell aria-label="Notifications">Alerts<span data-customer-notification-count>0</span></button>
       <button class="customer-profile-trigger" type="button" data-customer-profile-menu aria-label="Customer options">...</button>
+      <div class="customer-notification-menu" data-customer-notification-panel hidden>
+        <strong>Notifications</strong>
+        <div data-customer-notification-list><p>No notifications yet.</p></div>
+      </div>
       <div class="customer-profile-menu" data-customer-profile-popover hidden>
         <a href="#dashboard" data-customer-profile-link>My profile</a>
         <a href="#orders">My orders</a>
@@ -188,7 +193,7 @@
       </div>
     </section>
 
-    <section class="section login-section customer-login-section" id="login">
+    <section class="section login-section customer-login-section" id="login" hidden>
       <div class="customer-login-copy">
         <p class="eyebrow">Customer account</p>
         <h2>Login once. Track every order from one place.</h2>
@@ -200,6 +205,7 @@
         </div>
       </div>
       <article class="login-card compact-login">
+        <button class="customer-login-close" type="button" data-close-customer-login aria-label="Close login">Close</button>
         <div class="login-card-heading">
           <span class="login-icon">C</span>
           <div>

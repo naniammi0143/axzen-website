@@ -24,6 +24,14 @@ const {
 } = require("./controllers/orderController");
 const { createSellerProduct, listProducts, listSellerProducts, updateSellerInventory } = require("./controllers/productController");
 const { financeSummary, publicCustomerAppConfig } = require("./controllers/adminController");
+const {
+  followSeller,
+  listCustomerFollows,
+  listCustomerNotifications,
+  markCustomerNotificationsRead,
+  sellerFollowerSummary,
+  sendSellerFollowerNotification,
+} = require("./controllers/notificationController");
 const { errorHandler, notFound } = require("./middleware/errorHandler");
 const { authenticate, authorize } = require("./middleware/auth");
 const { multipartForm } = require("./middleware/multipartUpload");
@@ -93,6 +101,10 @@ app.get("/api/customer/catalog", listProducts);
 app.get("/api/customer/app-config", publicCustomerAppConfig);
 app.post("/api/customer/cart", authenticate, authorize("customer"), saveCart);
 app.post("/api/customer/orders", authenticate, authorize("customer"), createOrder);
+app.get("/api/customer/follows", authenticate, authorize("customer"), listCustomerFollows);
+app.post("/api/customer/follows/:sellerId", authenticate, authorize("customer"), followSeller);
+app.get("/api/customer/notifications", authenticate, authorize("customer"), listCustomerNotifications);
+app.post("/api/customer/notifications/read", authenticate, authorize("customer"), markCustomerNotificationsRead);
 app.get("/api/seller/orders", authenticate, authorize("seller"), listSellerOrders);
 app.post("/api/seller/orders/:id/accept", authenticate, authorize("seller"), acceptSellerOrder);
 app.post("/api/seller/orders/:id/reject", authenticate, authorize("seller"), rejectSellerOrder);
@@ -101,6 +113,8 @@ app.post("/api/seller/orders/:id/pack-and-ship", authenticate, authorize("seller
 app.get("/api/seller/products", authenticate, authorize("seller"), listSellerProducts);
 app.post("/api/seller/products", authenticate, authorize("seller"), multipartForm({ optional: true, maxBytes: 30 * 1024 * 1024 }), createSellerProduct);
 app.patch("/api/seller/products/:id/inventory", authenticate, authorize("seller"), updateSellerInventory);
+app.get("/api/seller/followers", authenticate, authorize("seller"), sellerFollowerSummary);
+app.post("/api/seller/followers/notify", authenticate, authorize("seller"), sendSellerFollowerNotification);
 app.get("/api/seller/support-tickets", authenticate, authorize("seller"), listSellerTickets);
 app.post("/api/seller/support-tickets", authenticate, authorize("seller"), createSellerTicket);
 app.get("/api/admin/helpdesk", authenticate, authorize("admin", "superadmin", "support"), listAdminTickets);

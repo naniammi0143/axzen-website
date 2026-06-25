@@ -2622,6 +2622,63 @@ h1 {
   font-weight: 900;
 }
 
+.customer-notification-button {
+  position: relative;
+  min-height: 38px;
+  padding: 0 12px;
+  color: #0f172a;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  font-weight: 900;
+}
+
+.customer-notification-button span {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 20px;
+  min-height: 20px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: #dc2626;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.customer-notification-menu {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 56px;
+  z-index: 80;
+  width: min(360px, calc(100vw - 28px));
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.14);
+}
+
+.customer-notification-menu button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 10px;
+  text-align: left;
+  color: #0f172a;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+}
+
+.customer-notification-menu button.unread {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
 .commerce-band button,
 .category-row button,
 .store-tags span,
@@ -2877,6 +2934,16 @@ h1 {
   font-weight: 900;
 }
 
+.customer-seller-search input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 16px;
+  background: #fff;
+  border: 1px solid #dbe3ef;
+  border-radius: 16px;
+  font-weight: 800;
+}
+
 .customer-product-modal {
   position: fixed;
   inset: 0;
@@ -3066,6 +3133,90 @@ h1 {
   grid-column: 1 / -1;
 }
 
+.storefront-page .customer-login-section[hidden] {
+  display: none !important;
+}
+
+.storefront-page .customer-login-section {
+  position: fixed;
+  inset: 0;
+  z-index: 180;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(320px, 420px);
+  gap: clamp(18px, 4vw, 54px);
+  align-items: center;
+  padding: clamp(18px, 5vw, 76px);
+  color: #0f172a;
+  background:
+    radial-gradient(circle at left, rgba(0, 113, 227, 0.2), transparent 34%),
+    rgba(245, 245, 247, 0.86);
+  backdrop-filter: blur(20px);
+}
+
+.customer-login-close {
+  justify-self: end;
+  min-height: 34px;
+  padding: 0 12px;
+  color: #0f172a;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  font-weight: 900;
+}
+
+.seller-follower-panel {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 14px;
+  margin-top: 16px;
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+}
+
+.seller-follower-panel strong {
+  display: block;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.seller-follower-panel form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.seller-follower-panel input {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid #dbe3ef;
+  border-radius: 14px;
+}
+
+.seller-follower-panel button {
+  min-height: 44px;
+  padding: 0 16px;
+  color: #fff;
+  background: #0071e3;
+  border: 0;
+  border-radius: 999px;
+  font-weight: 900;
+}
+
+.seller-follower-panel p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #15803d;
+  font-weight: 800;
+}
+
+.seller-follower-panel p.error {
+  color: #dc2626;
+}
+
 .admin-sidebar {
   color: #f5f5f7;
   background:
@@ -3246,7 +3397,21 @@ h1 {
     white-space: nowrap;
   }
 
+  .storefront-page .customer-login-section {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  .customer-notification-menu {
+    right: 8px;
+  }
+
   .customer-order-history button {
+    grid-template-columns: 1fr;
+  }
+
+  .seller-follower-panel,
+  .seller-follower-panel form {
     grid-template-columns: 1fr;
   }
 

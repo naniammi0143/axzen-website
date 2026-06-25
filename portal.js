@@ -51,6 +51,8 @@ let sellerSocket = null;
 let sellerNotificationAudio = null;
 let customerAppConfig = {};
 let storeRailTimer = null;
+let customerNotificationTimer = null;
+let sellerFollowerCount = 0;
 
 const CART_KEY = "axzenCustomerCart";
 const ADDRESS_KEY = "axzenCustomerAddress";
@@ -102,6 +104,23 @@ function setLoginMessage(form, message, isError = false) {
   messageElement.textContent = message;
   messageElement.classList.toggle("error", isError);
   messageElement.style.display = "block";
+}
+
+function openLoginArea() {
+  if (!loginSection) return;
+  loginSection.hidden = false;
+  if (loginSection.classList.contains("customer-login-section")) {
+    document.body.classList.add("customer-login-open");
+    loginSection.querySelector("input[name='phone']")?.focus();
+    return;
+  }
+  loginSection.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function closeLoginArea() {
+  if (!loginSection?.classList.contains("customer-login-section")) return;
+  loginSection.hidden = true;
+  document.body.classList.remove("customer-login-open");
 }
 
 function updateLoginNavigation(isLoggedIn) {
@@ -255,6 +274,63 @@ function saveRecentProduct(productId) {
   });
   writeJsonArray(CUSTOMER_RECENT_KEY, recent.slice(0, 12));
   renderRecentProducts();
+}
+
+function renderCustomerNotificationPanel(notifications = [], unreadCount = 0) {
+  const count = document.querySelector("[data-customer-notification-count]");
+  const list = document.querySelector("[data-customer-notification-list]");
+  if (count) {
+    count.textContent = String(unreadCount || 0);
+    count.hidden = !unreadCount;
+  }
+  if (!list) return;
+  list.innerHTML = notifications.length
+    ? notifications
+        .slice(0, 12)
+        .map(
+          (item) => `
+            <button type="button" data-customer-notification-link="${escapeHtml(item.link || "")}" class="${item.isRead ? "" : "unread"}">
+              <strong>${escapeHtml(item.title)}</strong>
+              <span>${escapeHtml(item.message || "")}</span>
+              <small>${new Date(item.createdAt).toLocaleString()}</small>
+            </button>
+          `
+        )
+        .join("")
+    : "<p>No notifications yet.</p>";
+}
+
+async function loadCustomerNotifications(showDesktop = false) {
+  if (localStorage.getItem("axzenRole") !== "customer") return;
+  const token = localStorage.getItem("axzenToken");
+  if (!token) return;
+  try {
+    const response = await fetch("/api/customer/notifications", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Unable to load notifications.");
+    renderCustomerNotificationPanel(result.notifications || [], result.unreadCount || 0);
+    const latest = (result.notifications || []).find((item) => !item.isRead);
+    if (showDesktop && latest && "Notification" in window && Notification.permission === "granted") {
+      new Notification(latest.title, { body: latest.message || "New Axzen update" });
+    }
+  } catch (error) {
+    console.warn(error.message || "Customer notifications unavailable.");
+  }
+}
+
+function startCustomerNotificationPolling() {
+  window.clearInterval(customerNotificationTimer);
+  if (localStorage.getItem("axzenRole") !== "customer") return;
+  if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {});
+  loadCustomerNotifications(false);
+  customerNotificationTimer = window.setInterval(() => loadCustomerNotifications(true), 30000);
+}
+
+function stopCustomerNotificationPolling() {
+  window.clearInterval(customerNotificationTimer);
+  customerNotificationTimer = null;
 }
 
 function getCartTotalPaise(cart = getCustomerCart()) {
@@ -791,16 +867,31 @@ function openCustomerSellerPage(sellerId) {
         </div>
         <button type="button" data-follow-seller="${escapeHtml(seller.id)}">${isFollowing ? "Following" : "Follow"}</button>
       </header>
+      <div class="customer-seller-search">
+        <input type="search" data-customer-seller-search="${escapeHtml(seller.id)}" placeholder="Search items in ${escapeHtml(seller.name)}">
+      </div>
       <div class="commerce-products">${seller.products.map(renderStorefrontProduct).join("")}</div>
     </section>
   `;
   target.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function openCustomerFollowsView() {
+async function openCustomerFollowsView() {
   const target = document.querySelector("[data-customer-main]");
   if (!target) return;
-  const follows = getFollowedSellers();
+  let follows = getFollowedSellers();
+  const token = localStorage.getItem("axzenToken");
+  if (token && localStorage.getItem("axzenRole") === "customer") {
+    try {
+      const response = await fetch("/api/customer/follows", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const result = await response.json();
+      if (response.ok) follows = result.follows || follows;
+    } catch {
+      // Local follows are still useful when network is unavailable.
+    }
+  }
   target.innerHTML = `
     <section class="customer-seller-page">
       <header>
@@ -855,7 +946,7 @@ function openCustomerCategoryPage(category) {
 async function openCustomerOrdersView() {
   const token = localStorage.getItem("axzenToken");
   if (!token || localStorage.getItem("axzenRole") !== "customer") {
-    loginSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+    openLoginArea();
     return;
   }
   document.querySelector("[data-customer-orders-modal]")?.remove();
@@ -972,11 +1063,15 @@ function openCustomerProductModal(productId) {
           <div class="customer-price-row">${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}<strong>${escapeHtml(product.price || "Rs. 0")}</strong></div>
           <p>${escapeHtml(product.unitLabel || "1 pc")} | ${Number(product.ratingAverage || 0).toFixed(1)} rating (${Number(product.ratingCount) || 0})</p>
           <p class="${stock > 0 ? "stock-left" : "stock-out"}">${stock > 0 ? `${Math.min(stock, 5)} items left` : "Currently not available"}</p>
+          <button type="button" class="secondary-button" data-share-product="${escapeHtml(product.id)}">Share product</button>
           <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"}>Add to cart</button>
         </div>
       </article>
     </aside>`
   );
+  const url = new URL(window.location.href);
+  url.searchParams.set("product", product.id);
+  history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
 async function loadStorefrontCatalog() {
@@ -996,6 +1091,16 @@ async function loadStorefrontCatalog() {
       renderStoreRail();
       renderCategorySections(result.products);
       renderRecentProducts();
+      const urlParams = new URLSearchParams(window.location.search);
+      const productId = urlParams.get("product");
+      const sellerId = urlParams.get("seller");
+      if (sellerId) openCustomerSellerPage(sellerId);
+      if (productId) {
+        window.setTimeout(() => {
+          openCustomerProductModal(productId);
+          saveRecentProduct(productId);
+        }, 100);
+      }
     }
   } catch (error) {
     console.warn(error.message || "Customer catalog unavailable.");
@@ -1170,6 +1275,18 @@ function renderSellerWorkspace(user = {}) {
       <div class="seller-agreement-summary">
         ${agreementLabels.map(([label, accepted]) => `<span class="${accepted ? "accepted" : ""}">${accepted ? "Yes" : "Pending"} - ${escapeHtml(label)}</span>`).join("")}
       </div>
+      <section class="seller-follower-panel">
+        <div>
+          <p class="eyebrow">Followers</p>
+          <strong data-seller-follower-count>${sellerFollowerCount}</strong>
+          <small>Customers following this seller page</small>
+        </div>
+        <form data-seller-follower-message>
+          <input name="message" maxlength="180" placeholder="Send offer/update to followers" required>
+          <button type="submit">Send notification</button>
+          <p data-seller-follower-message-status></p>
+        </form>
+      </section>
     </article>
     <section class="seller-module-grid">
       ${modules
@@ -1378,6 +1495,23 @@ async function loadSellerProducts() {
       message.textContent = error.message || "Unable to load products.";
       message.classList.add("error");
     }
+  }
+}
+
+async function loadSellerFollowerSummary() {
+  const countNode = document.querySelector("[data-seller-follower-count]");
+  if (!countNode || localStorage.getItem("axzenRole") !== "seller") return;
+  const token = localStorage.getItem("axzenToken");
+  try {
+    const response = await fetch("/api/seller/followers", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Unable to load followers.");
+    sellerFollowerCount = Number(result.followerCount) || 0;
+    countNode.textContent = sellerFollowerCount;
+  } catch (error) {
+    countNode.textContent = String(sellerFollowerCount || 0);
   }
 }
 
@@ -2102,9 +2236,12 @@ function renderDashboard(payload) {
   const { user, dashboard } = payload;
   updateSellerHeader(user);
   if (user.role !== "seller") stopSellerOrderPolling();
+  if (user.role === "customer") startCustomerNotificationPolling();
+  else stopCustomerNotificationPolling();
 
   if (loginSection) {
     loginSection.hidden = true;
+    if (loginSection.classList.contains("customer-login-section")) document.body.classList.remove("customer-login-open");
   }
   updateLoginNavigation(true);
 
@@ -2223,6 +2360,7 @@ function renderDashboard(payload) {
   if (user.role === "seller") {
     setSellerSection(getSellerSectionFromHash());
     loadSellerProducts();
+    loadSellerFollowerSummary();
     loadSellerTickets();
     requestSellerNotificationPermission();
     updateSellerNotificationBadge();
@@ -2399,7 +2537,7 @@ document.addEventListener("click", async (event) => {
     renderCartSummary(true);
     if (!(localStorage.getItem("axzenToken") && localStorage.getItem("axzenRole") === "customer")) {
       setCartMessage("Login with phone OTP to continue checkout.", true);
-      loginSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+      openLoginArea();
     }
     return;
   }
@@ -2418,10 +2556,26 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const customerLoginLink = event.target.closest("a[href='#login']");
+  if (customerLoginLink && loginSection?.classList.contains("customer-login-section")) {
+    event.preventDefault();
+    openLoginArea();
+    if (customerProfilePopover) customerProfilePopover.hidden = true;
+    return;
+  }
+
+  if (
+    event.target.closest("[data-close-customer-login]") ||
+    (event.target === loginSection && loginSection?.classList.contains("customer-login-section"))
+  ) {
+    closeLoginArea();
+    return;
+  }
+
   const customerProfileLink = event.target.closest("[data-customer-profile-link]");
   if (customerProfileLink) {
     if (!(localStorage.getItem("axzenToken") && localStorage.getItem("axzenRole") === "customer")) {
-      loginSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+      openLoginArea();
       if (customerProfilePopover) customerProfilePopover.hidden = true;
       return;
     }
@@ -2459,7 +2613,7 @@ document.addEventListener("click", async (event) => {
   const customerFollowsLink = event.target.closest("[data-customer-follows-link]");
   if (customerFollowsLink) {
     event.preventDefault();
-    openCustomerFollowsView();
+    await openCustomerFollowsView();
     return;
   }
 
@@ -2481,6 +2635,50 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-close-customer-product]") || event.target === document.querySelector("[data-customer-product-modal]")) {
     document.querySelector("[data-customer-product-modal]")?.remove();
+    const url = new URL(window.location.href);
+    url.searchParams.delete("product");
+    history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    return;
+  }
+
+  const shareProduct = event.target.closest("[data-share-product]");
+  if (shareProduct) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("product", shareProduct.dataset.shareProduct);
+    const shareUrl = url.toString();
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Axzen product", url: shareUrl });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        setCartMessage("Product link copied.");
+      }
+    } catch {
+      setCartMessage("Product share cancelled.");
+    }
+    return;
+  }
+
+  const customerNotificationBell = event.target.closest("[data-customer-notification-bell]");
+  if (customerNotificationBell) {
+    const panel = document.querySelector("[data-customer-notification-panel]");
+    if (panel) {
+      panel.hidden = !panel.hidden;
+      if (!panel.hidden) {
+        await fetch("/api/customer/notifications/read", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${localStorage.getItem("axzenToken") || ""}` },
+        }).catch(() => {});
+        await loadCustomerNotifications(false);
+      }
+    }
+    return;
+  }
+
+  const notificationLink = event.target.closest("[data-customer-notification-link]");
+  if (notificationLink) {
+    const link = notificationLink.dataset.customerNotificationLink;
+    if (link) window.location.href = link;
     return;
   }
 
@@ -2502,6 +2700,13 @@ document.addEventListener("click", async (event) => {
     const seller = getStorefrontSellers().find((entry) => String(entry.id) === String(followSellerButton.dataset.followSeller));
     if (seller) {
       saveFollowedSeller(seller);
+      const token = localStorage.getItem("axzenToken");
+      if (token && localStorage.getItem("axzenRole") === "customer") {
+        fetch(`/api/customer/follows/${encodeURIComponent(seller.id)}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {});
+      }
       followSellerButton.textContent = "Following";
     }
     return;
@@ -2795,6 +3000,17 @@ document.addEventListener("input", (event) => {
     renderSellerOrdersRows();
   }
 
+  const customerSellerSearch = event.target.closest("[data-customer-seller-search]");
+  if (customerSellerSearch) {
+    const seller = getStorefrontSellers().find((entry) => String(entry.id) === String(customerSellerSearch.dataset.customerSellerSearch));
+    const grid = customerSellerSearch.closest(".customer-seller-page")?.querySelector(".commerce-products");
+    if (seller && grid) {
+      const term = customerSellerSearch.value.trim().toLowerCase();
+      const products = seller.products.filter((product) => [product.title, product.category, product.sku].join(" ").toLowerCase().includes(term));
+      grid.innerHTML = products.length ? products.map(renderStorefrontProduct).join("") : `<p class="order-invoice-empty">No seller items found.</p>`;
+    }
+  }
+
   const checkoutForm = event.target.closest("[data-checkout-form]");
   if (checkoutForm) {
     const formData = new FormData(checkoutForm);
@@ -2927,6 +3143,31 @@ document.addEventListener("submit", async (event) => {
     return;
   }
 
+  const followerMessageForm = event.target.closest("[data-seller-follower-message]");
+  if (followerMessageForm) {
+    event.preventDefault();
+    const status = followerMessageForm.querySelector("[data-seller-follower-message-status]");
+    const payload = Object.fromEntries(new FormData(followerMessageForm).entries());
+    try {
+      const token = localStorage.getItem("axzenToken");
+      const response = await fetch("/api/seller/followers/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Unable to send notification.");
+      followerMessageForm.reset();
+      if (status) status.textContent = `Notification sent to ${result.sentCount || 0} followers.`;
+    } catch (error) {
+      if (status) {
+        status.textContent = error.message || "Unable to send notification.";
+        status.classList.add("error");
+      }
+    }
+    return;
+  }
+
   const inventoryForm = event.target.closest("[data-inventory-update]");
   if (inventoryForm) {
     event.preventDefault();
@@ -3013,6 +3254,7 @@ if (logoutButton) {
   logoutButton.addEventListener("click", () => {
     stopSellerOrderPolling();
     disconnectSellerRealtime();
+    stopCustomerNotificationPolling();
     localStorage.removeItem("axzenToken");
     localStorage.removeItem("axzenRole");
     localStorage.removeItem("axzenPhone");
@@ -3029,10 +3271,8 @@ if (logoutButton) {
       protectedContent.hidden = true;
     }
 
-    if (loginSection) {
-      loginSection.hidden = false;
-      loginSection.scrollIntoView({ behavior: "smooth" });
-    }
+    if (loginSection?.classList.contains("customer-login-section")) closeLoginArea();
+    else openLoginArea();
     updateLoginNavigation(false);
     updateSellerHeader(null);
     renderCartSummary(false);
