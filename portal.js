@@ -53,6 +53,7 @@ let customerAppConfig = {};
 let storeRailTimer = null;
 let customerNotificationTimer = null;
 let sellerFollowerCount = 0;
+const sellerStoreCache = new Map();
 
 const CART_KEY = "axzenCustomerCart";
 const ADDRESS_KEY = "axzenCustomerAddress";
@@ -271,6 +272,13 @@ function saveFollowedSeller(seller) {
   const follows = getFollowedSellers().filter((item) => String(item.id) !== String(seller.id));
   follows.unshift({ id: seller.id, name: seller.name, followedAt: new Date().toISOString() });
   writeJsonArray(CUSTOMER_FOLLOWS_KEY, follows.slice(0, 50));
+}
+
+function removeFollowedSeller(sellerId) {
+  writeJsonArray(
+    CUSTOMER_FOLLOWS_KEY,
+    getFollowedSellers().filter((item) => String(item.id) !== String(sellerId))
+  );
 }
 
 function saveRecentProduct(productId) {
@@ -791,15 +799,45 @@ function getStorefrontSellers() {
   const sellers = new Map();
   storefrontProductsCache.forEach((product) => {
     if (!product.sellerId) return;
+    const storeDetails = product.sellerStoreDetails || {};
     const entry = sellers.get(String(product.sellerId)) || {
       id: product.sellerId,
       name: product.sellerName || "Axzen seller",
+      category: product.sellerCategory || product.category || "General",
+      city: product.sellerCity || "",
+      fullName: product.sellerFullName || "",
+      businessType: product.sellerBusinessType || "",
+      email: product.sellerEmail || "",
+      phone: product.sellerPhone || "",
+      createdAt: product.sellerCreatedAt || "",
+      profileImageUrl: storeDetails.profileImageUrl || "",
+      offerBannerUrl: storeDetails.offerBannerUrl || "",
+      tagline: storeDetails.tagline || "",
+      about: storeDetails.about || "",
+      offerTitle: storeDetails.offerTitle || "",
+      offerSubtitle: storeDetails.offerSubtitle || "",
+      ownerDisplayName: storeDetails.ownerDisplayName || "",
+      memberSinceLabel: storeDetails.memberSinceLabel || "",
+      supportEmail: storeDetails.supportEmail || "",
+      supportPhone: storeDetails.supportPhone || "",
       products: [],
     };
     entry.products.push(product);
     sellers.set(String(product.sellerId), entry);
   });
   return [...sellers.values()];
+}
+
+function setCustomerSubpageMode(isSubpage) {
+  document.body.classList.toggle("customer-subpage-open", Boolean(isSubpage));
+}
+
+function setCustomerHistory(route, value, replace = false) {
+  const url = new URL(window.location.href);
+  ["seller", "category", "follows"].forEach((key) => url.searchParams.delete(key));
+  if (route && value) url.searchParams.set(route, value);
+  const method = replace ? "replaceState" : "pushState";
+  history[method]({ customerRoute: route || "home", value: value || "" }, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
 function renderCustomerCategories(products = storefrontProductsCache) {
@@ -829,6 +867,7 @@ function renderStorefrontProducts(products = storefrontProductsCache) {
 function resetCustomerMain() {
   const target = document.querySelector("[data-customer-main]");
   if (target && !target.querySelector(".section-heading")) target.innerHTML = customerMainDefaultHtml;
+  setCustomerSubpageMode(false);
 }
 
 function renderCustomerSaleBanner() {
@@ -927,34 +966,197 @@ function renderStoreRail() {
   }, 5000);
 }
 
-function openCustomerSellerPage(sellerId) {
+function fallbackSellerStore(sellerId) {
   const seller = getStorefrontSellers().find((entry) => String(entry.id) === String(sellerId));
+  if (!seller) return null;
+  return {
+    seller,
+    products: seller.products,
+    categories: [...new Set(seller.products.map((product) => product.category || "General"))].map((name) => ({
+      name,
+      products: seller.products.filter((product) => (product.category || "General") === name).length,
+    })),
+    reviews: { ratingAverage: 4.8, reviewCount: seller.products.reduce((sum, product) => sum + Number(product.ratingCount || 0), 0), bars: [], latestReview: null },
+  };
+}
+
+async function loadCustomerSellerStore(sellerId) {
+  const key = String(sellerId);
+  if (sellerStoreCache.has(key)) return sellerStoreCache.get(key);
+  try {
+    const token = localStorage.getItem("axzenToken") || "";
+    const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+    const [sellerResponse, productsResponse, categoriesResponse, reviewsResponse] = await Promise.all([
+      fetch(`/api/customer/sellers/${encodeURIComponent(sellerId)}`, { headers: authHeaders }),
+      fetch(`/api/customer/sellers/${encodeURIComponent(sellerId)}/products`),
+      fetch(`/api/customer/sellers/${encodeURIComponent(sellerId)}/categories`),
+      fetch(`/api/customer/sellers/${encodeURIComponent(sellerId)}/reviews`),
+    ]);
+    const [sellerResult, productsResult, categoriesResult, reviewsResult] = await Promise.all([
+      sellerResponse.json(),
+      productsResponse.json(),
+      categoriesResponse.json(),
+      reviewsResponse.json(),
+    ]);
+    if (!sellerResponse.ok || !productsResponse.ok) throw new Error(sellerResult.message || productsResult.message || "Unable to load seller store.");
+    const seller = sellerResult.seller || {};
+    const store = {
+      seller: {
+        id: seller.id || seller._id || sellerId,
+        name: seller.businessName || seller.name || "Axzen seller",
+        category: seller.category || "General",
+        city: seller.city || "",
+        fullName: seller.fullName || "",
+        businessType: seller.businessType || "",
+        gstNumber: seller.gstNumber || "",
+        email: seller.email || "",
+        phone: seller.phone || "",
+        createdAt: seller.createdAt || "",
+        followerCount: Number(seller.followerCount || 0),
+        productCount: Number(seller.productCount || productsResult.products?.length || 0),
+        isFollowing: seller.isFollowing === true,
+        ...(seller.storeDetails || {}),
+      },
+      products: productsResult.products || [],
+      categories: categoriesResult.categories || [],
+      reviews: reviewsResult.reviews || {},
+    };
+    store.seller.products = store.products;
+    sellerStoreCache.set(key, store);
+    return store;
+  } catch {
+    return fallbackSellerStore(sellerId);
+  }
+}
+
+async function openCustomerSellerPage(sellerId, options = {}) {
+  const store = await loadCustomerSellerStore(sellerId);
+  const seller = store?.seller;
   const target = document.querySelector("[data-customer-main]");
   if (!seller || !target) return;
-  const isFollowing = getFollowedSellers().some((item) => String(item.id) === String(seller.id));
+  setCustomerSubpageMode(true);
+  if (options.push !== false) setCustomerHistory("seller", seller.id);
+  const products = store.products || seller.products || [];
+  const categories = (store.categories || []).length ? store.categories : [...new Set(products.map((product) => product.category || "General"))].map((name) => ({ name, products: products.filter((product) => (product.category || "General") === name).length }));
+  const reviews = store.reviews || {};
+  const isFollowing = seller.isFollowing || getFollowedSellers().some((item) => String(item.id) === String(seller.id));
+  const bestProducts = [...products].sort((a, b) => Number(b.ratingCount || 0) - Number(a.ratingCount || 0)).slice(0, 5);
+  const avatar = seller.profileImageUrl
+    ? `<img src="${escapeHtml(seller.profileImageUrl)}" alt="${escapeHtml(seller.name)}">`
+    : `<span>${escapeHtml(seller.name.slice(0, 4).toUpperCase())}</span>`;
+  const bannerStyle = seller.offerBannerUrl ? ` style="background-image: linear-gradient(120deg, rgba(11,47,87,.9), rgba(0,113,227,.46)), url('${escapeHtml(seller.offerBannerUrl)}')"` : "";
   target.innerHTML = `
-    <section class="customer-seller-page">
-      <header>
-        <div>
-          <p class="eyebrow">Seller page</p>
-          <h2>${escapeHtml(seller.name)}</h2>
-          <p>${seller.products.length} products available</p>
+    <section class="customer-seller-page customer-seller-storefront">
+      <nav class="customer-breadcrumb"><button type="button" data-reset-customer-home>Home</button><span>></span><span>Stores</span><span>></span><strong>${escapeHtml(seller.name)}</strong></nav>
+      <header class="seller-store-hero"${bannerStyle}>
+        <div class="seller-store-avatar">${avatar}</div>
+        <div class="seller-store-copy">
+          <p class="seller-preferred">Preferred Seller</p>
+          <h2>${escapeHtml(seller.name)} <span>Verified</span></h2>
+          <p>${escapeHtml(seller.tagline || `Your trusted destination for ${seller.category || "quality products"}.`)}</p>
+          <div class="seller-store-meta">
+            <span>${escapeHtml(String(reviews.ratingAverage || "4.8"))} rating</span>
+            <span>${escapeHtml(String(seller.followerCount || 0))} followers</span>
+            <span>${products.length} products</span>
+            <span>${seller.memberSinceLabel || (seller.createdAt ? `Joined ${new Date(seller.createdAt).getFullYear()}` : "Verified seller")}</span>
+          </div>
         </div>
-        <button type="button" data-follow-seller="${escapeHtml(seller.id)}">${isFollowing ? "Following" : "Follow"}</button>
+        <div class="seller-store-actions">
+          <button type="button" class="secondary-button" data-share-seller="${escapeHtml(seller.id)}">Share Store</button>
+          <button type="button" data-follow-seller="${escapeHtml(seller.id)}">${isFollowing ? "Unfollow" : "Follow"}</button>
+          <small>${isFollowing ? "You follow this store" : "Follow for new product alerts"}</small>
+        </div>
       </header>
-      <div class="customer-seller-search">
-        <input type="search" data-customer-seller-search="${escapeHtml(seller.id)}" placeholder="Search items in ${escapeHtml(seller.name)}">
+      <div class="seller-store-tabs">
+        <button type="button" class="active">Store Home</button>
+        <button type="button">All Products</button>
+        <button type="button">Categories</button>
+        <button type="button">New Arrivals</button>
+        <button type="button">Best Sellers</button>
+        <button type="button">Offers</button>
+        <input type="search" data-customer-seller-search="${escapeHtml(seller.id)}" placeholder="Search in store...">
       </div>
-      <div class="commerce-products">${seller.products.map(renderStorefrontProduct).join("")}</div>
+      <div class="seller-store-grid">
+        <article class="seller-store-card about">
+          <h3>About ${escapeHtml(seller.name)}</h3>
+          <p>${escapeHtml(seller.about || `Welcome to ${seller.name}, a trusted Axzen seller offering quality products, fast delivery and customer support.`)}</p>
+          <div class="seller-store-benefits">
+            <span>Quality Products</span>
+            <span>Fast Delivery</span>
+            <span>Trusted Support</span>
+          </div>
+        </article>
+        <article class="seller-store-card highlights">
+          <h3>Store Highlights</h3>
+          <div class="seller-highlight-grid">
+            <span><strong>${escapeHtml(String(seller.followerCount || 0))}</strong><small>Followers</small></span>
+            <span><strong>${products.length}</strong><small>Products</small></span>
+            <span><strong>${escapeHtml(String(reviews.ratingAverage || "4.8"))}</strong><small>Rating</small></span>
+            <span><strong>98%</strong><small>Response Rate</small></span>
+          </div>
+          <h4>Top Categories</h4>
+          <div class="seller-top-categories">${categories.slice(0, 5).map((category) => `<button type="button" data-open-category="${escapeHtml(category.name || category)}">${escapeHtml(category.name || category)}<small>${escapeHtml(category.products || "")}</small></button>`).join("")}</div>
+        </article>
+        <aside class="seller-store-card info">
+          <h3>Seller Information</h3>
+          <dl>
+            <dt>Store Name</dt><dd>${escapeHtml(seller.name)}</dd>
+            <dt>Owner</dt><dd>${escapeHtml(seller.ownerDisplayName || seller.fullName || "Axzen seller")}</dd>
+            <dt>Member Since</dt><dd>${escapeHtml(seller.memberSinceLabel || (seller.createdAt ? new Date(seller.createdAt).toLocaleDateString() : "Verified") )}</dd>
+            <dt>Business Type</dt><dd>${escapeHtml(seller.businessType || "Seller")}</dd>
+            <dt>GST Number</dt><dd>${escapeHtml(seller.gstNumber || "Not added")}</dd>
+            <dt>Email</dt><dd>${escapeHtml(seller.supportEmail || seller.email || "-")}</dd>
+            <dt>Phone</dt><dd>${escapeHtml(seller.supportPhone || seller.phone || "-")}</dd>
+          </dl>
+          <button type="button" data-follow-seller="${escapeHtml(seller.id)}">${isFollowing ? "Following" : "Message Seller"}</button>
+        </aside>
+        <aside class="seller-store-card reviews">
+          <h3>Customer Reviews</h3>
+          <div class="seller-review-score">
+            <strong>${escapeHtml(String(reviews.ratingAverage || "0.0"))}</strong>
+            <span>${escapeHtml(String(reviews.reviewCount || 0))} reviews</span>
+          </div>
+          <div class="seller-review-bars">
+            ${(reviews.bars || [5, 4, 3, 2, 1].map((rating) => ({ rating, percent: 0 })))
+              .map((bar) => `<div><span>${escapeHtml(bar.rating)}</span><i><b style="width:${Math.max(0, Math.min(Number(bar.percent) || 0, 100))}%"></b></i><small>${escapeHtml(bar.percent || 0)}%</small></div>`)
+              .join("")}
+          </div>
+          ${
+            reviews.latestReview
+              ? `<p>${escapeHtml(reviews.latestReview.message || "")}</p>`
+              : `<p>No written reviews yet. Ratings are calculated from seller products.</p>`
+          }
+        </aside>
+      </div>
+      <section class="seller-offer-banner">
+        <strong>${escapeHtml(seller.offerTitle || "Extra 5% Off")}</strong>
+        <span>${escapeHtml(seller.offerSubtitle || "Special store offers on selected products")}</span>
+      </section>
+      <section class="seller-best-products">
+        <header><h3>Best Selling Products</h3><button type="button">View all products -></button></header>
+        <div class="commerce-products seller-best-row">${bestProducts.map(renderStorefrontProduct).join("")}</div>
+      </section>
+      <section class="seller-all-products">
+        <header><h3>All Products</h3><span>${products.length} items</span></header>
+        <div class="commerce-products">${products.map(renderStorefrontProduct).join("")}</div>
+      </section>
+      <div class="seller-store-perks">
+        <span>Extra offers on prepaid orders</span>
+        <span>Free shipping rules by seller</span>
+        <span>Safe packaging</span>
+        <span>Dedicated support</span>
+      </div>
     </section>
   `;
   target.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-async function openCustomerFollowsView() {
+async function openCustomerFollowsView(options = {}) {
   const target = document.querySelector("[data-customer-main]");
   if (!target) return;
   closeCustomerPopovers();
+  setCustomerSubpageMode(true);
+  if (options.push !== false) setCustomerHistory("follows", "1");
   let follows = getFollowedSellers();
   const token = localStorage.getItem("axzenToken");
   if (token && localStorage.getItem("axzenRole") === "customer") {
@@ -969,8 +1171,9 @@ async function openCustomerFollowsView() {
     }
   }
   target.innerHTML = `
-    <section class="customer-seller-page">
-      <header>
+    <section class="customer-seller-page customer-follows-page">
+      <nav class="customer-breadcrumb"><button type="button" data-reset-customer-home>Home</button><span>></span><strong>Follows</strong></nav>
+      <header class="customer-follows-hero">
         <div>
           <p class="eyebrow">Follows</p>
           <h2>Your followed stores</h2>
@@ -999,13 +1202,16 @@ async function openCustomerFollowsView() {
   target.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function openCustomerCategoryPage(category) {
+function openCustomerCategoryPage(category, options = {}) {
   const target = document.querySelector("[data-customer-main]");
   if (!target) return;
   const products = storefrontProductsCache.filter((product) => (product.category || "General") === category);
+  setCustomerSubpageMode(true);
+  if (options.push !== false) setCustomerHistory("category", category);
   target.innerHTML = `
-    <section class="customer-seller-page">
-      <header>
+    <section class="customer-seller-page customer-category-page">
+      <nav class="customer-breadcrumb"><button type="button" data-reset-customer-home>Home</button><span>></span><strong>${escapeHtml(category)}</strong></nav>
+      <header class="customer-category-page-hero">
         <div>
           <p class="eyebrow">Category</p>
           <h2>${escapeHtml(category)}</h2>
@@ -1283,7 +1489,11 @@ async function loadStorefrontCatalog() {
       const urlParams = new URLSearchParams(window.location.search);
       const productId = urlParams.get("product");
       const sellerId = urlParams.get("seller");
-      if (sellerId) openCustomerSellerPage(sellerId);
+      const category = urlParams.get("category");
+      const follows = urlParams.get("follows");
+      if (sellerId) openCustomerSellerPage(sellerId, { push: false });
+      else if (category) openCustomerCategoryPage(category, { push: false });
+      else if (follows) openCustomerFollowsView({ push: false });
       if (productId) {
         window.setTimeout(() => {
           openCustomerProductModal(productId);
@@ -2941,19 +3151,48 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const shareSellerButton = event.target.closest("[data-share-seller]");
+  if (shareSellerButton) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("seller", shareSellerButton.dataset.shareSeller);
+    try {
+      if (navigator.share) await navigator.share({ title: "Axzen seller store", url: url.toString() });
+      else {
+        await navigator.clipboard.writeText(url.toString());
+        setCartMessage("Store link copied.");
+      }
+    } catch {
+      setCartMessage("Store share cancelled.");
+    }
+    return;
+  }
+
   const followSellerButton = event.target.closest("[data-follow-seller]");
   if (followSellerButton) {
     const seller = getStorefrontSellers().find((entry) => String(entry.id) === String(followSellerButton.dataset.followSeller));
     if (seller) {
-      saveFollowedSeller(seller);
+      const alreadyFollowing = getFollowedSellers().some((item) => String(item.id) === String(seller.id));
       const token = localStorage.getItem("axzenToken");
-      if (token && localStorage.getItem("axzenRole") === "customer") {
+      if (alreadyFollowing) {
+        removeFollowedSeller(seller.id);
+        sellerStoreCache.delete(String(seller.id));
+        if (token && localStorage.getItem("axzenRole") === "customer") {
+          fetch(`/api/customer/follows/${encodeURIComponent(seller.id)}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          }).catch(() => {});
+        }
+      } else {
+        saveFollowedSeller(seller);
+        sellerStoreCache.delete(String(seller.id));
+        if (token && localStorage.getItem("axzenRole") === "customer") {
         fetch(`/api/customer/follows/${encodeURIComponent(seller.id)}`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         }).catch(() => {});
+        }
       }
-      followSellerButton.textContent = "Following";
+      openCustomerSellerPage(seller.id, { push: false });
     }
     return;
   }
@@ -2961,10 +3200,13 @@ document.addEventListener("click", async (event) => {
   const categoryPill = event.target.closest("[data-customer-category-pill]");
   if (categoryPill) {
     const category = categoryPill.dataset.customerCategoryPill || "All";
-    const products = category === "All" ? storefrontProductsCache : storefrontProductsCache.filter((product) => product.category === category);
-    resetCustomerMain();
-    document.querySelectorAll("[data-customer-category-pill]").forEach((button) => button.classList.toggle("active", button === categoryPill));
-    renderStorefrontProducts(products);
+    if (category === "All") {
+      resetCustomerMain();
+      renderStorefrontProducts(storefrontProductsCache);
+      setCustomerHistory("", "", false);
+    } else {
+      openCustomerCategoryPage(category);
+    }
     return;
   }
 
@@ -2978,6 +3220,7 @@ document.addEventListener("click", async (event) => {
   if (resetCustomerHome) {
     resetCustomerMain();
     renderStorefrontProducts(storefrontProductsCache);
+    setCustomerHistory("", "", false);
     return;
   }
 
@@ -3260,7 +3503,7 @@ document.addEventListener("input", (event) => {
   const customerSellerSearch = event.target.closest("[data-customer-seller-search]");
   if (customerSellerSearch) {
     const seller = getStorefrontSellers().find((entry) => String(entry.id) === String(customerSellerSearch.dataset.customerSellerSearch));
-    const grid = customerSellerSearch.closest(".customer-seller-page")?.querySelector(".commerce-products");
+    const grid = customerSellerSearch.closest(".customer-seller-page")?.querySelector(".seller-all-products .commerce-products, .commerce-products");
     if (seller && grid) {
       const term = customerSellerSearch.value.trim().toLowerCase();
       const products = seller.products.filter((product) => [product.title, product.category, product.sku].join(" ").toLowerCase().includes(term));
@@ -3542,6 +3785,18 @@ const pageRole = document.querySelector(".firebase-phone-form")?.dataset.role;
 
 initCustomerLocation();
 loadStorefrontCatalog();
+
+window.addEventListener("popstate", () => {
+  if (!document.body.classList.contains("storefront-page")) return;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("seller")) openCustomerSellerPage(params.get("seller"), { push: false });
+  else if (params.get("category")) openCustomerCategoryPage(params.get("category"), { push: false });
+  else if (params.get("follows")) openCustomerFollowsView({ push: false });
+  else {
+    resetCustomerMain();
+    renderStorefrontProducts(storefrontProductsCache);
+  }
+});
 
 if (savedToken && savedRole && savedRole === pageRole) {
   loadDashboard(savedRole, savedToken).catch(() => {

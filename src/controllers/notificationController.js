@@ -35,6 +35,18 @@ const followSeller = asyncHandler(async (req, res) => {
   success(res, { seller, followerCount });
 });
 
+const unfollowSeller = asyncHandler(async (req, res) => {
+  const seller = await Seller.findById(req.params.sellerId).select("_id businessName").lean();
+  if (!seller) {
+    res.status(404).json({ ok: false, message: "Seller not found." });
+    return;
+  }
+
+  await Follow.deleteOne({ customerId: req.user.id, sellerId: seller._id });
+  const followerCount = await Follow.countDocuments({ sellerId: seller._id });
+  success(res, { seller, followerCount });
+});
+
 const listCustomerFollows = asyncHandler(async (req, res) => {
   const follows = await Follow.find({ customerId: req.user.id }).sort({ createdAt: -1 }).populate("sellerId", "businessName category city").lean();
   success(res, {
@@ -108,4 +120,5 @@ module.exports = {
   notifyFollowersForProduct,
   sellerFollowerSummary,
   sendSellerFollowerNotification,
+  unfollowSeller,
 };

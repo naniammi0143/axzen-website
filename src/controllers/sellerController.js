@@ -1,12 +1,16 @@
 const fs = require("fs/promises");
 const os = require("os");
 const path = require("path");
+const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const Seller = require("../models/Seller");
+const Product = require("../models/Product");
+const Follow = require("../models/Follow");
+const env = require("../config/env");
 const { verifyFirebaseToken } = require("../config/firebase");
 const asyncHandler = require("../utils/asyncHandler");
 const { success } = require("../utils/apiResponse");
-const { toPaise } = require("../utils/money");
+const { formatRupees, toPaise } = require("../utils/money");
 const { hashPassword } = require("../utils/password");
 
 const uploadRoot = process.env.UPLOAD_DIR || path.join(os.tmpdir(), "axzen-uploads", "seller-kyc");
@@ -137,6 +141,108 @@ function buildSellerUpdate(req, phone, email) {
   };
 }
 
+function publicProduct(product) {
+  return {
+    id: product._id,
+    sku: product.sku,
+    title: product.title,
+    category: product.category,
+    sellerId: product.sellerId,
+    sellerName: product.sellerName,
+    description: product.description || "",
+    mrpPaise: product.mrpPaise || product.pricePaise,
+    mrp: formatRupees(product.mrpPaise || product.pricePaise),
+    pricePaise: product.pricePaise,
+    price: formatRupees(product.pricePaise),
+    unitLabel: product.unitLabel || "1 pc",
+    ratingAverage: Number(product.ratingAverage || 0),
+    ratingCount: Number(product.ratingCount || 0),
+    stock: product.stock,
+    images: product.images || [],
+    image: product.images?.[0] || "",
+  };
+}
+
+function publicSeller(seller, followerCount = 0, productCount = 0, followState = false) {
+  const details = seller.storeDetails || {};
+  return {
+    id: seller._id,
+    businessName: seller.businessName,
+    name: seller.businessName,
+    category: seller.category,
+    city: seller.city,
+    fullName: seller.fullName,
+    businessType: seller.businessType,
+    gstNumber: seller.gstNumber,
+    email: details.supportEmail || seller.email,
+    phone: details.supportPhone || seller.phone,
+    createdAt: seller.createdAt,
+    followerCount,
+    productCount,
+    isFollowing: followState,
+    storeDetails: details,
+  };
+}
+
+function optionalCustomerId(req) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  if (!token) return "";
+  try {
+    const user = jwt.verify(token, env.jwtSecret);
+    return user.role === "customer" ? user.id : "";
+  } catch {
+    return "";
+  }
+}
+
+const getPublicSeller = asyncHandler(async (req, res) => {
+  const seller = await Seller.findOne({ _id: req.params.sellerId, isActive: true, status: "active" }).lean();
+  if (!seller) {
+    res.status(404).json({ ok: false, message: "Seller not found." });
+    return;
+  }
+  const customerId = optionalCustomerId(req);
+  const [followerCount, productCount, follow] = await Promise.all([
+    Follow.countDocuments({ sellerId: seller._id }),
+    Product.countDocuments({ sellerId: seller._id, status: { $in: ["active", "approved"] } }),
+    customerId ? Follow.exists({ customerId, sellerId: seller._id }) : null,
+  ]);
+  success(res, { seller: publicSeller(seller, followerCount, productCount, Boolean(follow)) });
+});
+
+const getPublicSellerProducts = asyncHandler(async (req, res) => {
+  const products = await Product.find({ sellerId: req.params.sellerId, status: { $in: ["active", "approved"] } }).sort({ updatedAt: -1 }).limit(200).lean();
+  success(res, { products: products.map(publicProduct) });
+});
+
+const getPublicSellerCategories = asyncHandler(async (req, res) => {
+  const products = await Product.find({ sellerId: req.params.sellerId, status: { $in: ["active", "approved"] } }).select("category").lean();
+  const counts = products.reduce((map, product) => {
+    const category = product.category || "General";
+    map.set(category, (map.get(category) || 0) + 1);
+    return map;
+  }, new Map());
+  const categories = [...counts.entries()].map(([name, total]) => ({ name, products: total })).sort((a, b) => b.products - a.products);
+  success(res, { categories });
+});
+
+const getPublicSellerReviews = asyncHandler(async (req, res) => {
+  const products = await Product.find({ sellerId: req.params.sellerId, status: { $in: ["active", "approved"] } }).select("ratingAverage ratingCount title").lean();
+  const totalReviews = products.reduce((sum, product) => sum + Number(product.ratingCount || 0), 0);
+  const weightedRating = totalReviews
+    ? products.reduce((sum, product) => sum + Number(product.ratingAverage || 0) * Number(product.ratingCount || 0), 0) / totalReviews
+    : 0;
+  success(res, {
+    reviews: {
+      ratingAverage: Number(weightedRating.toFixed(1)),
+      reviewCount: totalReviews,
+      bars: [5, 4, 3, 2, 1].map((rating) => ({ rating, percent: rating === Math.round(weightedRating || 0) ? 85 : 0 })),
+      latestReview: null,
+    },
+  });
+});
+
 const getProfile = asyncHandler(async (req, res) => {
   const seller = await Seller.findOne({ userId: req.user.id });
   success(res, { seller });
@@ -262,6 +368,10 @@ const registerSeller = asyncHandler(async (req, res) => {
 
 module.exports = {
   getProfile,
+  getPublicSeller,
+  getPublicSellerCategories,
+  getPublicSellerProducts,
+  getPublicSellerReviews,
   registerSeller,
   updateProfile,
 };

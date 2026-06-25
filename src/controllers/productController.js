@@ -38,7 +38,7 @@ const listProducts = asyncHandler(async (req, res) => {
   const sellerIds = [...new Set(products.map((product) => String(product.sellerId)).filter(Boolean))];
   const sellers = sellerIds.length
     ? await Seller.find({ _id: { $in: sellerIds } })
-        .select("_id codEnabled onlinePaymentEnabled freeDeliveryEnabled freeDeliveryMinOrderPaise")
+        .select("_id businessName category city fullName businessType email phone createdAt codEnabled onlinePaymentEnabled freeDeliveryEnabled freeDeliveryMinOrderPaise storeDetails")
         .lean()
     : [];
   const sellerSettings = new Map(sellers.map((seller) => [String(seller._id), seller]));
@@ -64,6 +64,14 @@ const listProducts = asyncHandler(async (req, res) => {
         stock: product.stock,
         images: product.images || [],
         image: product.images?.[0] || "",
+        sellerCategory: settings.category || "General",
+        sellerCity: settings.city || "",
+        sellerFullName: settings.fullName || "",
+        sellerBusinessType: settings.businessType || "",
+        sellerEmail: settings.email || "",
+        sellerPhone: settings.phone || "",
+        sellerCreatedAt: settings.createdAt || null,
+        sellerStoreDetails: settings.storeDetails || {},
         codEnabled: settings.codEnabled !== false,
         onlinePaymentEnabled: settings.onlinePaymentEnabled !== false,
         freeDeliveryEnabled: settings.freeDeliveryEnabled === true,

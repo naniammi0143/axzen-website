@@ -37,6 +37,18 @@ const sellerSchema = new mongoose.Schema(
     onlinePaymentEnabled: { type: Boolean, default: true },
     freeDeliveryEnabled: { type: Boolean, default: false },
     freeDeliveryMinOrderPaise: { type: Number, min: 0, default: 0 },
+    storeDetails: {
+      profileImageUrl: { type: String, trim: true, default: "" },
+      offerBannerUrl: { type: String, trim: true, default: "" },
+      tagline: { type: String, trim: true, default: "" },
+      about: { type: String, trim: true, default: "" },
+      offerTitle: { type: String, trim: true, default: "" },
+      offerSubtitle: { type: String, trim: true, default: "" },
+      ownerDisplayName: { type: String, trim: true, default: "" },
+      memberSinceLabel: { type: String, trim: true, default: "" },
+      supportEmail: { type: String, trim: true, default: "" },
+      supportPhone: { type: String, trim: true, default: "" },
+    },
     agreements: {
       marketplaceTerms: { type: Boolean, default: false },
       kycConsent: { type: Boolean, default: false },

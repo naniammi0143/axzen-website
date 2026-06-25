@@ -23,6 +23,7 @@ const {
   rejectSellerOrder,
 } = require("./controllers/orderController");
 const { createSellerProduct, listProducts, listSellerProducts, updateSellerInventory } = require("./controllers/productController");
+const { getPublicSeller, getPublicSellerCategories, getPublicSellerProducts, getPublicSellerReviews } = require("./controllers/sellerController");
 const { financeSummary, publicCustomerAppConfig } = require("./controllers/adminController");
 const {
   followSeller,
@@ -31,6 +32,7 @@ const {
   markCustomerNotificationsRead,
   sellerFollowerSummary,
   sendSellerFollowerNotification,
+  unfollowSeller,
 } = require("./controllers/notificationController");
 const { errorHandler, notFound } = require("./middleware/errorHandler");
 const { authenticate, authorize } = require("./middleware/auth");
@@ -99,10 +101,15 @@ app.get(
 // Compatibility routes used by the current frontend while the UI is being split into portals.
 app.get("/api/customer/catalog", listProducts);
 app.get("/api/customer/app-config", publicCustomerAppConfig);
+app.get("/api/customer/sellers/:sellerId", getPublicSeller);
+app.get("/api/customer/sellers/:sellerId/products", getPublicSellerProducts);
+app.get("/api/customer/sellers/:sellerId/categories", getPublicSellerCategories);
+app.get("/api/customer/sellers/:sellerId/reviews", getPublicSellerReviews);
 app.post("/api/customer/cart", authenticate, authorize("customer"), saveCart);
 app.post("/api/customer/orders", authenticate, authorize("customer"), createOrder);
 app.get("/api/customer/follows", authenticate, authorize("customer"), listCustomerFollows);
 app.post("/api/customer/follows/:sellerId", authenticate, authorize("customer"), followSeller);
+app.delete("/api/customer/follows/:sellerId", authenticate, authorize("customer"), unfollowSeller);
 app.get("/api/customer/notifications", authenticate, authorize("customer"), listCustomerNotifications);
 app.post("/api/customer/notifications/read", authenticate, authorize("customer"), markCustomerNotificationsRead);
 app.get("/api/seller/orders", authenticate, authorize("seller"), listSellerOrders);

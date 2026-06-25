@@ -693,6 +693,7 @@
   }
 
   function renderSellers(data) {
+    state.cache.sellers = data.items || [];
     qs('[data-view-panel="sellers"]').innerHTML = panel(
       "Seller approvals and performance",
       filterBar("sellers", [
@@ -710,14 +711,39 @@
             { label: "Commission", render: (row) => `${escapeHtml(row.commissionType || "percentage")} ${escapeHtml(row.commissionValue ?? (Number(row.commissionBps || 0) / 100).toFixed(2))}` },
           ],
           data.items,
-          (row) => `
+          (row, index) => `
             <button data-action="seller-view" data-id="${row._id}">View details</button>
+            <button data-action="seller-store-controls" data-id="${row._id}" data-index="${index}">Store controls</button>
             <button data-action="seller-approve" data-id="${row._id}">Approve</button>
             <button data-action="seller-reject" data-id="${row._id}">Reject</button>
             <button data-action="seller-toggle" data-id="${row._id}" data-status="${row.status === "active" ? "inactive" : "active"}">${row.status === "active" ? "Deactivate" : "Activate"}</button>
           `
         )
     );
+  }
+
+  function openSellerStoreControls(index) {
+    const seller = state.cache.sellers?.[Number(index)] || {};
+    const details = seller.storeDetails || {};
+    const drawer = ensureReportDrawer("seller-store-controls", "Seller storefront controls");
+    qs(".report-drawer-body", drawer).innerHTML = `
+      <form class="customer-app-form seller-store-control-form" data-seller-store-controls="${escapeHtml(seller._id)}">
+        <p class="eyebrow">Customer seller page</p>
+        <h3>${escapeHtml(seller.businessName || "Seller")}</h3>
+        <label>Profile photo URL<input name="profileImageUrl" value="${escapeHtml(details.profileImageUrl || "")}" placeholder="https://.../profile.png"></label>
+        <label>Offer banner URL<input name="offerBannerUrl" value="${escapeHtml(details.offerBannerUrl || "")}" placeholder="https://.../banner.png"></label>
+        <label>Store tagline<input name="tagline" value="${escapeHtml(details.tagline || "")}" placeholder="Your trusted destination for premium products"></label>
+        <label>About store<textarea name="about" rows="5" placeholder="Write seller page about section">${escapeHtml(details.about || "")}</textarea></label>
+        <label>Offer title<input name="offerTitle" value="${escapeHtml(details.offerTitle || "")}" placeholder="Extra 5% Off"></label>
+        <label>Offer subtitle<input name="offerSubtitle" value="${escapeHtml(details.offerSubtitle || "")}" placeholder="On prepaid orders or selected products"></label>
+        <label>Owner display name<input name="ownerDisplayName" value="${escapeHtml(details.ownerDisplayName || "")}" placeholder="Owner name"></label>
+        <label>Member since label<input name="memberSinceLabel" value="${escapeHtml(details.memberSinceLabel || "")}" placeholder="January 2023"></label>
+        <label>Support email<input name="supportEmail" value="${escapeHtml(details.supportEmail || seller.email || "")}" placeholder="support@example.com"></label>
+        <label>Support phone<input name="supportPhone" value="${escapeHtml(details.supportPhone || seller.phone || "")}" placeholder="+91..."></label>
+        <button type="submit">Save seller page controls</button>
+      </form>
+    `;
+    openReportDrawer(drawer);
   }
 
   function renderProducts(data) {
@@ -1457,6 +1483,7 @@
       if (action === "payout-paid") return patch(`/api/admin/finance/orders/${id}/payout`, { payoutStatus: "paid" });
       if (action === "payout-failed") return patch(`/api/admin/finance/orders/${id}/payout`, { payoutStatus: "failed" });
       if (action === "seller-view") return openSellerDetail(id);
+      if (action === "seller-store-controls") return openSellerStoreControls(target.dataset.index);
       if (action === "seller-approve") return patch(`/api/admin/sellers/${id}/approve`, {});
       if (action === "seller-reject") return patch(`/api/admin/sellers/${id}/reject`, {});
       if (action === "seller-toggle") return patch(`/api/admin/sellers/${id}`, { status: target.dataset.status });
@@ -1541,6 +1568,21 @@
           await api("/api/admin/customer-app", { method: "PATCH", body: JSON.stringify(payload) });
           toast("Customer app content saved.");
           await loadView("customerapp");
+        } catch (error) {
+          toast(error.message, true);
+        }
+        return;
+      }
+
+      const sellerStoreControls = event.target.closest("[data-seller-store-controls]");
+      if (sellerStoreControls) {
+        event.preventDefault();
+        const payload = { storeDetails: Object.fromEntries(new FormData(sellerStoreControls).entries()) };
+        try {
+          await api(`/api/admin/sellers/${sellerStoreControls.dataset.sellerStoreControls}`, { method: "PATCH", body: JSON.stringify(payload) });
+          toast("Seller storefront controls saved.");
+          closeTopReportDrawer();
+          await loadView("sellers");
         } catch (error) {
           toast(error.message, true);
         }
