@@ -1,5 +1,6 @@
 const AuditLog = require("../models/AuditLog");
 const AdminUser = require("../models/AdminUser");
+const CustomerAppConfig = require("../models/CustomerAppConfig");
 const Delivery = require("../models/Delivery");
 const Order = require("../models/Order");
 const Payment = require("../models/Payment");
@@ -54,6 +55,11 @@ const employeeRoles = {
     systemRole: "delivery_manager",
     permissions: ["dashboard", "delivery", "orders"],
     activityNotes: ["Shipment tracking", "Delivery labels", "Courier updates"],
+  },
+  "Customer App Executive": {
+    systemRole: "support",
+    permissions: ["dashboard", "customerapp", "products", "customers"],
+    activityNotes: ["Customer app content", "Offer banner updates", "Recommended seller display"],
   },
 };
 
@@ -636,6 +642,65 @@ const updateCustomer = asyncHandler(async (req, res) => {
   success(res, { customer });
 });
 
+async function getCustomerAppConfigDocument() {
+  return CustomerAppConfig.findOneAndUpdate(
+    { key: "default" },
+    { $setOnInsert: { key: "default" } },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  ).lean();
+}
+
+const publicCustomerAppConfig = asyncHandler(async (req, res) => {
+  const [config, sellers] = await Promise.all([
+    getCustomerAppConfigDocument(),
+    Seller.find({ status: "active", isActive: true }).sort({ updatedAt: -1 }).limit(15).select("businessName category city").lean(),
+  ]);
+  success(res, {
+    config,
+    sellers,
+  });
+});
+
+const getCustomerAppConfig = asyncHandler(async (req, res) => {
+  const [config, sellers] = await Promise.all([
+    getCustomerAppConfigDocument(),
+    Seller.find().sort({ businessName: 1 }).select("businessName category city status isActive").lean(),
+  ]);
+  success(res, { config, sellers });
+});
+
+const updateCustomerAppConfig = asyncHandler(async (req, res) => {
+  const allowed = ["saleTitle", "saleSubtitle", "saleCta", "offerImageUrl", "spotlightTitle", "categoryOrder"];
+  const update = {};
+  allowed.forEach((key) => {
+    if (req.body[key] !== undefined) update[key] = req.body[key];
+  });
+  if (req.body.recommendedSellerIds !== undefined) {
+    update.recommendedSellerIds = Array.isArray(req.body.recommendedSellerIds)
+      ? req.body.recommendedSellerIds.filter(Boolean)
+      : String(req.body.recommendedSellerIds || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+  }
+  if (typeof update.categoryOrder === "string") {
+    update.categoryOrder = update.categoryOrder
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  update.updatedBy = req.user?.id || null;
+
+  const config = await CustomerAppConfig.findOneAndUpdate({ key: "default" }, update, {
+    new: true,
+    upsert: true,
+    setDefaultsOnInsert: true,
+    runValidators: true,
+  });
+  await audit(req, "customerapp.update", "customerapp", config._id, update);
+  success(res, { config });
+});
+
 const listPayments = asyncHandler(async (req, res) => {
   const filter = {};
   if (req.query.status) filter.status = req.query.status;
@@ -1203,6 +1268,7 @@ module.exports = {
   createEmployee,
   exportCsv,
   financeSummary,
+  getCustomerAppConfig,
   customerDetail,
   listAuditLogs,
   listCustomers,
@@ -1216,6 +1282,7 @@ module.exports = {
   orderStatuses,
   paymentCommissionReport,
   productStatuses,
+  publicCustomerAppConfig,
   rejectProduct,
   rejectSeller,
   reportCustomers,
@@ -1229,6 +1296,7 @@ module.exports = {
   reports,
   sellerDetail,
   updateCustomer,
+  updateCustomerAppConfig,
   updateDelivery,
   updateEmployee,
   updateOrder,

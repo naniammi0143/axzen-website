@@ -23,7 +23,7 @@ const {
   rejectSellerOrder,
 } = require("./controllers/orderController");
 const { createSellerProduct, listProducts, listSellerProducts, updateSellerInventory } = require("./controllers/productController");
-const { financeSummary } = require("./controllers/adminController");
+const { financeSummary, publicCustomerAppConfig } = require("./controllers/adminController");
 const { errorHandler, notFound } = require("./middleware/errorHandler");
 const { authenticate, authorize } = require("./middleware/auth");
 const { multipartForm } = require("./middleware/multipartUpload");
@@ -90,6 +90,7 @@ app.get(
 
 // Compatibility routes used by the current frontend while the UI is being split into portals.
 app.get("/api/customer/catalog", listProducts);
+app.get("/api/customer/app-config", publicCustomerAppConfig);
 app.post("/api/customer/cart", authenticate, authorize("customer"), saveCart);
 app.post("/api/customer/orders", authenticate, authorize("customer"), createOrder);
 app.get("/api/seller/orders", authenticate, authorize("seller"), listSellerOrders);

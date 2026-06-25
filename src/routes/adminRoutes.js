@@ -6,6 +6,7 @@ const {
   createEmployee,
   exportCsv,
   financeSummary,
+  getCustomerAppConfig,
   listAuditLogs,
   listCustomers,
   listDeliveries,
@@ -18,6 +19,7 @@ const {
   paymentCommissionReport,
   rejectProduct,
   rejectSeller,
+  updateCustomerAppConfig,
   reportCustomers,
   reportCompliance,
   reportPayments,
@@ -63,6 +65,9 @@ router.patch("/orders/:id", authorizeAdminAccess("orders"), updateOrder);
 router.get("/customers", authorizeAdminAccess("customers"), listCustomers);
 router.get("/customers/:id/detail", authorizeAdminAccess("customers"), customerDetail);
 router.patch("/customers/:id", authorizeAdminAccess("customers"), updateCustomer);
+
+router.get("/customer-app", authorizeAdminAccess("customerapp"), getCustomerAppConfig);
+router.patch("/customer-app", authorizeAdminAccess("customerapp"), updateCustomerAppConfig);
 
 router.get("/payments", authorizeAdminAccess("finance"), listPayments);
 router.get("/finance/report", authorizeAdminAccess("finance"), paymentCommissionReport);

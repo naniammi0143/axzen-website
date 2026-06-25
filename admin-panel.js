@@ -20,6 +20,7 @@
     orders: "Order Management",
     payments: "Payments and Commission",
     customers: "Customers",
+    customerapp: "Customer App Control",
     delivery: "Delivery Management",
     helpdesk: "Helpdesk",
     employees: "Employee Roles",
@@ -33,6 +34,7 @@
     orders: "/api/admin/orders",
     payments: "/api/admin/payments",
     customers: "/api/admin/customers",
+    customerapp: "/api/admin/customer-app",
     delivery: "/api/admin/deliveries",
     helpdesk: "/api/admin/helpdesk",
     employees: "/api/admin/employees",
@@ -46,6 +48,7 @@
     orders: "orders",
     payments: "finance",
     customers: "customers",
+    customerapp: "customerapp",
     delivery: "delivery",
     helpdesk: "customers",
     employees: "employees",
@@ -54,9 +57,9 @@
   };
 
   const roleViewAccess = {
-    superadmin: ["dashboard", "sellers", "products", "orders", "payments", "customers", "delivery", "helpdesk", "employees", "reports", "audit"],
-    admin: ["dashboard", "sellers", "products", "orders", "customers", "delivery", "helpdesk", "employees", "reports"],
-    support: ["dashboard", "orders", "customers", "helpdesk"],
+    superadmin: ["dashboard", "sellers", "products", "orders", "payments", "customers", "customerapp", "delivery", "helpdesk", "employees", "reports", "audit"],
+    admin: ["dashboard", "sellers", "products", "orders", "customers", "customerapp", "delivery", "helpdesk", "employees", "reports"],
+    support: ["dashboard", "orders", "customers", "customerapp", "helpdesk"],
     finance: ["dashboard", "payments", "reports"],
     delivery_manager: ["dashboard", "orders", "delivery"],
   };
@@ -843,6 +846,57 @@
     );
   }
 
+  function renderCustomerApp(data) {
+    const config = data.config || {};
+    const selected = new Set((config.recommendedSellerIds || []).map(String));
+    qs('[data-view-panel="customerapp"]').innerHTML = `
+      <section class="customer-app-admin">
+        <header class="employee-hero">
+          <div>
+            <span class="eyebrow">Customer App Control</span>
+            <h2>Offers, banners and recommended sellers</h2>
+            <p>Change customer app content from here without touching the page structure.</p>
+          </div>
+          <div class="employee-count-card">
+            <span>Recommended sellers</span>
+            <strong>${escapeHtml(selected.size || 0)}</strong>
+            <small>Shown on customer home</small>
+          </div>
+        </header>
+        <article class="admin-panel">
+          <div class="panel-heading">
+            <h2>Homepage content</h2>
+            <small>Visible on axzen.in</small>
+          </div>
+          <form class="customer-app-form" data-customer-app-form>
+            <label>Sale title<input name="saleTitle" value="${escapeHtml(config.saleTitle || "")}" placeholder="Exclusive coupon for you!"></label>
+            <label>Sale subtitle<input name="saleSubtitle" value="${escapeHtml(config.saleSubtitle || "")}" placeholder="Flat 10% Off up to Rs. 100"></label>
+            <label>CTA text<input name="saleCta" value="${escapeHtml(config.saleCta || "")}" placeholder="Shop offers"></label>
+            <label>Offer image URL<input name="offerImageUrl" value="${escapeHtml(config.offerImageUrl || "")}" placeholder="https://.../offer.png"></label>
+            <label>Spotlight title<input name="spotlightTitle" value="${escapeHtml(config.spotlightTitle || "")}" placeholder="Brands in Spotlight"></label>
+            <label>Category order<input name="categoryOrder" value="${escapeHtml((config.categoryOrder || []).join(", "))}" placeholder="For You, Fashion, Mobiles"></label>
+            <fieldset>
+              <legend>Recommended sellers</legend>
+              <div class="customer-app-seller-grid">
+                ${(data.sellers || [])
+                  .map(
+                    (seller) => `
+                      <label>
+                        <input type="checkbox" name="recommendedSellerIds" value="${seller._id}" ${selected.has(String(seller._id)) ? "checked" : ""}>
+                        <span><strong>${escapeHtml(seller.businessName)}</strong><small>${escapeHtml([seller.category, seller.city, seller.status].filter(Boolean).join(" / "))}</small></span>
+                      </label>
+                    `
+                  )
+                  .join("")}
+              </div>
+            </fieldset>
+            <button type="submit">Save customer app</button>
+          </form>
+        </article>
+      </section>
+    `;
+  }
+
   function renderDelivery(data) {
     qs('[data-view-panel="delivery"]').innerHTML = panel(
       "Delivery tracking",
@@ -1258,7 +1312,7 @@
         return renderReports(await api(`/api/admin/reports/${state.reportType}${query}`));
       }
       const data = await listView(view, state.filterQuery || "");
-      const renderers = { sellers: renderSellers, products: renderProducts, orders: renderOrders, customers: renderCustomers, delivery: renderDelivery, helpdesk: renderHelpdesk, employees: renderEmployees, audit: renderAudit };
+      const renderers = { sellers: renderSellers, products: renderProducts, orders: renderOrders, customers: renderCustomers, customerapp: renderCustomerApp, delivery: renderDelivery, helpdesk: renderHelpdesk, employees: renderEmployees, audit: renderAudit };
       renderers[view]?.(data);
     } catch (error) {
       qs(`[data-view-panel="${view}"]`).innerHTML = panel(titles[view], emptyState(error.message));
@@ -1467,6 +1521,26 @@
           toast("Employee updated successfully.");
           closeTopReportDrawer();
           await loadView("employees");
+        } catch (error) {
+          toast(error.message, true);
+        }
+        return;
+      }
+
+      const customerAppForm = event.target.closest("[data-customer-app-form]");
+      if (customerAppForm) {
+        event.preventDefault();
+        const formData = new FormData(customerAppForm);
+        const payload = Object.fromEntries(formData.entries());
+        payload.recommendedSellerIds = formData.getAll("recommendedSellerIds");
+        payload.categoryOrder = String(payload.categoryOrder || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+        try {
+          await api("/api/admin/customer-app", { method: "PATCH", body: JSON.stringify(payload) });
+          toast("Customer app content saved.");
+          await loadView("customerapp");
         } catch (error) {
           toast(error.message, true);
         }

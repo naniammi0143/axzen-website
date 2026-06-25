@@ -36,6 +36,7 @@ const adminAccess = {
   products: ["superadmin", "admin"],
   orders: ["superadmin", "admin", "support", "delivery_manager"],
   customers: ["superadmin", "admin", "support"],
+  customerapp: ["superadmin", "admin"],
   finance: ["superadmin", "finance"],
   delivery: ["superadmin", "admin", "delivery_manager"],
   employees: ["superadmin", "admin"],

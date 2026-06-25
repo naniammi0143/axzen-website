@@ -43,13 +43,14 @@
     </form>
 
     <nav class="commerce-nav" aria-label="Customer navigation">
+      <button class="customer-location-chip" type="button" data-customer-location>Location not set</button>
       <a href="https://seller.axzen.in" target="_blank" rel="noopener noreferrer">Sell</a>
       <a href="#orders">Orders</a>
+      <a href="#follows" data-customer-follows-link>Follows</a>
       <a href="#cart">Cart</a>
-      <a href="#login">Login</a>
       <button class="customer-profile-trigger" type="button" data-customer-profile-menu aria-label="Customer options">...</button>
       <div class="customer-profile-menu" data-customer-profile-popover hidden>
-        <a href="#dashboard">My profile</a>
+        <a href="#dashboard" data-customer-profile-link>My profile</a>
         <a href="#orders">My orders</a>
         <a href="#cart">Cart</a>
         <a href="#login">Login / OTP</a>
@@ -94,6 +95,7 @@
     </section>
 
     <section class="customer-category-rail" data-customer-category-rail aria-label="Shop by category"></section>
+    <section class="customer-recent-section" data-customer-recent hidden></section>
 
     <section class="section commerce-layout" id="products">
       <aside class="shop-sidebar">
@@ -157,7 +159,7 @@
         </div>
       </div>
 
-      <aside class="cart-summary" id="cart">
+      <aside class="cart-summary" id="cart" hidden>
         <h3>Cart</h3>
         <p>2 items selected</p>
         <strong>Rs. 2,248</strong>
@@ -169,6 +171,8 @@
         </div>
       </aside>
     </section>
+
+    <section class="section customer-category-sections" data-customer-category-sections></section>
 
     <section class="section" id="stores">
       <div class="section-heading">

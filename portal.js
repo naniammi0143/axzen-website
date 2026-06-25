@@ -39,17 +39,24 @@ const sellerProfilePopover = document.querySelector("[data-seller-profile-popove
 const customerProfilePopover = document.querySelector("[data-customer-profile-popover]");
 const customerMain = document.querySelector("[data-customer-main]");
 const customerMainDefaultHtml = customerMain?.innerHTML || "";
+const customerLocationChip = document.querySelector("[data-customer-location]");
 const ownerLoginModal = document.querySelector("[data-owner-login-modal]");
 let sellerProductsCache = [];
 let sellerOrdersCache = [];
 let sellerTicketsCache = [];
+let customerOrdersCache = [];
 let storefrontProductsCache = [];
 let sellerOrderPollTimer = null;
 let sellerSocket = null;
 let sellerNotificationAudio = null;
+let customerAppConfig = {};
+let storeRailTimer = null;
 
 const CART_KEY = "axzenCustomerCart";
 const ADDRESS_KEY = "axzenCustomerAddress";
+const CUSTOMER_FOLLOWS_KEY = "axzenCustomerFollows";
+const CUSTOMER_RECENT_KEY = "axzenCustomerRecentProducts";
+const CUSTOMER_LOCATION_KEY = "axzenCustomerLocation";
 const SELLER_OWNER_KEY = "axzenSellerOwnerMode";
 const SELLER_NOTIFICATION_MUTE_KEY = "axzenSellerNotificationsMuted";
 const SELLER_NOTIFICATION_HISTORY_KEY = "axzenSellerNotificationHistory";
@@ -101,6 +108,11 @@ function updateLoginNavigation(isLoggedIn) {
   const dashboardTarget = dashboardSection ? "#dashboard" : "#protectedContent";
 
   loginNavLinks.forEach((link) => {
+    if (link.closest("[data-customer-profile-popover]")) {
+      link.textContent = isLoggedIn ? "Logout" : "Login / OTP";
+      link.setAttribute("href", isLoggedIn ? "#logout" : "#login");
+      return;
+    }
     link.textContent = isLoggedIn ? "Dashboard" : link.dataset.loginLabel || "Login";
     link.setAttribute("href", isLoggedIn ? dashboardTarget : "#login");
   });
@@ -204,6 +216,45 @@ function getSavedCustomerAddress() {
 
 function saveCustomerAddress(address) {
   localStorage.setItem(ADDRESS_KEY, JSON.stringify(address));
+}
+
+function readJsonArray(key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeJsonArray(key, value) {
+  localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
+}
+
+function getFollowedSellers() {
+  return readJsonArray(CUSTOMER_FOLLOWS_KEY);
+}
+
+function saveFollowedSeller(seller) {
+  const follows = getFollowedSellers().filter((item) => String(item.id) !== String(seller.id));
+  follows.unshift({ id: seller.id, name: seller.name, followedAt: new Date().toISOString() });
+  writeJsonArray(CUSTOMER_FOLLOWS_KEY, follows.slice(0, 50));
+}
+
+function saveRecentProduct(productId) {
+  const product = storefrontProductsCache.find((item) => String(item.id) === String(productId));
+  if (!product) return;
+  const recent = readJsonArray(CUSTOMER_RECENT_KEY).filter((item) => String(item.id) !== String(product.id));
+  recent.unshift({
+    id: product.id,
+    title: product.title,
+    sellerName: product.sellerName,
+    price: product.price,
+    image: product.image || product.images?.[0] || "",
+    viewedAt: new Date().toISOString(),
+  });
+  writeJsonArray(CUSTOMER_RECENT_KEY, recent.slice(0, 12));
+  renderRecentProducts();
 }
 
 function getCartTotalPaise(cart = getCustomerCart()) {
@@ -378,6 +429,10 @@ function addProductToCart(productId) {
   const product = storefrontProductsCache.find((item) => String(item.id) === String(productId));
   if (!product) {
     setCartMessage("Product details are still loading. Try again in a moment.", true);
+    return;
+  }
+  if ((Number(product.stock) || 0) <= 0) {
+    setCartMessage("This product is currently not available.", true);
     return;
   }
 
@@ -567,6 +622,7 @@ function renderStorefrontProduct(product) {
   const category = product.category || "Product";
   const mrp = Number(product.mrpPaise) > Number(product.pricePaise) ? product.mrp || rupees(product.mrpPaise) : "";
   const rating = Number(product.ratingAverage || 0).toFixed(1);
+  const stock = Number(product.stock) || 0;
   return `
     <article class="commerce-product" data-product-card="${escapeHtml(product.id)}">
       ${
@@ -581,8 +637,8 @@ function renderStorefrontProduct(product) {
         <strong>${escapeHtml(product.price || "Rs. 0")}</strong>
       </div>
       <small>${escapeHtml(product.unitLabel || "1 pc")} | ${rating} rating (${Number(product.ratingCount) || 0})</small>
-      <button type="button" data-product-details="${escapeHtml(product.id)}">View details</button>
-      <button type="button" data-add-cart="${escapeHtml(product.id)}">Add to cart</button>
+      <small class="${stock > 0 ? "stock-left" : "stock-out"}">${stock > 0 ? `${Math.min(stock, 5)} items left` : "Currently not available"}</small>
+      <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"}>Add to cart</button>
     </article>
   `;
 }
@@ -605,8 +661,12 @@ function getStorefrontSellers() {
 function renderCustomerCategories(products = storefrontProductsCache) {
   const rail = document.querySelector("[data-customer-category-rail]");
   if (!rail) return;
-  const categories = ["All", ...new Set(products.map((product) => product.category || "General").filter(Boolean))].slice(0, 8);
-  rail.innerHTML = categories.map((category) => `<button type="button" data-customer-category-pill="${escapeHtml(category)}">${escapeHtml(category)}</button>`).join("");
+  const configured = Array.isArray(customerAppConfig.categoryOrder) ? customerAppConfig.categoryOrder : [];
+  const detected = [...new Set(products.map((product) => product.category || "General").filter(Boolean))];
+  const categories = ["All", ...new Set([...configured, ...detected])].slice(0, 12);
+  rail.innerHTML = categories
+    .map((category, index) => `<button type="button" class="${index === 0 ? "active" : ""}" data-customer-category-pill="${escapeHtml(category)}">${escapeHtml(category)}</button>`)
+    .join("");
 }
 
 function renderStorefrontProducts(products = storefrontProductsCache) {
@@ -620,10 +680,81 @@ function resetCustomerMain() {
   if (target && !target.querySelector(".section-heading")) target.innerHTML = customerMainDefaultHtml;
 }
 
+function renderCustomerSaleBanner() {
+  const banner = document.querySelector(".customer-sale-banner");
+  if (!banner) return;
+  const offerImage = customerAppConfig.offerImageUrl || "";
+  banner.style.backgroundImage = offerImage
+    ? `linear-gradient(90deg, rgba(5, 64, 43, 0.78), rgba(5, 64, 43, 0.42)), url("${offerImage.replaceAll('"', "%22")}")`
+    : "";
+  banner.innerHTML = `
+    <div>
+      <p class="eyebrow">Axzen offer</p>
+      <h2>${escapeHtml(customerAppConfig.saleTitle || "Exclusive coupon for you!")}</h2>
+      <p>${escapeHtml(customerAppConfig.saleSubtitle || "Flat 10% Off up to Rs. 100. Already applied on selected products.")}</p>
+    </div>
+    <a class="primary-button" href="#products">${escapeHtml(customerAppConfig.saleCta || "Shop offers")}</a>
+  `;
+}
+
+function renderRecentProducts() {
+  const section = document.querySelector("[data-customer-recent]");
+  if (!section) return;
+  const recent = readJsonArray(CUSTOMER_RECENT_KEY);
+  section.hidden = recent.length === 0;
+  if (!recent.length) return;
+  section.innerHTML = `
+    <div class="section-heading compact">
+      <div>
+        <p class="eyebrow">Your recent history</p>
+        <h2>Continue from where you stopped</h2>
+      </div>
+    </div>
+    <div class="customer-mini-rail">
+      ${recent
+        .map(
+          (item) => `
+            <button type="button" data-product-card="${escapeHtml(item.id)}">
+              ${item.image ? `<img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}">` : `<span>${escapeHtml((item.title || "P").charAt(0))}</span>`}
+              <strong>${escapeHtml(item.title || "Product")}</strong>
+              <small>${escapeHtml(item.price || "")}</small>
+            </button>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderCategorySections(products = storefrontProductsCache) {
+  const section = document.querySelector("[data-customer-category-sections]");
+  if (!section) return;
+  const categories = [...new Set(products.map((product) => product.category || "General").filter(Boolean))].slice(0, 8);
+  section.innerHTML = categories
+    .map((category) => {
+      const categoryProducts = products.filter((product) => (product.category || "General") === category);
+      return `
+        <article class="customer-category-block" data-category-block="${escapeHtml(category)}">
+          <header>
+            <h2>${escapeHtml(category)}</h2>
+            <button type="button" data-open-category="${escapeHtml(category)}">More</button>
+          </header>
+          <div class="commerce-products category-products-row">
+            ${categoryProducts.slice(0, 5).map(renderStorefrontProduct).join("")}
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
 function renderStoreRail() {
   const rail = document.querySelector(".store-rail");
   if (!rail) return;
-  const sellers = getStorefrontSellers().slice(0, 6);
+  const configured = new Set((customerAppConfig.recommendedSellerIds || []).map(String));
+  const sellers = getStorefrontSellers()
+    .sort((a, b) => Number(configured.has(String(b.id))) - Number(configured.has(String(a.id))))
+    .slice(0, 15);
   if (!sellers.length) return;
   rail.innerHTML = sellers
     .map(
@@ -637,12 +768,19 @@ function renderStoreRail() {
       `
     )
     .join("");
+  window.clearInterval(storeRailTimer);
+  storeRailTimer = window.setInterval(() => {
+    if (!document.body.contains(rail) || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const maxScroll = rail.scrollWidth - rail.clientWidth;
+    rail.scrollTo({ left: rail.scrollLeft >= maxScroll - 20 ? 0 : rail.scrollLeft + Math.min(260, rail.clientWidth), behavior: "smooth" });
+  }, 5000);
 }
 
 function openCustomerSellerPage(sellerId) {
   const seller = getStorefrontSellers().find((entry) => String(entry.id) === String(sellerId));
   const target = document.querySelector("[data-customer-main]");
   if (!seller || !target) return;
+  const isFollowing = getFollowedSellers().some((item) => String(item.id) === String(seller.id));
   target.innerHTML = `
     <section class="customer-seller-page">
       <header>
@@ -651,12 +789,161 @@ function openCustomerSellerPage(sellerId) {
           <h2>${escapeHtml(seller.name)}</h2>
           <p>${seller.products.length} products available</p>
         </div>
-        <button type="button" data-follow-seller="${escapeHtml(seller.id)}">Follow</button>
+        <button type="button" data-follow-seller="${escapeHtml(seller.id)}">${isFollowing ? "Following" : "Follow"}</button>
       </header>
       <div class="commerce-products">${seller.products.map(renderStorefrontProduct).join("")}</div>
     </section>
   `;
   target.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function openCustomerFollowsView() {
+  const target = document.querySelector("[data-customer-main]");
+  if (!target) return;
+  const follows = getFollowedSellers();
+  target.innerHTML = `
+    <section class="customer-seller-page">
+      <header>
+        <div>
+          <p class="eyebrow">Follows</p>
+          <h2>Your followed stores</h2>
+          <p>${follows.length} seller pages saved</p>
+        </div>
+      </header>
+      <div class="store-rail static">
+        ${
+          follows.length
+            ? follows
+                .map(
+                  (seller) => `
+                    <article class="store-card" data-open-seller="${escapeHtml(seller.id)}">
+                      <div class="store-card-top"><span class="store-avatar">${escapeHtml(seller.name.slice(0, 2).toUpperCase())}</span><span class="store-status">Following</span></div>
+                      <h3>${escapeHtml(seller.name)}</h3>
+                      <p class="store-meta">Followed ${new Date(seller.followedAt).toLocaleDateString()}</p>
+                    </article>
+                  `
+                )
+                .join("")
+            : `<p class="order-invoice-empty">No followed sellers yet. Open any seller page and tap Follow.</p>`
+        }
+      </div>
+    </section>
+  `;
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function openCustomerCategoryPage(category) {
+  const target = document.querySelector("[data-customer-main]");
+  if (!target) return;
+  const products = storefrontProductsCache.filter((product) => (product.category || "General") === category);
+  target.innerHTML = `
+    <section class="customer-seller-page">
+      <header>
+        <div>
+          <p class="eyebrow">Category</p>
+          <h2>${escapeHtml(category)}</h2>
+          <p>${products.length} products available</p>
+        </div>
+        <button type="button" data-reset-customer-home>Back to home</button>
+      </header>
+      <div class="commerce-products">${products.map(renderStorefrontProduct).join("")}</div>
+    </section>
+  `;
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function openCustomerOrdersView() {
+  const token = localStorage.getItem("axzenToken");
+  if (!token || localStorage.getItem("axzenRole") !== "customer") {
+    loginSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  document.querySelector("[data-customer-orders-modal]")?.remove();
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    `<aside class="customer-product-modal customer-orders-modal" data-customer-orders-modal>
+      <article>
+        <button type="button" data-close-customer-orders>Close</button>
+        <div class="customer-product-detail wide">
+          <p class="eyebrow">My orders</p>
+          <h2>Order history</h2>
+          <p>Loading your latest orders...</p>
+        </div>
+      </article>
+    </aside>`
+  );
+  try {
+    const response = await fetch("/api/orders/customer", { headers: { Authorization: `Bearer ${token}` } });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Unable to load orders.");
+    const orders = result.orders || [];
+    customerOrdersCache = orders;
+    document.querySelector("[data-customer-orders-modal] article").innerHTML = `
+      <button type="button" data-close-customer-orders>Close</button>
+      <div class="customer-product-detail wide">
+        <p class="eyebrow">My orders</p>
+        <h2>Order history</h2>
+        ${
+          orders.length
+            ? `<div class="customer-order-history">
+                ${orders
+                  .map((order) => {
+                    const statusDate = order.deliveredAt || order.cancelledAt || order.updatedAt || order.createdAt;
+                    return `
+                      <button type="button" data-customer-order-row="${escapeHtml(order.orderId)}">
+                        <strong>${escapeHtml(order.orderId)}</strong>
+                        <span>${escapeHtml(order.sellerName || "Axzen seller")}</span>
+                        <small>${escapeHtml((order.status || "placed").replaceAll("_", " "))} - ${new Date(statusDate).toLocaleDateString()}</small>
+                        <b>${rupees(order.customerPaid || order.finance?.totalPaise || 0)}</b>
+                      </button>
+                    `;
+                  })
+                  .join("")}
+              </div>`
+            : `<p class="order-invoice-empty">No orders yet.</p>`
+        }
+      </div>
+    `;
+  } catch (error) {
+    document.querySelector("[data-customer-orders-modal] .customer-product-detail").innerHTML = `<h2>Order history</h2><p>${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function openCustomerOrderDetails(orderId) {
+  const order = customerOrdersCache.find((item) => String(item.orderId) === String(orderId));
+  if (!order) return;
+  const statusDate = order.deliveredAt || order.cancelledAt || order.updatedAt || order.createdAt;
+  const items = order.items || [];
+  const target = document.querySelector("[data-customer-orders-modal] article");
+  if (!target) return;
+  target.innerHTML = `
+    <button type="button" data-close-customer-orders>Close</button>
+    <button type="button" class="secondary-button" data-back-customer-orders>Back to orders</button>
+    <div class="customer-product-detail wide">
+      <p class="eyebrow">Order details</p>
+      <h2>${escapeHtml(order.orderId)}</h2>
+      <div class="report-detail-grid">
+        <button class="seller-profile-chip" type="button"><span>Status</span><strong>${escapeHtml((order.status || "placed").replaceAll("_", " "))}</strong></button>
+        <button class="seller-profile-chip" type="button"><span>Status date</span><strong>${new Date(statusDate).toLocaleDateString()}</strong></button>
+        <button class="seller-profile-chip" type="button"><span>Seller</span><strong>${escapeHtml(order.sellerName || "Axzen seller")}</strong></button>
+        <button class="seller-profile-chip" type="button"><span>Total</span><strong>${rupees(order.customerPaid || order.finance?.totalPaise || 0)}</strong></button>
+      </div>
+      <div class="customer-order-history">
+        ${items
+          .map(
+            (item) => `
+              <button type="button">
+                <strong>${escapeHtml(item.title || item.name || "Product")}</strong>
+                <span>Qty ${escapeHtml(item.quantity || item.qty || 1)}</span>
+                <small>${escapeHtml(item.sku || "")}</small>
+                <b>${rupees(item.pricePaise || item.price || 0)}</b>
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
 }
 
 function openCustomerProductModal(productId) {
@@ -665,6 +952,7 @@ function openCustomerProductModal(productId) {
   document.querySelector("[data-customer-product-modal]")?.remove();
   const images = product.images?.length ? product.images : [product.image].filter(Boolean);
   const mrp = Number(product.mrpPaise) > Number(product.pricePaise) ? product.mrp || rupees(product.mrpPaise) : "";
+  const stock = Number(product.stock) || 0;
   document.body.insertAdjacentHTML(
     "beforeend",
     `<aside class="customer-product-modal" data-customer-product-modal>
@@ -683,7 +971,8 @@ function openCustomerProductModal(productId) {
           <p>${escapeHtml(product.description || "Seller verified product on Axzen.")}</p>
           <div class="customer-price-row">${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}<strong>${escapeHtml(product.price || "Rs. 0")}</strong></div>
           <p>${escapeHtml(product.unitLabel || "1 pc")} | ${Number(product.ratingAverage || 0).toFixed(1)} rating (${Number(product.ratingCount) || 0})</p>
-          <button type="button" data-add-cart="${escapeHtml(product.id)}">Add to cart</button>
+          <p class="${stock > 0 ? "stock-left" : "stock-out"}">${stock > 0 ? `${Math.min(stock, 5)} items left` : "Currently not available"}</p>
+          <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"}>Add to cart</button>
         </div>
       </article>
     </aside>`
@@ -694,7 +983,10 @@ async function loadStorefrontCatalog() {
   const grid = document.querySelector(".commerce-products");
   if (!grid) return;
   try {
-    const response = await fetch("/api/customer/catalog");
+    const [configResponse, response] = await Promise.all([fetch("/api/customer/app-config"), fetch("/api/customer/catalog")]);
+    const configResult = await configResponse.json();
+    if (configResponse.ok) customerAppConfig = configResult.config || {};
+    renderCustomerSaleBanner();
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || "Unable to load products.");
     if (result.products?.length) {
@@ -702,12 +994,36 @@ async function loadStorefrontCatalog() {
       renderCustomerCategories(result.products);
       renderStorefrontProducts(result.products);
       renderStoreRail();
+      renderCategorySections(result.products);
+      renderRecentProducts();
     }
   } catch (error) {
     console.warn(error.message || "Customer catalog unavailable.");
   } finally {
     renderCartSummary(false);
   }
+}
+
+function initCustomerLocation() {
+  if (!customerLocationChip) return;
+  const saved = localStorage.getItem(CUSTOMER_LOCATION_KEY);
+  if (saved) {
+    customerLocationChip.textContent = saved;
+    return;
+  }
+  customerLocationChip.textContent = "Select delivery location";
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const label = `Location set ${position.coords.latitude.toFixed(2)}, ${position.coords.longitude.toFixed(2)}`;
+      localStorage.setItem(CUSTOMER_LOCATION_KEY, label);
+      customerLocationChip.textContent = label;
+    },
+    () => {
+      customerLocationChip.textContent = "Location not set";
+    },
+    { timeout: 5000, maximumAge: 86400000 }
+  );
 }
 
 async function openOrderInvoice(orderId) {
@@ -1916,8 +2232,8 @@ function renderDashboard(payload) {
   }
 
   if (dashboardSection) {
-    dashboardSection.hidden = false;
-    dashboardSection.scrollIntoView({ behavior: "smooth" });
+    dashboardSection.hidden = user.role === "customer";
+    if (user.role !== "customer") dashboardSection.scrollIntoView({ behavior: "smooth" });
   }
 }
 
@@ -2094,14 +2410,84 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
-  const productDetails = event.target.closest("[data-product-details]");
-  if (productDetails) {
-    openCustomerProductModal(productDetails.dataset.productDetails);
+  const customerLogoutLink = event.target.closest("a[href='#logout']");
+  if (customerLogoutLink) {
+    event.preventDefault();
+    logoutButton?.click();
+    if (customerProfilePopover) customerProfilePopover.hidden = true;
+    return;
+  }
+
+  const customerProfileLink = event.target.closest("[data-customer-profile-link]");
+  if (customerProfileLink) {
+    if (!(localStorage.getItem("axzenToken") && localStorage.getItem("axzenRole") === "customer")) {
+      loginSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (customerProfilePopover) customerProfilePopover.hidden = true;
+      return;
+    }
+    if (dashboardSection) {
+      dashboardSection.hidden = false;
+      dashboardSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    if (customerProfilePopover) customerProfilePopover.hidden = true;
+    return;
+  }
+
+  const customerCartLink = event.target.closest("a[href='#cart']");
+  if (customerCartLink && document.body.classList.contains("storefront-page")) {
+    event.preventDefault();
+    const cart = document.querySelector("#cart");
+    if (cart) {
+      cart.hidden = !cart.hidden;
+      if (!cart.hidden) {
+        renderCartSummary(false);
+        cart.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    }
+    if (customerProfilePopover) customerProfilePopover.hidden = true;
+    return;
+  }
+
+  const customerOrdersLink = event.target.closest("a[href='#orders']");
+  if (customerOrdersLink && document.body.classList.contains("storefront-page")) {
+    event.preventDefault();
+    if (customerProfilePopover) customerProfilePopover.hidden = true;
+    await openCustomerOrdersView();
+    return;
+  }
+
+  const customerFollowsLink = event.target.closest("[data-customer-follows-link]");
+  if (customerFollowsLink) {
+    event.preventDefault();
+    openCustomerFollowsView();
+    return;
+  }
+
+  if (event.target.closest("[data-close-customer-orders]") || event.target === document.querySelector("[data-customer-orders-modal]")) {
+    document.querySelector("[data-customer-orders-modal]")?.remove();
+    return;
+  }
+
+  if (event.target.closest("[data-back-customer-orders]")) {
+    await openCustomerOrdersView();
+    return;
+  }
+
+  const customerOrderRow = event.target.closest("[data-customer-order-row]");
+  if (customerOrderRow) {
+    openCustomerOrderDetails(customerOrderRow.dataset.customerOrderRow);
     return;
   }
 
   if (event.target.closest("[data-close-customer-product]") || event.target === document.querySelector("[data-customer-product-modal]")) {
     document.querySelector("[data-customer-product-modal]")?.remove();
+    return;
+  }
+
+  const productCard = event.target.closest("[data-product-card]");
+  if (productCard && !event.target.closest("[data-add-cart]") && !event.target.closest("[data-open-seller]")) {
+    openCustomerProductModal(productCard.dataset.productCard);
+    saveRecentProduct(productCard.dataset.productCard);
     return;
   }
 
@@ -2111,12 +2497,36 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const followSellerButton = event.target.closest("[data-follow-seller]");
+  if (followSellerButton) {
+    const seller = getStorefrontSellers().find((entry) => String(entry.id) === String(followSellerButton.dataset.followSeller));
+    if (seller) {
+      saveFollowedSeller(seller);
+      followSellerButton.textContent = "Following";
+    }
+    return;
+  }
+
   const categoryPill = event.target.closest("[data-customer-category-pill]");
   if (categoryPill) {
     const category = categoryPill.dataset.customerCategoryPill || "All";
     const products = category === "All" ? storefrontProductsCache : storefrontProductsCache.filter((product) => product.category === category);
     resetCustomerMain();
+    document.querySelectorAll("[data-customer-category-pill]").forEach((button) => button.classList.toggle("active", button === categoryPill));
     renderStorefrontProducts(products);
+    return;
+  }
+
+  const openCategory = event.target.closest("[data-open-category]");
+  if (openCategory) {
+    openCustomerCategoryPage(openCategory.dataset.openCategory);
+    return;
+  }
+
+  const resetCustomerHome = event.target.closest("[data-reset-customer-home]");
+  if (resetCustomerHome) {
+    resetCustomerMain();
+    renderStorefrontProducts(storefrontProductsCache);
     return;
   }
 
@@ -2633,6 +3043,7 @@ const savedToken = localStorage.getItem("axzenToken");
 const savedRole = localStorage.getItem("axzenRole");
 const pageRole = document.querySelector(".firebase-phone-form")?.dataset.role;
 
+initCustomerLocation();
 loadStorefrontCatalog();
 
 if (savedToken && savedRole && savedRole === pageRole) {
