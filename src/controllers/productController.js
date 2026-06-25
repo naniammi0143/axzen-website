@@ -1,5 +1,6 @@
 const Product = require("../models/Product");
 const Seller = require("../models/Seller");
+const Follow = require("../models/Follow");
 const asyncHandler = require("../utils/asyncHandler");
 const { success } = require("../utils/apiResponse");
 const { uploadProductImages } = require("../utils/cloudinary");
@@ -42,6 +43,13 @@ const listProducts = asyncHandler(async (req, res) => {
         .lean()
     : [];
   const sellerSettings = new Map(sellers.map((seller) => [String(seller._id), seller]));
+  const followerRows = sellerIds.length
+    ? await Follow.aggregate([
+        { $match: { sellerId: { $in: sellers.map((seller) => seller._id) } } },
+        { $group: { _id: "$sellerId", followers: { $sum: 1 } } },
+      ])
+    : [];
+  const followerCounts = new Map(followerRows.map((row) => [String(row._id), row.followers]));
 
   success(res, {
     products: products.map((product) => {
@@ -71,6 +79,7 @@ const listProducts = asyncHandler(async (req, res) => {
         sellerEmail: settings.email || "",
         sellerPhone: settings.phone || "",
         sellerCreatedAt: settings.createdAt || null,
+        sellerFollowerCount: followerCounts.get(String(product.sellerId)) || 0,
         sellerStoreDetails: settings.storeDetails || {},
         codEnabled: settings.codEnabled !== false,
         onlinePaymentEnabled: settings.onlinePaymentEnabled !== false,

@@ -297,6 +297,34 @@ function saveRecentProduct(productId) {
   renderRecentProducts();
 }
 
+function sellerInitials(name = "Seller") {
+  return (
+    String(name || "Seller")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join("") || "S"
+  );
+}
+
+function sellerAvatarMarkup(name, logoUrl = "", className = "seller-mini-avatar") {
+  return logoUrl
+    ? `<img class="${className}" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(name)}">`
+    : `<span class="${className}">${escapeHtml(sellerInitials(name))}</span>`;
+}
+
+function sellerVerifiedIcon() {
+  return `<span class="seller-verified-icon" aria-label="Verified seller">&#10003;</span>`;
+}
+
+function compactCount(value = 0) {
+  const number = Number(value) || 0;
+  if (number >= 100000) return `${(number / 100000).toFixed(1)}L`;
+  if (number >= 1000) return `${(number / 1000).toFixed(number >= 10000 ? 0 : 1)}K`;
+  return String(number);
+}
+
 function renderCustomerNotificationPanel(notifications = [], unreadCount = 0) {
   const count = document.querySelector("[data-customer-notification-count]");
   const list = document.querySelector("[data-customer-notification-list]");
@@ -764,6 +792,9 @@ function renderStorefrontProduct(product) {
   const image = product.image || product.images?.[0] || "";
   const title = product.title || product.name || "Product";
   const sellerName = product.sellerName || product.seller || "Axzen seller";
+  const sellerDetails = product.sellerStoreDetails || {};
+  const sellerLogo = sellerDetails.profileImageUrl || "";
+  const sellerFollowers = compactCount(product.sellerFollowerCount || 0);
   const category = product.category || "Product";
   const mrp = Number(product.mrpPaise) > Number(product.pricePaise) ? product.mrp || rupees(product.mrpPaise) : "";
   const rating = Number(product.ratingAverage || 0).toFixed(1);
@@ -779,10 +810,17 @@ function renderStorefrontProduct(product) {
         }
       </div>
       <div class="commerce-product-body">
-        <button class="product-wishlist" type="button" aria-label="Add ${escapeHtml(title)} to wishlist">♡</button>
+        <button class="product-wishlist" type="button" aria-label="Add ${escapeHtml(title)} to wishlist">&hearts;</button>
         <h3>${escapeHtml(title)}</h3>
         <p class="commerce-product-category">${escapeHtml(category)}</p>
-        <p class="commerce-product-seller"><button class="seller-hash-link" type="button" data-open-seller="${escapeHtml(product.sellerId)}">#${escapeHtml(sellerName)}</button></p>
+        <p class="commerce-product-seller">
+          ${sellerAvatarMarkup(sellerName, sellerLogo)}
+          <span class="seller-row-prefix">by</span>
+          <button class="seller-hash-link" type="button" data-open-seller="${escapeHtml(product.sellerId)}">${escapeHtml(sellerName)}</button>
+          ${sellerVerifiedIcon()}
+          <span class="seller-row-meta">${rating} rating</span>
+          <span class="seller-row-meta">${sellerFollowers} followers</span>
+        </p>
         <div class="customer-price-row">
           ${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}
           <strong>${escapeHtml(product.price || "Rs. 0")}</strong>
@@ -792,6 +830,53 @@ function renderStorefrontProduct(product) {
         <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"}>Add to cart</button>
       </div>
     </article>
+  `;
+}
+
+function renderSellerStoreProductCard(product) {
+  const image = product.image || product.images?.[0] || "";
+  const title = product.title || product.name || "Product";
+  const category = product.category || "Product";
+  const rating = Number(product.ratingAverage || 0).toFixed(1);
+  const ratingCount = Number(product.ratingCount || 0);
+  const stock = Number(product.stock) || 0;
+  return `
+    <article class="seller-store-product-card" data-product-card="${escapeHtml(product.id)}">
+      <button class="product-wishlist" type="button" aria-label="Add ${escapeHtml(title)} to wishlist">&hearts;</button>
+      <div class="seller-store-product-media">
+        ${
+          image
+            ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(title)}" loading="lazy">`
+            : `<div class="seller-store-product-fallback">${escapeHtml(category)}</div>`
+        }
+      </div>
+      <div class="seller-store-product-body">
+        <h4>${escapeHtml(title)}</h4>
+        <p>${escapeHtml(category)}</p>
+        <strong>${escapeHtml(product.price || "Rs. 0")}</strong>
+        <small>${rating} (${ratingCount})</small>
+        <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"}>Add to cart</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderSellerTopCategory(category, products = []) {
+  const categoryName = category.name || category;
+  const firstProduct = products.find((product) => (product.category || "General") === categoryName) || {};
+  const image = firstProduct.image || firstProduct.images?.[0] || "";
+  return `
+    <button type="button" class="seller-category-tile" data-open-category="${escapeHtml(categoryName)}">
+      <span>
+        ${
+          image
+            ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(categoryName)}">`
+            : `<b>${escapeHtml(sellerInitials(categoryName))}</b>`
+        }
+      </span>
+      <strong>${escapeHtml(categoryName)}</strong>
+      <small>${escapeHtml(category.products || products.filter((product) => (product.category || "General") === categoryName).length || 0)} Products</small>
+    </button>
   `;
 }
 
@@ -820,8 +905,10 @@ function getStorefrontSellers() {
       memberSinceLabel: storeDetails.memberSinceLabel || "",
       supportEmail: storeDetails.supportEmail || "",
       supportPhone: storeDetails.supportPhone || "",
+      followerCount: Number(product.sellerFollowerCount || 0),
       products: [],
     };
+    entry.followerCount = Math.max(Number(entry.followerCount || 0), Number(product.sellerFollowerCount || 0));
     entry.products.push(product);
     sellers.set(String(product.sellerId), entry);
   });
@@ -950,10 +1037,14 @@ function renderStoreRail() {
     .map(
       (seller) => `
         <article class="store-card" data-open-seller="${escapeHtml(seller.id)}">
-          <div class="store-card-top"><span class="store-avatar">${escapeHtml(seller.name.slice(0, 2).toUpperCase())}</span><span class="store-status">Follow</span></div>
-          <h3>${escapeHtml(seller.name)}</h3>
-          <p class="store-meta">${seller.products.length} products on Axzen</p>
+          <div class="store-card-top">
+            ${sellerAvatarMarkup(seller.name, seller.profileImageUrl, "store-card-logo")}
+            <span class="store-status">Verified</span>
+          </div>
+          <h3 class="store-card-name">${escapeHtml(seller.name)} ${sellerVerifiedIcon()}</h3>
+          <p class="store-meta">${compactCount(seller.followerCount)} followers &middot; ${seller.products.length} products &middot; ${Number(seller.ratingAverage || 4.8).toFixed(1)} rating</p>
           <div class="store-tags">${[...new Set(seller.products.map((product) => product.category || "General"))].slice(0, 3).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>
+          <button type="button" class="store-card-action" data-open-seller="${escapeHtml(seller.id)}">View Store</button>
         </article>
       `
     )
@@ -1041,9 +1132,11 @@ async function openCustomerSellerPage(sellerId, options = {}) {
   const reviews = store.reviews || {};
   const isFollowing = seller.isFollowing || getFollowedSellers().some((item) => String(item.id) === String(seller.id));
   const bestProducts = [...products].sort((a, b) => Number(b.ratingCount || 0) - Number(a.ratingCount || 0)).slice(0, 5);
+  const reviewAverage = Number(reviews.ratingAverage || 4.8).toFixed(1);
+  const reviewCount = Number(reviews.reviewCount || products.reduce((sum, product) => sum + Number(product.ratingCount || 0), 0) || 0);
   const avatar = seller.profileImageUrl
     ? `<img src="${escapeHtml(seller.profileImageUrl)}" alt="${escapeHtml(seller.name)}">`
-    : `<span>${escapeHtml(seller.name.slice(0, 4).toUpperCase())}</span>`;
+    : `<span>${escapeHtml(sellerInitials(seller.name).slice(0, 4))}</span>`;
   const bannerStyle = seller.offerBannerUrl ? ` style="background-image: linear-gradient(120deg, rgba(11,47,87,.9), rgba(0,113,227,.46)), url('${escapeHtml(seller.offerBannerUrl)}')"` : "";
   target.innerHTML = `
     <section class="customer-seller-page customer-seller-storefront">
@@ -1052,19 +1145,25 @@ async function openCustomerSellerPage(sellerId, options = {}) {
         <div class="seller-store-avatar">${avatar}</div>
         <div class="seller-store-copy">
           <p class="seller-preferred">Preferred Seller</p>
-          <h2>${escapeHtml(seller.name)} <span>Verified</span></h2>
+          <h2>${escapeHtml(seller.name)} ${sellerVerifiedIcon()}</h2>
           <p>${escapeHtml(seller.tagline || `Your trusted destination for ${seller.category || "quality products"}.`)}</p>
+          <div class="seller-rating-line"><span>★★★★★</span><strong>${reviewAverage}</strong><small>(${reviewCount} Reviews)</small></div>
           <div class="seller-store-meta">
-            <span>${escapeHtml(String(reviews.ratingAverage || "4.8"))} rating</span>
-            <span>${escapeHtml(String(seller.followerCount || 0))} followers</span>
+            <span>${reviewAverage} rating</span>
+            <span>${compactCount(seller.followerCount || 0)} followers</span>
             <span>${products.length} products</span>
             <span>${seller.memberSinceLabel || (seller.createdAt ? `Joined ${new Date(seller.createdAt).getFullYear()}` : "Verified seller")}</span>
           </div>
         </div>
+        <div class="seller-hero-trust">
+          <span><strong>100% Original</strong><small>Genuine Products</small></span>
+          <span><strong>7 Days Return</strong><small>Easy Returns</small></span>
+          <span><strong>Secure Payment</strong><small>100% Protected</small></span>
+        </div>
         <div class="seller-store-actions">
           <button type="button" class="secondary-button" data-share-seller="${escapeHtml(seller.id)}">Share Store</button>
           <button type="button" data-follow-seller="${escapeHtml(seller.id)}">${isFollowing ? "Unfollow" : "Follow"}</button>
-          <small>${isFollowing ? "You follow this store" : "Follow for new product alerts"}</small>
+          <small>${isFollowing ? "You follow this store" : `Followed by ${compactCount(seller.followerCount || 0)}+ customers`}</small>
         </div>
       </header>
       <div class="seller-store-tabs">
@@ -1081,21 +1180,19 @@ async function openCustomerSellerPage(sellerId, options = {}) {
           <h3>About ${escapeHtml(seller.name)}</h3>
           <p>${escapeHtml(seller.about || `Welcome to ${seller.name}, a trusted Axzen seller offering quality products, fast delivery and customer support.`)}</p>
           <div class="seller-store-benefits">
-            <span>Quality Products</span>
-            <span>Fast Delivery</span>
-            <span>Trusted Support</span>
+            <span><strong>Quality Products</strong><small>100% Genuine</small></span>
+            <span><strong>Fast Delivery</strong><small>Pan India Delivery</small></span>
+            <span><strong>Safe Packaging</strong><small>Safe & Reliable</small></span>
           </div>
         </article>
-        <article class="seller-store-card highlights">
-          <h3>Store Highlights</h3>
-          <div class="seller-highlight-grid">
-            <span><strong>${escapeHtml(String(seller.followerCount || 0))}</strong><small>Followers</small></span>
-            <span><strong>${products.length}</strong><small>Products</small></span>
-            <span><strong>${escapeHtml(String(reviews.ratingAverage || "4.8"))}</strong><small>Rating</small></span>
-            <span><strong>98%</strong><small>Response Rate</small></span>
+        <article class="seller-store-card categories">
+          <header>
+            <h3>Top Categories</h3>
+            <button type="button">View all categories -></button>
+          </header>
+          <div class="seller-top-categories">
+            ${categories.slice(0, 5).map((category) => renderSellerTopCategory(category, products)).join("")}
           </div>
-          <h4>Top Categories</h4>
-          <div class="seller-top-categories">${categories.slice(0, 5).map((category) => `<button type="button" data-open-category="${escapeHtml(category.name || category)}">${escapeHtml(category.name || category)}<small>${escapeHtml(category.products || "")}</small></button>`).join("")}</div>
         </article>
         <aside class="seller-store-card info">
           <h3>Seller Information</h3>
@@ -1110,11 +1207,22 @@ async function openCustomerSellerPage(sellerId, options = {}) {
           </dl>
           <button type="button" data-follow-seller="${escapeHtml(seller.id)}">${isFollowing ? "Following" : "Message Seller"}</button>
         </aside>
+        <section class="seller-best-products">
+          <header><h3>Best Selling Products</h3><button type="button">View all products -></button></header>
+          <div class="seller-store-product-row">${bestProducts.map(renderSellerStoreProductCard).join("")}</div>
+        </section>
         <aside class="seller-store-card reviews">
           <h3>Customer Reviews</h3>
+          <div class="seller-review-identity">
+            ${sellerAvatarMarkup(seller.name, seller.profileImageUrl, "seller-review-avatar")}
+            <div>
+              <strong>${escapeHtml(seller.name)} ${sellerVerifiedIcon()}</strong>
+              <small>Verified seller &middot; ${compactCount(seller.followerCount || 0)} followers</small>
+            </div>
+          </div>
           <div class="seller-review-score">
-            <strong>${escapeHtml(String(reviews.ratingAverage || "0.0"))}</strong>
-            <span>${escapeHtml(String(reviews.reviewCount || 0))} reviews</span>
+            <strong>${reviewAverage}</strong>
+            <span>${reviewCount} reviews</span>
           </div>
           <div class="seller-review-bars">
             ${(reviews.bars || [5, 4, 3, 2, 1].map((rating) => ({ rating, percent: 0 })))
@@ -1128,23 +1236,16 @@ async function openCustomerSellerPage(sellerId, options = {}) {
           }
         </aside>
       </div>
-      <section class="seller-offer-banner">
-        <strong>${escapeHtml(seller.offerTitle || "Extra 5% Off")}</strong>
-        <span>${escapeHtml(seller.offerSubtitle || "Special store offers on selected products")}</span>
-      </section>
-      <section class="seller-best-products">
-        <header><h3>Best Selling Products</h3><button type="button">View all products -></button></header>
-        <div class="commerce-products seller-best-row">${bestProducts.map(renderStorefrontProduct).join("")}</div>
-      </section>
       <section class="seller-all-products">
         <header><h3>All Products</h3><span>${products.length} items</span></header>
         <div class="commerce-products">${products.map(renderStorefrontProduct).join("")}</div>
       </section>
       <div class="seller-store-perks">
-        <span>Extra offers on prepaid orders</span>
-        <span>Free shipping rules by seller</span>
-        <span>Safe packaging</span>
-        <span>Dedicated support</span>
+        <span><strong>Extra 5% Off</strong><small>On Prepaid Orders</small></span>
+        <span><strong>Free Shipping</strong><small>On Orders Above Rs. 499</small></span>
+        <span><strong>Easy Returns</strong><small>Within 7 Days</small></span>
+        <span><strong>Safe Packaging</strong><small>100% Secure Packaging</small></span>
+        <span><strong>Dedicated Support</strong><small>24x7 Customer Support</small></span>
       </div>
     </section>
   `;
@@ -1185,13 +1286,23 @@ async function openCustomerFollowsView(options = {}) {
           follows.length
             ? follows
                 .map(
-                  (seller) => `
+                  (seller) => {
+                    const liveSeller = getStorefrontSellers().find((entry) => String(entry.id) === String(seller.id)) || {};
+                    const sellerName = liveSeller.name || seller.name || "Axzen seller";
+                    const followerCount = liveSeller.followerCount || seller.followerCount || 0;
+                    const productCount = liveSeller.products?.length || seller.productCount || 0;
+                    return `
                     <article class="store-card" data-open-seller="${escapeHtml(seller.id)}">
-                      <div class="store-card-top"><span class="store-avatar">${escapeHtml(seller.name.slice(0, 2).toUpperCase())}</span><span class="store-status">Following</span></div>
-                      <h3>${escapeHtml(seller.name)}</h3>
-                      <p class="store-meta">Followed ${new Date(seller.followedAt).toLocaleDateString()}</p>
+                      <div class="store-card-top">
+                        ${sellerAvatarMarkup(sellerName, liveSeller.profileImageUrl || seller.profileImageUrl || "", "store-card-logo")}
+                        <span class="store-status">Following</span>
+                      </div>
+                      <h3 class="store-card-name">${escapeHtml(sellerName)} ${sellerVerifiedIcon()}</h3>
+                      <p class="store-meta">${compactCount(followerCount)} followers &middot; ${productCount} products &middot; Followed ${new Date(seller.followedAt).toLocaleDateString()}</p>
+                      <button type="button" class="store-card-action" data-open-seller="${escapeHtml(seller.id)}">View Store</button>
                     </article>
-                  `
+                  `;
+                  }
                 )
                 .join("")
             : `<p class="order-invoice-empty">No followed sellers yet. Open any seller page and tap Follow.</p>`
@@ -1410,6 +1521,9 @@ function openCustomerProductModal(productId) {
   const stock = Number(product.stock) || 0;
   const productTitle = product.title || "Product";
   const sellerName = product.sellerName || "Seller";
+  const sellerDetails = product.sellerStoreDetails || {};
+  const sellerLogo = sellerDetails.profileImageUrl || "";
+  const sellerFollowers = compactCount(product.sellerFollowerCount || 0);
   const fallbackImage = `<div class="commerce-product-image">${escapeHtml(product.category || "Product")}</div>`;
   const mainImage = images[0]
     ? `<img src="${escapeHtml(images[0])}" alt="${escapeHtml(productTitle)}">`
@@ -1433,12 +1547,21 @@ function openCustomerProductModal(productId) {
           </div>
           <div class="customer-product-main-image">
             <span class="product-popular-badge">Popular</span>
-            <button class="product-wishlist" type="button" aria-label="Add ${escapeHtml(productTitle)} to wishlist">♡</button>
+            <button class="product-wishlist" type="button" aria-label="Add ${escapeHtml(productTitle)} to wishlist">&hearts;</button>
             ${mainImage}
           </div>
         </div>
         <div class="customer-product-detail">
-          <p class="customer-product-seller-badge">${escapeHtml(sellerName)} <span>✓</span></p>
+          <div class="customer-product-seller-panel">
+            ${sellerAvatarMarkup(sellerName, sellerLogo, "seller-modal-avatar")}
+            <div>
+              <span>Sold by</span>
+              <button type="button" data-open-seller="${escapeHtml(product.sellerId)}">${escapeHtml(sellerName)}</button>
+              ${sellerVerifiedIcon()}
+              <small>${Number(product.ratingAverage || 0).toFixed(1)} rating &middot; ${sellerFollowers} followers</small>
+            </div>
+            <button type="button" class="view-store-button" data-open-seller="${escapeHtml(product.sellerId)}">View Store</button>
+          </div>
           <h2>${escapeHtml(productTitle)}</h2>
           <p>${escapeHtml(product.description || "Seller verified product on Axzen.")}</p>
           <div class="customer-price-row">${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}<strong>${escapeHtml(product.price || "Rs. 0")}</strong></div>
@@ -3147,7 +3270,8 @@ document.addEventListener("click", async (event) => {
 
   const openSellerButton = event.target.closest("[data-open-seller]");
   if (openSellerButton) {
-    openCustomerSellerPage(openSellerButton.dataset.openSeller);
+    document.querySelector("[data-customer-product-modal]")?.remove();
+    await openCustomerSellerPage(openSellerButton.dataset.openSeller);
     return;
   }
 
