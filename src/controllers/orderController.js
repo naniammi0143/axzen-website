@@ -2,6 +2,7 @@ const Cart = require("../models/Cart");
 const Delivery = require("../models/Delivery");
 const Order = require("../models/Order");
 const Payment = require("../models/Payment");
+const Product = require("../models/Product");
 const Seller = require("../models/Seller");
 const Settlement = require("../models/Settlement");
 const mongoose = require("mongoose");
@@ -308,6 +309,14 @@ const syncSellerShipmentStatus = asyncHandler(async (req, res) => {
 });
 
 const shiprocketStatusWebhook = asyncHandler(async (req, res) => {
+  const webhookSecret = process.env.SHIPROCKET_WEBHOOK_SECRET || "";
+  if (webhookSecret) {
+    const providedSecret = req.headers["x-shiprocket-secret"] || req.headers["x-webhook-secret"] || req.body.secret;
+    if (providedSecret !== webhookSecret) {
+      res.status(401).json({ ok: false, message: "Invalid shipment webhook secret." });
+      return;
+    }
+  }
   const orderId = req.body.order_id || req.body.orderId;
   const awb = req.body.awb || req.body.awb_code || req.body.awbNumber;
   const order = await Order.findOne({
@@ -323,13 +332,50 @@ const shiprocketStatusWebhook = asyncHandler(async (req, res) => {
 
 async function buildOrderFinanceFromRequest(req) {
   const cart = await Cart.findOne({ customerId: req.user.id });
-  const items = Array.isArray(req.body.items) && req.body.items.length ? req.body.items : cart?.items || [];
+  const requestedItems = Array.isArray(req.body.items) && req.body.items.length ? req.body.items : cart?.items || [];
 
-  if (!items.length) {
+  if (!requestedItems.length) {
     return { error: "Cart is empty." };
   }
 
-  const seller = await Seller.findById(items[0].sellerId);
+  const productIds = requestedItems.map((item) => item.productId || item.id).filter(Boolean);
+  if (!productIds.length) {
+    return { error: "Cart items are invalid." };
+  }
+  if (productIds.some((id) => !mongoose.isValidObjectId(id))) {
+    return { error: "Cart contains invalid products." };
+  }
+
+  const products = await Product.find({ _id: { $in: productIds }, status: { $in: ["active", "approved"] } }).lean();
+  const productMap = new Map(products.map((product) => [String(product._id), product]));
+  const items = [];
+
+  for (const requested of requestedItems) {
+    const productId = String(requested.productId || requested.id || "");
+    const product = productMap.get(productId);
+    const quantity = Math.max(1, Math.min(Number.parseInt(requested.quantity, 10) || 1, 10));
+    if (!product) {
+      return { error: "One or more cart products are not available anymore." };
+    }
+    if ((Number(product.stock) || 0) < quantity) {
+      return { error: `${product.title} has only ${Number(product.stock) || 0} item(s) available.` };
+    }
+    items.push({
+      productId: product._id,
+      sellerId: product.sellerId,
+      sku: product.sku,
+      title: product.title,
+      pricePaise: product.pricePaise,
+      quantity,
+    });
+  }
+
+  const sellerIds = [...new Set(items.map((item) => String(item.sellerId)))];
+  if (sellerIds.length !== 1) {
+    return { error: "Checkout supports one seller per order. Place separate orders for each seller." };
+  }
+
+  const seller = await Seller.findById(sellerIds[0]);
   if (!seller) {
     return { error: "Seller not found for this order." };
   }
@@ -346,6 +392,19 @@ async function buildOrderFinanceFromRequest(req) {
   const finance = calculateOrderFinance(items, getSellerCommission(seller), deliveryCharge, sellerDeliveryCharge);
   finance.freeDeliveryApplied = sellerFreeDeliveryEligible;
   return { cart, items, seller, finance, freeDeliveryApplied: sellerFreeDeliveryEligible };
+}
+
+async function decrementOrderStock(items = []) {
+  for (const item of items) {
+    const updated = await Product.findOneAndUpdate(
+      { _id: item.productId, stock: { $gte: item.quantity }, status: { $in: ["active", "approved"] } },
+      { $inc: { stock: -item.quantity } },
+      { new: true }
+    );
+    if (!updated) {
+      throw new Error(`${item.title || "Product"} is out of stock. Please refresh cart and try again.`);
+    }
+  }
 }
 
 const createRazorpayCheckoutOrder = asyncHandler(async (req, res) => {
@@ -419,6 +478,12 @@ const createOrder = asyncHandler(async (req, res) => {
       }));
   if (paymentMethod !== "cod" && !isOnlinePaid) {
     res.status(400).json({ ok: false, message: "Online payment was not completed. Order was not placed." });
+    return;
+  }
+  try {
+    await decrementOrderStock(items);
+  } catch (error) {
+    res.status(409).json({ ok: false, message: error.message || "Stock changed. Please refresh cart." });
     return;
   }
   const transactionId = req.body.razorpayPaymentId || req.body.transactionId || (paymentMethod === "cod" ? `COD-${orderId}` : `PAY-${orderId}`);

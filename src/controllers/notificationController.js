@@ -24,7 +24,7 @@ async function notifyFollowersForProduct(seller, product) {
 }
 
 const followSeller = asyncHandler(async (req, res) => {
-  const seller = await Seller.findById(req.params.sellerId).select("_id businessName").lean();
+  const seller = await Seller.findOne({ _id: req.params.sellerId, isActive: true, status: "active" }).select("_id businessName").lean();
   if (!seller) {
     res.status(404).json({ ok: false, message: "Seller not found." });
     return;
@@ -36,7 +36,7 @@ const followSeller = asyncHandler(async (req, res) => {
 });
 
 const unfollowSeller = asyncHandler(async (req, res) => {
-  const seller = await Seller.findById(req.params.sellerId).select("_id businessName").lean();
+  const seller = await Seller.findOne({ _id: req.params.sellerId, isActive: true, status: "active" }).select("_id businessName").lean();
   if (!seller) {
     res.status(404).json({ ok: false, message: "Seller not found." });
     return;
@@ -48,15 +48,17 @@ const unfollowSeller = asyncHandler(async (req, res) => {
 });
 
 const listCustomerFollows = asyncHandler(async (req, res) => {
-  const follows = await Follow.find({ customerId: req.user.id }).sort({ createdAt: -1 }).populate("sellerId", "businessName category city").lean();
+  const follows = await Follow.find({ customerId: req.user.id }).sort({ createdAt: -1 }).populate("sellerId", "businessName category city isActive status").lean();
   success(res, {
-    follows: follows.map((follow) => ({
-      id: follow.sellerId?._id,
-      name: follow.sellerId?.businessName || "Seller",
-      category: follow.sellerId?.category || "General",
-      city: follow.sellerId?.city || "",
-      followedAt: follow.createdAt,
-    })),
+    follows: follows
+      .filter((follow) => follow.sellerId?.isActive === true && follow.sellerId?.status === "active")
+      .map((follow) => ({
+        id: follow.sellerId?._id,
+        name: follow.sellerId?.businessName || "Seller",
+        category: follow.sellerId?.category || "General",
+        city: follow.sellerId?.city || "",
+        followedAt: follow.createdAt,
+      })),
   });
 });
 

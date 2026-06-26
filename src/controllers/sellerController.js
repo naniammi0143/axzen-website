@@ -141,7 +141,7 @@ function buildSellerUpdate(req, phone, email) {
   };
 }
 
-function publicProduct(product) {
+function publicProduct(product, seller = {}) {
   return {
     id: product._id,
     sku: product.sku,
@@ -160,6 +160,18 @@ function publicProduct(product) {
     stock: product.stock,
     images: product.images || [],
     image: product.images?.[0] || "",
+    sellerCategory: seller.category || "General",
+    sellerCity: seller.city || "",
+    sellerFullName: seller.fullName || "",
+    sellerBusinessType: seller.businessType || "",
+    sellerEmail: seller.email || "",
+    sellerPhone: seller.phone || "",
+    sellerCreatedAt: seller.createdAt || null,
+    sellerStoreDetails: seller.storeDetails || {},
+    codEnabled: seller.codEnabled !== false,
+    onlinePaymentEnabled: seller.onlinePaymentEnabled !== false,
+    freeDeliveryEnabled: seller.freeDeliveryEnabled === true,
+    freeDeliveryMinOrderPaise: Number(seller.freeDeliveryMinOrderPaise) || 0,
   };
 }
 
@@ -212,11 +224,21 @@ const getPublicSeller = asyncHandler(async (req, res) => {
 });
 
 const getPublicSellerProducts = asyncHandler(async (req, res) => {
+  const seller = await Seller.findOne({ _id: req.params.sellerId, isActive: true, status: "active" }).lean();
+  if (!seller) {
+    res.status(404).json({ ok: false, message: "Seller not found." });
+    return;
+  }
   const products = await Product.find({ sellerId: req.params.sellerId, status: { $in: ["active", "approved"] } }).sort({ updatedAt: -1 }).limit(200).lean();
-  success(res, { products: products.map(publicProduct) });
+  success(res, { products: products.map((product) => publicProduct(product, seller)) });
 });
 
 const getPublicSellerCategories = asyncHandler(async (req, res) => {
+  const seller = await Seller.findOne({ _id: req.params.sellerId, isActive: true, status: "active" }).select("_id").lean();
+  if (!seller) {
+    res.status(404).json({ ok: false, message: "Seller not found." });
+    return;
+  }
   const products = await Product.find({ sellerId: req.params.sellerId, status: { $in: ["active", "approved"] } }).select("category").lean();
   const counts = products.reduce((map, product) => {
     const category = product.category || "General";
@@ -228,6 +250,11 @@ const getPublicSellerCategories = asyncHandler(async (req, res) => {
 });
 
 const getPublicSellerReviews = asyncHandler(async (req, res) => {
+  const seller = await Seller.findOne({ _id: req.params.sellerId, isActive: true, status: "active" }).select("_id").lean();
+  if (!seller) {
+    res.status(404).json({ ok: false, message: "Seller not found." });
+    return;
+  }
   const products = await Product.find({ sellerId: req.params.sellerId, status: { $in: ["active", "approved"] } }).select("ratingAverage ratingCount title").lean();
   const totalReviews = products.reduce((sum, product) => sum + Number(product.ratingCount || 0), 0);
   const weightedRating = totalReviews

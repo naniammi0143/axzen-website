@@ -38,7 +38,7 @@ const listProducts = asyncHandler(async (req, res) => {
   const products = await Product.find({ status: { $in: ["active", "approved"] } }).sort({ updatedAt: -1 }).limit(200).lean();
   const sellerIds = [...new Set(products.map((product) => String(product.sellerId)).filter(Boolean))];
   const sellers = sellerIds.length
-    ? await Seller.find({ _id: { $in: sellerIds } })
+    ? await Seller.find({ _id: { $in: sellerIds }, isActive: true, status: "active" })
         .select("_id businessName category city fullName businessType email phone createdAt codEnabled onlinePaymentEnabled freeDeliveryEnabled freeDeliveryMinOrderPaise storeDetails")
         .lean()
     : [];
@@ -52,7 +52,7 @@ const listProducts = asyncHandler(async (req, res) => {
   const followerCounts = new Map(followerRows.map((row) => [String(row._id), row.followers]));
 
   success(res, {
-    products: products.map((product) => {
+    products: products.filter((product) => sellerSettings.has(String(product.sellerId))).map((product) => {
       const settings = sellerSettings.get(String(product.sellerId)) || {};
       return {
         id: product._id,

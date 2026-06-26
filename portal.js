@@ -60,6 +60,7 @@ const ADDRESS_KEY = "axzenCustomerAddress";
 const CUSTOMER_FOLLOWS_KEY = "axzenCustomerFollows";
 const CUSTOMER_RECENT_KEY = "axzenCustomerRecentProducts";
 const CUSTOMER_LOCATION_KEY = "axzenCustomerLocation";
+const CUSTOMER_WISHLIST_KEY = "axzenCustomerWishlist";
 const SELLER_OWNER_KEY = "axzenSellerOwnerMode";
 const SELLER_NOTIFICATION_MUTE_KEY = "axzenSellerNotificationsMuted";
 const SELLER_NOTIFICATION_HISTORY_KEY = "axzenSellerNotificationHistory";
@@ -439,6 +440,46 @@ function setCartMessage(message, isError = false) {
   });
 }
 
+function showCustomerToast(message, isError = false) {
+  let toast = document.querySelector("[data-customer-toast]");
+  if (!toast) {
+    document.body.insertAdjacentHTML("beforeend", `<div class="customer-toast" data-customer-toast hidden></div>`);
+    toast = document.querySelector("[data-customer-toast]");
+  }
+  toast.textContent = message;
+  toast.classList.toggle("error", isError);
+  toast.hidden = false;
+  window.clearTimeout(showCustomerToast.timer);
+  showCustomerToast.timer = window.setTimeout(() => {
+    toast.hidden = true;
+  }, 2600);
+}
+
+function getCustomerWishlist() {
+  return readJsonArray(CUSTOMER_WISHLIST_KEY).map(String);
+}
+
+function saveCustomerWishlist(list = []) {
+  writeJsonArray(CUSTOMER_WISHLIST_KEY, [...new Set(list.map(String))]);
+}
+
+function isWishlisted(productId) {
+  return getCustomerWishlist().includes(String(productId));
+}
+
+function toggleCustomerWishlist(productId) {
+  const product = storefrontProductsCache.find((item) => String(item.id) === String(productId));
+  const wishlist = getCustomerWishlist();
+  const exists = wishlist.includes(String(productId));
+  const next = exists ? wishlist.filter((id) => id !== String(productId)) : [...wishlist, String(productId)];
+  saveCustomerWishlist(next);
+  document.querySelectorAll(`[data-wishlist-product="${CSS.escape(String(productId))}"]`).forEach((button) => {
+    button.classList.toggle("active", !exists);
+    button.setAttribute("aria-pressed", String(!exists));
+  });
+  showCustomerToast(`${product?.title || "Product"} ${exists ? "removed from wishlist" : "added to wishlist"}.`);
+}
+
 function renderCartSummary(showCheckout = false) {
   const summaries = document.querySelectorAll(".cart-summary");
   if (!summaries.length) return;
@@ -633,6 +674,7 @@ function addProductToCart(productId) {
   saveCustomerCart(cart);
   renderCartSummary(false);
   setCartMessage(`${product.title || "Product"} added to cart.`);
+  showCustomerToast(`${product.title || "Product"} added to cart.`);
 }
 
 function buildOrderItems(cart = getCustomerCart()) {
@@ -810,7 +852,7 @@ function renderStorefrontProduct(product) {
         }
       </div>
       <div class="commerce-product-body">
-        <button class="product-wishlist" type="button" aria-label="Add ${escapeHtml(title)} to wishlist">&hearts;</button>
+        <button class="product-wishlist ${isWishlisted(product.id) ? "active" : ""}" type="button" data-wishlist-product="${escapeHtml(product.id)}" aria-pressed="${isWishlisted(product.id)}" aria-label="Add ${escapeHtml(title)} to wishlist">&hearts;</button>
         <h3>${escapeHtml(title)}</h3>
         <p class="commerce-product-category">${escapeHtml(category)}</p>
         <p class="commerce-product-seller">
@@ -842,7 +884,7 @@ function renderSellerStoreProductCard(product) {
   const stock = Number(product.stock) || 0;
   return `
     <article class="seller-store-product-card" data-product-card="${escapeHtml(product.id)}">
-      <button class="product-wishlist" type="button" aria-label="Add ${escapeHtml(title)} to wishlist">&hearts;</button>
+      <button class="product-wishlist ${isWishlisted(product.id) ? "active" : ""}" type="button" data-wishlist-product="${escapeHtml(product.id)}" aria-pressed="${isWishlisted(product.id)}" aria-label="Add ${escapeHtml(title)} to wishlist">&hearts;</button>
       <div class="seller-store-product-media">
         ${
           image
@@ -1147,7 +1189,7 @@ async function openCustomerSellerPage(sellerId, options = {}) {
           <p class="seller-preferred">Preferred Seller</p>
           <h2>${escapeHtml(seller.name)} ${sellerVerifiedIcon()}</h2>
           <p>${escapeHtml(seller.tagline || `Your trusted destination for ${seller.category || "quality products"}.`)}</p>
-          <div class="seller-rating-line"><span>★★★★★</span><strong>${reviewAverage}</strong><small>(${reviewCount} Reviews)</small></div>
+          <div class="seller-rating-line"><span>&#9733;&#9733;&#9733;&#9733;&#9733;</span><strong>${reviewAverage}</strong><small>(${reviewCount} Reviews)</small></div>
           <div class="seller-store-meta">
             <span>${reviewAverage} rating</span>
             <span>${compactCount(seller.followerCount || 0)} followers</span>
@@ -1167,12 +1209,12 @@ async function openCustomerSellerPage(sellerId, options = {}) {
         </div>
       </header>
       <div class="seller-store-tabs">
-        <button type="button" class="active">Store Home</button>
-        <button type="button">All Products</button>
-        <button type="button">Categories</button>
-        <button type="button">New Arrivals</button>
-        <button type="button">Best Sellers</button>
-        <button type="button">Offers</button>
+        <button type="button" class="active" data-seller-store-tab="home">Store Home</button>
+        <button type="button" data-seller-store-tab="all">All Products</button>
+        <button type="button" data-seller-store-tab="categories">Categories</button>
+        <button type="button" data-seller-store-tab="new">New Arrivals</button>
+        <button type="button" data-seller-store-tab="best">Best Sellers</button>
+        <button type="button" data-seller-store-tab="offers">Offers</button>
         <input type="search" data-customer-seller-search="${escapeHtml(seller.id)}" placeholder="Search in store...">
       </div>
       <div class="seller-store-grid">
@@ -1188,7 +1230,7 @@ async function openCustomerSellerPage(sellerId, options = {}) {
         <article class="seller-store-card categories">
           <header>
             <h3>Top Categories</h3>
-            <button type="button">View all categories -></button>
+            <button type="button" data-seller-store-tab="categories">View all categories -></button>
           </header>
           <div class="seller-top-categories">
             ${categories.slice(0, 5).map((category) => renderSellerTopCategory(category, products)).join("")}
@@ -1205,10 +1247,10 @@ async function openCustomerSellerPage(sellerId, options = {}) {
             <dt>Email</dt><dd>${escapeHtml(seller.supportEmail || seller.email || "-")}</dd>
             <dt>Phone</dt><dd>${escapeHtml(seller.supportPhone || seller.phone || "-")}</dd>
           </dl>
-          <button type="button" data-follow-seller="${escapeHtml(seller.id)}">${isFollowing ? "Following" : "Message Seller"}</button>
+          <button type="button" data-message-seller="${escapeHtml(seller.id)}">Message Seller</button>
         </aside>
         <section class="seller-best-products">
-          <header><h3>Best Selling Products</h3><button type="button">View all products -></button></header>
+          <header><h3>Best Selling Products</h3><button type="button" data-seller-store-tab="all">View all products -></button></header>
           <div class="seller-store-product-row">${bestProducts.map(renderSellerStoreProductCard).join("")}</div>
         </section>
         <aside class="seller-store-card reviews">
@@ -1238,7 +1280,7 @@ async function openCustomerSellerPage(sellerId, options = {}) {
       </div>
       <section class="seller-all-products">
         <header><h3>All Products</h3><span>${products.length} items</span></header>
-        <div class="commerce-products">${products.map(renderStorefrontProduct).join("")}</div>
+        <div class="commerce-products seller-store-product-row">${products.map(renderSellerStoreProductCard).join("")}</div>
       </section>
       <div class="seller-store-perks">
         <span><strong>Extra 5% Off</strong><small>On Prepaid Orders</small></span>
@@ -1526,7 +1568,7 @@ function openCustomerProductModal(productId) {
   const sellerFollowers = compactCount(product.sellerFollowerCount || 0);
   const fallbackImage = `<div class="commerce-product-image">${escapeHtml(product.category || "Product")}</div>`;
   const mainImage = images[0]
-    ? `<img src="${escapeHtml(images[0])}" alt="${escapeHtml(productTitle)}">`
+    ? `<img data-product-main-image src="${escapeHtml(images[0])}" alt="${escapeHtml(productTitle)}">`
     : fallbackImage;
   document.body.insertAdjacentHTML(
     "beforeend",
@@ -1539,7 +1581,7 @@ function openCustomerProductModal(productId) {
               images.length
                 ? images
                     .slice(0, 4)
-                    .map((image, index) => `<button type="button" class="${index === 0 ? "active" : ""}"><img src="${escapeHtml(image)}" alt="${escapeHtml(productTitle)} thumbnail ${index + 1}"></button>`)
+                    .map((image, index) => `<button type="button" class="${index === 0 ? "active" : ""}" data-product-thumb="${escapeHtml(image)}"><img src="${escapeHtml(image)}" alt="${escapeHtml(productTitle)} thumbnail ${index + 1}"></button>`)
                     .join("")
                 : `<button type="button" class="active">${fallbackImage}</button>`
             }
@@ -1547,7 +1589,7 @@ function openCustomerProductModal(productId) {
           </div>
           <div class="customer-product-main-image">
             <span class="product-popular-badge">Popular</span>
-            <button class="product-wishlist" type="button" aria-label="Add ${escapeHtml(productTitle)} to wishlist">&hearts;</button>
+            <button class="product-wishlist ${isWishlisted(product.id) ? "active" : ""}" type="button" data-wishlist-product="${escapeHtml(product.id)}" aria-pressed="${isWishlisted(product.id)}" aria-label="Add ${escapeHtml(productTitle)} to wishlist">&hearts;</button>
             ${mainImage}
           </div>
         </div>
@@ -3064,6 +3106,12 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const wishlistButton = event.target.closest("[data-wishlist-product]");
+  if (wishlistButton) {
+    toggleCustomerWishlist(wishlistButton.dataset.wishlistProduct);
+    return;
+  }
+
   const removeCartButton = event.target.closest("[data-cart-remove]");
   if (removeCartButton) {
     const nextCart = getCustomerCart().filter((item) => String(item.id) !== String(removeCartButton.dataset.cartRemove));
@@ -3106,6 +3154,19 @@ document.addEventListener("click", async (event) => {
     const willOpen = customerProfilePopover?.hidden !== false;
     closeCustomerPopovers(willOpen ? "profile" : "");
     if (customerProfilePopover) customerProfilePopover.hidden = !willOpen;
+    return;
+  }
+
+  const customerLocationButton = event.target.closest("[data-customer-location]");
+  if (customerLocationButton) {
+    const current = localStorage.getItem(CUSTOMER_LOCATION_KEY) || "";
+    const next = window.prompt("Enter delivery location or pincode", current.replace(/^Location set\s*/i, ""));
+    if (next !== null) {
+      const label = next.trim() ? `Location set ${next.trim()}` : "Location not set";
+      localStorage.setItem(CUSTOMER_LOCATION_KEY, label);
+      customerLocationButton.textContent = label;
+      showCustomerToast("Delivery location updated.");
+    }
     return;
   }
 
@@ -3236,6 +3297,17 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const productThumb = event.target.closest("[data-product-thumb]");
+  if (productThumb) {
+    const modal = productThumb.closest("[data-customer-product-modal]");
+    const image = modal?.querySelector("[data-product-main-image]");
+    if (image) {
+      image.src = productThumb.dataset.productThumb;
+      modal.querySelectorAll("[data-product-thumb]").forEach((button) => button.classList.toggle("active", button === productThumb));
+    }
+    return;
+  }
+
   const customerNotificationBell = event.target.closest("[data-customer-notification-bell]");
   if (customerNotificationBell) {
     const panel = document.querySelector("[data-customer-notification-panel]");
@@ -3318,6 +3390,40 @@ document.addEventListener("click", async (event) => {
       }
       openCustomerSellerPage(seller.id, { push: false });
     }
+    return;
+  }
+
+  const messageSellerButton = event.target.closest("[data-message-seller]");
+  if (messageSellerButton) {
+    const sellerId = String(messageSellerButton.dataset.messageSeller || "");
+    const store = sellerStoreCache.get(sellerId);
+    const seller = store?.seller || getStorefrontSellers().find((entry) => String(entry.id) === sellerId);
+    const phone = seller?.supportPhone || seller?.phone || "";
+    const email = seller?.supportEmail || seller?.email || "";
+    if (phone) window.location.href = `tel:${phone}`;
+    else if (email) window.location.href = `mailto:${email}`;
+    else showCustomerToast("Seller contact is not available.", true);
+    return;
+  }
+
+  const sellerStoreTab = event.target.closest("[data-seller-store-tab]");
+  if (sellerStoreTab) {
+    const page = sellerStoreTab.closest(".customer-seller-storefront");
+    const tab = sellerStoreTab.dataset.sellerStoreTab;
+    page?.querySelectorAll("[data-seller-store-tab]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.sellerStoreTab === tab && button.closest(".seller-store-tabs"));
+    });
+    const targetMap = {
+      home: ".seller-store-hero",
+      all: ".seller-all-products",
+      categories: ".seller-store-card.categories",
+      new: ".seller-all-products",
+      best: ".seller-best-products",
+      offers: ".seller-store-perks",
+    };
+    const section = page?.querySelector(targetMap[tab] || ".seller-store-hero");
+    section?.scrollIntoView({ behavior: "smooth", block: "start" });
+    showCustomerToast(tab === "new" ? "Newest products are shown in All Products." : "Store section opened.");
     return;
   }
 
@@ -3631,7 +3737,7 @@ document.addEventListener("input", (event) => {
     if (seller && grid) {
       const term = customerSellerSearch.value.trim().toLowerCase();
       const products = seller.products.filter((product) => [product.title, product.category, product.sku].join(" ").toLowerCase().includes(term));
-      grid.innerHTML = products.length ? products.map(renderStorefrontProduct).join("") : `<p class="order-invoice-empty">No seller items found.</p>`;
+      grid.innerHTML = products.length ? products.map(renderSellerStoreProductCard).join("") : `<p class="order-invoice-empty">No seller items found.</p>`;
     }
   }
 
