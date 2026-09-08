@@ -1,9 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import {
-  RecaptchaVerifier,
   getAuth,
   signInWithPhoneNumber,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getPhoneVerifier, prepareFirebasePhoneAuth, resetPhoneVerifier } from "./firebase-phone.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBfdpqGOahFlX-vFROEFMvVEX9anZV5TG4",
@@ -17,7 +17,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-auth.languageCode = "en";
+prepareFirebasePhoneAuth(auth);
 const form = document.querySelector("#sellerRegisterForm");
 const message = document.querySelector("#sellerRegisterMessage");
 const sendOtpButton = document.querySelector("[data-send-register-otp]");
@@ -36,8 +36,6 @@ const maxFileSize = 5 * 1024 * 1024;
 const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png"]);
 
 let confirmationResult = null;
-let recaptchaVerifier = null;
-let recaptchaWidgetId = null;
 
 function showMessage(text, isError = false) {
   message.textContent = text;
@@ -46,26 +44,11 @@ function showMessage(text, isError = false) {
 }
 
 async function resetRecaptcha() {
-  if (recaptchaVerifier) {
-    recaptchaVerifier.clear();
-  }
-
-  recaptchaVerifier = null;
-  recaptchaWidgetId = null;
-  const container = document.querySelector("#recaptcha-seller-register");
-  if (container) {
-    container.innerHTML = "";
-  }
+  await resetPhoneVerifier("recaptcha-seller-register");
 }
 
 async function getRecaptcha() {
-  if (!recaptchaVerifier) {
-    recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-seller-register", {
-      size: "invisible",
-    });
-    recaptchaWidgetId = await recaptchaVerifier.render();
-  }
-  return recaptchaVerifier;
+  return getPhoneVerifier(auth, "recaptcha-seller-register");
 }
 
 function otpErrorMessage(error) {
@@ -164,9 +147,6 @@ sendOtpButton.addEventListener("click", async () => {
     verifyOtpButton.hidden = false;
     showMessage(`OTP sent to +91${normalizedPhone()}.`);
   } catch (error) {
-    if (window.grecaptcha && recaptchaWidgetId !== null) {
-      window.grecaptcha.reset(recaptchaWidgetId);
-    }
     await resetRecaptcha();
     showMessage(otpErrorMessage(error), true);
     sendOtpButton.disabled = false;

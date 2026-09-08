@@ -1,0 +1,343 @@
+/* Menu bar lock — logo | search | actions, aligned dept bar */
+.ax-nav-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  flex: 0 0 auto;
+}
+
+.storefront-page.axzen-mall .ax-topbar {
+  min-height: 36px;
+  padding: 0 max(20px, calc((100vw - 1280px) / 2 + 20px));
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+.storefront-page.axzen-mall .ax-topbar button,
+.storefront-page.axzen-mall .ax-topbar a,
+.storefront-page.axzen-mall .ax-topbar span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.storefront-page.axzen-mall .ax-topbar .ax-nav-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.storefront-page.axzen-mall .commerce-header,
+.storefront-page.axzen-mall .ax-header {
+  display: grid;
+  grid-template-columns: 150px minmax(360px, 1fr) auto;
+  align-items: center;
+  gap: 24px;
+  min-height: 72px;
+  padding: 10px max(20px, calc((100vw - 1280px) / 2 + 20px));
+}
+
+.storefront-page.axzen-mall .ax-logo,
+.storefront-page.axzen-mall .commerce-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.storefront-page.axzen-mall .customer-header-logo,
+.storefront-page.axzen-mall .brand-logo {
+  height: 36px;
+  width: auto;
+  max-width: 140px;
+  object-fit: contain;
+}
+
+.storefront-page.axzen-mall .brand-logo:not([hidden]) ~ .brand-mark,
+.storefront-page.axzen-mall .brand-logo:not([hidden]) ~ .ax-wordmark {
+  display: none;
+}
+
+.storefront-page.axzen-mall .commerce-search,
+.storefront-page.axzen-mall .ax-search {
+  display: flex;
+  align-items: stretch;
+  min-height: 44px;
+  overflow: hidden;
+  border: 1px solid #d7deea;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.storefront-page.axzen-mall .commerce-search select {
+  width: 132px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-right: 1px solid #e6ebf2;
+  background: #f7f9fc;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.storefront-page.axzen-mall .commerce-search input {
+  min-width: 0;
+  flex: 1;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.storefront-page.axzen-mall .commerce-search button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 96px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 16px;
+  color: #fff;
+  background: #0061ff;
+  border: 0;
+  border-radius: 0;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.storefront-page.axzen-mall .commerce-search button .ax-nav-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.storefront-page.axzen-mall .ax-header-actions,
+.storefront-page.axzen-mall .commerce-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.storefront-page.axzen-mall .ax-icon-link,
+.storefront-page.axzen-mall .customer-notification-button,
+.storefront-page.axzen-mall .customer-profile-trigger,
+.storefront-page.axzen-mall .ax-account-btn,
+.storefront-page.axzen-mall .ax-cart-link {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  min-width: 64px;
+  min-height: 52px;
+  padding: 4px 8px;
+  color: #172033 !important;
+  background: transparent !important;
+  border: 0;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.1;
+  box-shadow: none;
+}
+
+.storefront-page.axzen-mall .ax-icon-link:hover,
+.storefront-page.axzen-mall .customer-notification-button:hover,
+.storefront-page.axzen-mall .ax-account-btn:hover,
+.storefront-page.axzen-mall .ax-cart-link:hover {
+  background: #f4f7fb !important;
+}
+
+.storefront-page.axzen-mall .ax-icon-link span,
+.storefront-page.axzen-mall .customer-notification-button span,
+.storefront-page.axzen-mall .ax-account-btn span,
+.storefront-page.axzen-mall .ax-cart-link span {
+  position: static;
+  top: auto;
+  right: auto;
+  min-width: 0;
+  min-height: 0;
+  display: block;
+  color: inherit;
+  background: transparent;
+  border-radius: 0;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.storefront-page.axzen-mall .ax-header-actions .ax-nav-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.storefront-page.axzen-mall .ax-icon-link b,
+.storefront-page.axzen-mall [data-customer-notification-count],
+.storefront-page.axzen-mall .ax-cart-link b {
+  position: absolute;
+  top: 1px;
+  right: 10px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: #e11d2e;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.storefront-page.axzen-mall .ax-icon-link b[hidden],
+.storefront-page.axzen-mall [data-customer-notification-count][hidden],
+.storefront-page.axzen-mall .ax-cart-link b[hidden] {
+  display: none !important;
+}
+
+.storefront-page.axzen-mall .customer-notification-menu,
+.storefront-page.axzen-mall .customer-profile-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+}
+
+.storefront-page.axzen-mall .ax-dept-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 48px;
+  padding: 0 max(20px, calc((100vw - 1280px) / 2 + 20px));
+  background: #0061ff;
+}
+
+.storefront-page.axzen-mall .ax-dept-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 16px;
+  color: #fff;
+  background: #0848b0;
+  border: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.storefront-page.axzen-mall .ax-dept-btn .ax-nav-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.storefront-page.axzen-mall .ax-dept-bar .ax-main-menu,
+.storefront-page.axzen-mall .ax-dept-links {
+  display: flex !important;
+  flex: 1;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.storefront-page.axzen-mall .ax-dept-bar .ax-main-menu a,
+.storefront-page.axzen-mall .ax-dept-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 48px;
+  padding: 0 14px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.storefront-page.axzen-mall .ax-dept-bar .ax-main-menu a:hover,
+.storefront-page.axzen-mall .ax-dept-links a:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.storefront-page.axzen-mall .ax-dept-bar .ax-nav-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.storefront-page.axzen-mall .ax-support-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .storefront-page.axzen-mall .ax-header {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .storefront-page.axzen-mall .ax-support-chip {
+    display: none;
+  }
+
+  .storefront-page.axzen-mall .ax-dept-bar .ax-main-menu,
+  .storefront-page.axzen-mall .ax-dept-links {
+    display: flex !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .storefront-page.axzen-mall .ax-header {
+    grid-template-columns: auto 1fr !important;
+    grid-template-areas:
+      "logo actions"
+      "search search";
+    gap: 10px;
+  }
+
+  .storefront-page.axzen-mall .ax-logo {
+    grid-area: logo;
+  }
+
+  .storefront-page.axzen-mall .ax-header-actions {
+    grid-area: actions;
+    justify-self: end;
+  }
+
+  .storefront-page.axzen-mall .ax-search,
+  .storefront-page.axzen-mall .commerce-search {
+    grid-area: search;
+    width: 100%;
+    flex-direction: row;
+  }
+
+  .storefront-page.axzen-mall .ax-icon-link,
+  .storefront-page.axzen-mall .ax-account-btn,
+  .storefront-page.axzen-mall .ax-cart-link {
+    min-width: 48px;
+    min-height: 44px;
+    padding: 4px 6px;
+  }
+
+  .storefront-page.axzen-mall .commerce-search select {
+    width: 86px;
+  }
+
+  .storefront-page.axzen-mall .commerce-search button {
+    min-width: 72px;
+    padding: 0 10px;
+    font-size: 13px;
+  }
+
+  .storefront-page.axzen-mall .ax-dept-bar {
+    display: none !important;
+  }
+}

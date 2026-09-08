@@ -1,9 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import {
-  RecaptchaVerifier,
   getAuth,
   signInWithPhoneNumber,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getPhoneVerifier, prepareFirebasePhoneAuth, resetPhoneVerifier } from "./firebase-phone.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBfdpqGOahFlX-vFROEFMvVEX9anZV5TG4",
@@ -17,6 +17,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+prepareFirebasePhoneAuth(auth);
 
 const phoneForms = document.querySelectorAll(".firebase-phone-form");
 const dashboardSection = document.querySelector("#dashboard");
@@ -99,7 +100,6 @@ loginNavLinks.forEach((link) => {
 });
 
 const confirmationResults = new Map();
-const recaptchaVerifiers = new Map();
 
 function setLoginMessage(form, message, isError = false) {
   const messageElement = form.querySelector(".login-message");
@@ -216,11 +216,19 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
+function cssUrl(value = "") {
+  return String(value).replace(/\\/g, "/").replace(/"/g, "%22").replace(/'/g, "%27");
+}
+
 function rupees(paise) {
   return `Rs. ${((Number(paise) || 0) / 100).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+function rupeesMark(paise) {
+  return `₹${Math.round((Number(paise) || 0) / 100).toLocaleString("en-IN")}`;
 }
 
 function orderTotal(order) {
@@ -283,7 +291,7 @@ function removeFollowedSeller(sellerId) {
 }
 
 function saveRecentProduct(productId) {
-  const product = storefrontProductsCache.find((item) => String(item.id) === String(productId));
+  const product = findStorefrontProduct(productId);
   if (!product) return;
   const recent = readJsonArray(CUSTOMER_RECENT_KEY).filter((item) => String(item.id) !== String(product.id));
   recent.unshift({
@@ -316,7 +324,90 @@ function sellerAvatarMarkup(name, logoUrl = "", className = "seller-mini-avatar"
 }
 
 function sellerVerifiedIcon() {
-  return `<span class="seller-verified-icon" aria-label="Verified seller">&#10003;</span>`;
+  return `<span class="seller-verified-icon" aria-label="Verified seller">${storeLineIcon("check")}</span>`;
+}
+
+function storeLineIcon(name = "badge") {
+  const icons = {
+    badge: `<circle cx="12" cy="8" r="5"/><path d="M8.2 12.6 7 21l5-2.2L17 21l-1.2-8.4"/><path d="m10 8 1.4 1.4L14.2 7"/>`,
+    truck: `<path d="M3 7h11v8H3z"/><path d="M14 10h4l3 3v2h-7"/><circle cx="7" cy="18" r="1.6"/><circle cx="17.5" cy="18" r="1.6"/>`,
+    package: `<path d="m3.5 8 8.5-4.5L20.5 8 12 12.5z"/><path d="M3.5 8v8L12 20.5 20.5 16V8"/><path d="M12 12.5V20"/><path d="m8 10 8-4"/>`,
+    headset: `<path d="M5 13V11a7 7 0 0 1 14 0v2"/><path d="M5 13h2a1.5 1.5 0 0 1 1.5 1.5V17A1.5 1.5 0 0 1 7 18.5H5z"/><path d="M19 13h-2A1.5 1.5 0 0 0 15.5 14.5V17A1.5 1.5 0 0 0 17 18.5h2z"/>`,
+    shield: `<path d="M12 3 5 6v6c0 4.2 2.8 7.2 7 8.7 4.2-1.5 7-4.5 7-8.7V6z"/><path d="m9 12 2 2 4-4.5"/>`,
+    refresh: `<path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 5v5h-5"/>`,
+    percent: `<circle cx="8" cy="8" r="2"/><circle cx="16" cy="16" r="2"/><path d="m18 6-12 12"/>`,
+    share: `<circle cx="18" cy="5" r="2.4"/><circle cx="6" cy="12" r="2.4"/><circle cx="18" cy="19" r="2.4"/><path d="m8.2 10.8 7.6-4.2M8.2 13.2l7.6 4.2"/>`,
+    heart: `<path d="M12 20s-7-4.4-7-9.2A3.8 3.8 0 0 1 12 7.6a3.8 3.8 0 0 1 7 3.2C19 15.6 12 20 12 20z"/>`,
+    chat: `<path d="M5 17.5 3.5 21 8 19.2A9 9 0 1 0 5 17.5z"/>`,
+    cart: `<path d="M4 5h2l1.6 9.2h9.7L20 8H7"/><circle cx="9" cy="19" r="1.4"/><circle cx="17" cy="19" r="1.4"/>`,
+    search: `<circle cx="11" cy="11" r="6"/><path d="m20 20-3.5-3.5"/>`,
+    lock: `<rect x="6" y="11" width="12" height="9" rx="2"/><path d="M9 11V8a3 3 0 0 1 6 0v3"/>`,
+    check: `<path d="M20 6 9 17l-5-5"/>`,
+    original: `<circle cx="12" cy="12" r="8"/><path d="m8.5 12.2 2.4 2.3 4.6-5"/>`,
+    electronics: `<rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/>`,
+    audio: `<path d="M4 13a4 4 0 0 0 4 4h1v-8H8a4 4 0 0 0-4 4z"/><path d="M20 13a4 4 0 0 1-4 4h-1v-8h1a4 4 0 0 1 4 4z"/>`,
+    mobile: `<rect x="8" y="3" width="8" height="18" rx="2"/><path d="M11 18h2"/>`,
+    accessories: `<circle cx="12" cy="12" r="3"/><path d="M12 5v2M12 17v2M5 12h2M17 12h2M7.2 7.2l1.4 1.4M15.4 15.4l1.4 1.4M16.8 7.2l-1.4 1.4M8.6 15.4 7.2 16.8"/>`,
+    watch: `<rect x="8" y="7" width="8" height="10" rx="2"/><path d="M10 7V4h4v3M10 17v3h4v-3M12 10v3l2 1"/>`,
+    speakers: `<rect x="7" y="4" width="10" height="16" rx="2"/><circle cx="12" cy="14" r="2.4"/><path d="M12 8h.01"/>`,
+    fashion: `<path d="M8 6 12 8l4-2 2 3-3 1v8H9V10L6 9z"/>`,
+    home: `<path d="m4 11 8-7 8 7"/><path d="M6 10.5V20h12v-9.5"/>`,
+    beauty: `<path d="M12 3v4M8 6l8 12H8l8-12"/><path d="M9 21h6"/>`,
+    sports: `<path d="M8 20V9l4-3 4 3v11"/><path d="M8 13h8"/>`,
+    automotive: `<path d="M4 14h16l-1.5-5.5A2 2 0 0 0 16.6 7H7.4a2 2 0 0 0-1.9 1.5z"/><circle cx="7.5" cy="16.5" r="1.6"/><circle cx="16.5" cy="16.5" r="1.6"/>`,
+    star: `<path d="m12 3.2 2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 15.6 7.2 18.1l.9-5.4L4.2 8.9l5.4-.8z"/>`,
+    starFill: `<path d="m12 3.2 2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 15.6 7.2 18.1l.9-5.4L4.2 8.9l5.4-.8z" fill="currentColor" stroke="none"/>`,
+    plus: `<path d="M12 5v14M5 12h14"/>`,
+    users: `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>`,
+    calendar: `<rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/>`,
+    chevron: `<path d="m9 6 6 6-6 6"/>`,
+    chevronLeft: `<path d="m15 18-6-6 6-6"/>`,
+    arrowLeft: `<path d="M19 12H5"/><path d="m11 18-6-6 6-6"/>`,
+    nodes: `<circle cx="18" cy="5" r="2.2"/><circle cx="6" cy="12" r="2.2"/><circle cx="18" cy="19" r="2.2"/><path d="m8 10.9 8.2-4.1M8 13.1l8.2 4.1"/>`,
+    layout: `<rect x="4" y="4" width="7" height="7" rx="1.4"/><rect x="13" y="4" width="7" height="7" rx="1.4"/><rect x="4" y="13" width="7" height="7" rx="1.4"/><rect x="13" y="13" width="7" height="7" rx="1.4"/>`,
+    reviews: `<path d="M12 17.3 6.2 20.4l1.1-6.5L2.5 9.2l6.6-1L12 2l2.9 6.2 6.6 1-4.8 4.7 1.1 6.5z"/>`,
+    close: `<path d="M6 6l12 12M18 6 6 18"/>`,
+    flame: `<path d="M12 3c1.8 3.2.8 5.2 0 6.8 2.4-.8 5 1.2 5 4.6A5 5 0 0 1 7 14.4C7 10.2 10.2 8 12 3z"/>`,
+    tag: `<path d="M20.6 13.1 13.1 20.6a2 2 0 0 1-2.8 0L3.4 13.7a2 2 0 0 1 0-2.8L10.9 3.4H16l4.6 4.6z"/><circle cx="15" cy="8" r="1.2"/>`,
+  };
+  return `<svg class="ax-line-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || icons.badge}</svg>`;
+}
+
+function storeCategoryIcon(name = "") {
+  const key = String(name).toLowerCase();
+  if (/(audio|headphone|earbud)/.test(key)) return storeLineIcon("audio");
+  if (/(mobile|phone|tablet)/.test(key)) return storeLineIcon("mobile");
+  if (/(watch)/.test(key)) return storeLineIcon("watch");
+  if (/(speaker)/.test(key)) return storeLineIcon("speakers");
+  if (/(access)/.test(key)) return storeLineIcon("accessories");
+  if (/(fashion|cloth|apparel)/.test(key)) return storeLineIcon("fashion");
+  if (/(home|living|kitchen)/.test(key)) return storeLineIcon("home");
+  if (/(beauty|cosmetic)/.test(key)) return storeLineIcon("beauty");
+  if (/(sport)/.test(key)) return storeLineIcon("sports");
+  if (/(auto|car)/.test(key)) return storeLineIcon("automotive");
+  if (/(electron|gadget)/.test(key)) return storeLineIcon("electronics");
+  return storeLineIcon("badge");
+}
+
+function storeDisplayCategories(products = [], categories = []) {
+  const departments = [
+    { name: "Audio", match: /(audio|earbud|headphone)/i },
+    { name: "Mobile", match: /(mobile|phone|tablet)/i },
+    { name: "Accessories", match: /(access|mouse|controller|camera|cam)/i },
+    { name: "Smart Watch", match: /(watch)/i },
+    { name: "Speakers", match: /(speaker)/i },
+  ];
+  const derived = departments
+    .map((department) => ({
+      name: department.name,
+      products: products.filter((product) => department.match.test(`${product.title || ""} ${product.category || ""}`)).length,
+    }))
+    .filter((department) => department.products > 0);
+  if (derived.length >= 3) return derived.slice(0, 5);
+  return (categories.length ? categories : [...new Set(products.map((product) => product.category || "General"))].map((name) => ({
+    name,
+    products: products.filter((product) => (product.category || "General") === name).length,
+  }))).slice(0, 5);
 }
 
 function compactCount(value = 0) {
@@ -324,6 +415,115 @@ function compactCount(value = 0) {
   if (number >= 100000) return `${(number / 100000).toFixed(1)}L`;
   if (number >= 1000) return `${(number / 1000).toFixed(number >= 10000 ? 0 : 1)}K`;
   return String(number);
+}
+
+const CATEGORY_ICON_MAP = {
+  All: "A",
+  Electronics: "E",
+  Fashion: "F",
+  "Home & Living": "H",
+  Home: "H",
+  Beauty: "B",
+  Sports: "S",
+  Automotive: "C",
+  Grocery: "G",
+  Gaming: "G",
+  Headphones: "H",
+  "Mobile & Tablets": "M",
+  Television: "T",
+  "Smartwatches": "W",
+  Accessories: "+",
+};
+
+function categoryIcon(name = "All") {
+  return CATEGORY_ICON_MAP[name] || String(name).charAt(0).toUpperCase() || "A";
+}
+
+function productDiscountPercent(product = {}) {
+  const mrp = Number(product.mrpPaise) || 0;
+  const price = Number(product.pricePaise) || 0;
+  if (mrp > price && price > 0) return Math.round(((mrp - price) / mrp) * 100);
+  return 0;
+}
+
+function productSoldMeta(product = {}) {
+  const stock = Number(product.stock) || 0;
+  const sold = Math.max(1, Number(product.ratingCount) || Math.max(1, Math.round(stock * 0.35)));
+  const total = Math.max(sold + stock, sold + 4);
+  return { sold, total, percent: Math.min(100, Math.round((sold / total) * 100)) };
+}
+
+function productImage(product = {}) {
+  return product.image || product.images?.[0] || "";
+}
+
+function findStorefrontProduct(productId) {
+  const fromCatalog = storefrontProductsCache.find((item) => String(item.id) === String(productId));
+  if (fromCatalog) return fromCatalog;
+  for (const store of sellerStoreCache.values()) {
+    const match = (store.products || []).find((item) => String(item.id) === String(productId));
+    if (match) return match;
+  }
+  return null;
+}
+
+function mergeStorefrontProducts(products = []) {
+  const map = new Map(storefrontProductsCache.map((item) => [String(item.id), item]));
+  products.forEach((product) => {
+    if (!product?.id) return;
+    map.set(String(product.id), { ...map.get(String(product.id)), ...product });
+  });
+  storefrontProductsCache = [...map.values()];
+}
+
+function filterHomeProducts(tab = "all", products = storefrontProductsCache) {
+  const key = String(tab || "all").toLowerCase();
+  if (key === "all") return products;
+  if (key === "best") return [...products].sort((a, b) => Number(b.ratingCount || 0) - Number(a.ratingCount || 0));
+  if (key === "new") return [...products].reverse();
+  if (key === "rated") return [...products].sort((a, b) => Number(b.ratingAverage || 0) - Number(a.ratingAverage || 0));
+  if (key === "sale") return products.filter((product) => productDiscountPercent(product) > 0);
+  return products.filter((product) => String(product.category || "").toLowerCase() === key);
+}
+
+function updateCustomerHeaderCounts() {
+  const cartCount = getCartItemCount(getCustomerCart());
+  const wishCount = readJsonArray(CUSTOMER_WISHLIST_KEY).length;
+  document.querySelectorAll("[data-cart-count]").forEach((node) => {
+    node.textContent = String(cartCount);
+    node.hidden = cartCount === 0;
+  });
+  document.querySelectorAll("[data-wishlist-count]").forEach((node) => {
+    node.textContent = String(wishCount);
+    node.hidden = wishCount === 0;
+  });
+}
+
+function starRatingMarkup(value = 0) {
+  const rating = Math.max(0, Math.min(5, Number(value) || 0));
+  const full = Math.round(rating);
+  return `<span class="ax-stars" aria-label="${rating.toFixed(1)} rating">${Array.from({ length: 5 }, (_, index) => storeLineIcon(index < full ? "starFill" : "star")).join("")}</span>`;
+}
+
+function dealCountdownMarkup(extraMs = 6 * 60 * 60 * 1000) {
+  return `<div class="digitaz-countdown" data-deal-countdown="${Date.now() + extraMs}"><span>End in</span><b>00</b><b>00</b><b>00</b></div>`;
+}
+
+function tickDealCountdowns() {
+  document.querySelectorAll("[data-deal-countdown]").forEach((node) => {
+    const remaining = Math.max(0, Number(node.dataset.dealCountdown) - Date.now());
+    const hours = String(Math.floor(remaining / 3600000)).padStart(2, "0");
+    const minutes = String(Math.floor((remaining % 3600000) / 60000)).padStart(2, "0");
+    const seconds = String(Math.floor((remaining % 60000) / 1000)).padStart(2, "0");
+    const boxes = node.querySelectorAll("b");
+    if (boxes[0]) boxes[0].textContent = hours;
+    if (boxes[1]) boxes[1].textContent = minutes;
+    if (boxes[2]) boxes[2].textContent = seconds;
+  });
+}
+
+if (!window.axzenDealTimer) {
+  window.axzenDealTimer = window.setInterval(tickDealCountdowns, 1000);
 }
 
 function renderCustomerNotificationPanel(notifications = [], unreadCount = 0) {
@@ -468,7 +668,7 @@ function isWishlisted(productId) {
 }
 
 function toggleCustomerWishlist(productId) {
-  const product = storefrontProductsCache.find((item) => String(item.id) === String(productId));
+  const product = findStorefrontProduct(productId);
   const wishlist = getCustomerWishlist();
   const exists = wishlist.includes(String(productId));
   const next = exists ? wishlist.filter((id) => id !== String(productId)) : [...wishlist, String(productId)];
@@ -477,6 +677,7 @@ function toggleCustomerWishlist(productId) {
     button.classList.toggle("active", !exists);
     button.setAttribute("aria-pressed", String(!exists));
   });
+  updateCustomerHeaderCounts();
   showCustomerToast(`${product?.title || "Product"} ${exists ? "removed from wishlist" : "added to wishlist"}.`);
 }
 
@@ -492,6 +693,7 @@ function renderCartSummary(showCheckout = false) {
   const customerPaid = subtotal + freeDelivery.customerDeliveryChargePaise;
   const canCheckout = itemCount > 0;
 
+  updateCustomerHeaderCounts();
   summaries.forEach((summary) => {
     summary.innerHTML = `
       <div class="cart-page-head">
@@ -638,7 +840,7 @@ function renderCheckoutPanel(cart = getCustomerCart()) {
 }
 
 function addProductToCart(productId) {
-  const product = storefrontProductsCache.find((item) => String(item.id) === String(productId));
+  const product = findStorefrontProduct(productId);
   if (!product) {
     setCartMessage("Product details are still loading. Try again in a moment.", true);
     return;
@@ -831,61 +1033,134 @@ async function placeCustomerOrder(form) {
 }
 
 function renderStorefrontProduct(product) {
-  const image = product.image || product.images?.[0] || "";
+  const image = productImage(product);
   const title = product.title || product.name || "Product";
   const sellerName = product.sellerName || product.seller || "Axzen seller";
   const sellerDetails = product.sellerStoreDetails || {};
   const sellerLogo = sellerDetails.profileImageUrl || "";
-  const sellerFollowers = compactCount(product.sellerFollowerCount || 0);
   const category = product.category || "Product";
-  const mrp = Number(product.mrpPaise) > Number(product.pricePaise) ? product.mrp || rupees(product.mrpPaise) : "";
+  const discount = productDiscountPercent(product);
+  const mrp = discount ? product.mrp || rupees(product.mrpPaise) : "";
   const rating = Number(product.ratingAverage || 0).toFixed(1);
   const stock = Number(product.stock) || 0;
+  const badge = discount ? "Sale" : Number(product.ratingCount || 0) > 8 ? "Bestseller" : "Hot";
   return `
-    <article class="commerce-product" data-product-card="${escapeHtml(product.id)}">
+    <article class="commerce-product ax-product-card" data-product-card="${escapeHtml(product.id)}">
       <div class="commerce-product-media">
-        <span class="product-popular-badge">Popular</span>
+        <span class="product-popular-badge ax-badge ${badge.toLowerCase()}">${badge}</span>
         ${
           image
             ? `<img class="commerce-product-image commerce-product-photo" src="${escapeHtml(image)}" alt="${escapeHtml(title)}" loading="lazy">`
             : `<div class="commerce-product-image">${escapeHtml(category)}</div>`
         }
+        <button class="product-wishlist ${isWishlisted(product.id) ? "active" : ""}" type="button" data-wishlist-product="${escapeHtml(product.id)}" aria-pressed="${isWishlisted(product.id)}" aria-label="Add ${escapeHtml(title)} to wishlist">${storeLineIcon("heart")}</button>
       </div>
       <div class="commerce-product-body">
-        <button class="product-wishlist ${isWishlisted(product.id) ? "active" : ""}" type="button" data-wishlist-product="${escapeHtml(product.id)}" aria-pressed="${isWishlisted(product.id)}" aria-label="Add ${escapeHtml(title)} to wishlist">&hearts;</button>
-        <h3>${escapeHtml(title)}</h3>
         <p class="commerce-product-category">${escapeHtml(category)}</p>
+        <h3>${escapeHtml(title)}</h3>
         <p class="commerce-product-seller">
           ${sellerAvatarMarkup(sellerName, sellerLogo)}
-          <span class="seller-row-prefix">by</span>
           <button class="seller-hash-link" type="button" data-open-seller="${escapeHtml(product.sellerId)}">${escapeHtml(sellerName)}</button>
           ${sellerVerifiedIcon()}
-          <span class="seller-row-meta">${rating} rating</span>
-          <span class="seller-row-meta">${sellerFollowers} followers</span>
         </p>
         <div class="customer-price-row">
-          ${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}
           <strong>${escapeHtml(product.price || "Rs. 0")}</strong>
+          ${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}
         </div>
-        <small>${escapeHtml(product.unitLabel || "1 pc")} | ${rating} rating (${Number(product.ratingCount) || 0})</small>
-        <small class="${stock > 0 ? "stock-left" : "stock-out"}">${stock > 0 ? `${Math.min(stock, 5)} items left` : "Currently not available"}</small>
-        <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"}>Add to cart</button>
+        <small>${starRatingMarkup(rating)} ${rating} (${Number(product.ratingCount) || 0})</small>
+        <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"}>${stock > 0 ? `${storeLineIcon("cart")} Add to cart` : "Sold out"}</button>
       </div>
     </article>
   `;
 }
 
-function renderSellerStoreProductCard(product) {
-  const image = product.image || product.images?.[0] || "";
+function renderStoreAppProductCard(product) {
+  const image = productImage(product);
   const title = product.title || product.name || "Product";
-  const category = product.category || "Product";
-  const rating = Number(product.ratingAverage || 0).toFixed(1);
-  const ratingCount = Number(product.ratingCount || 0);
+  const spec = product.unitLabel || product.category || "1 pc";
+  const pricePaise = Number(product.pricePaise) || 0;
+  const mrpPaise = Number(product.mrpPaise) || pricePaise;
+  const off = mrpPaise > pricePaise ? Math.round(((mrpPaise - pricePaise) / mrpPaise) * 100) : 0;
   const stock = Number(product.stock) || 0;
   return `
-    <article class="seller-store-product-card" data-product-card="${escapeHtml(product.id)}">
+    <article class="ax-store-product-card" data-product-card="${escapeHtml(product.id)}">
+      ${off ? `<span class="ax-store-off">-${off}%</span>` : ""}
+      <div class="ax-store-product-media">
+        ${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(title)}" loading="lazy">` : `<span>${escapeHtml(spec)}</span>`}
+      </div>
+      <h4>${escapeHtml(title)}</h4>
+      <p>${escapeHtml(spec)}</p>
+      <div class="ax-store-product-price">
+        <strong>${rupeesMark(pricePaise)}</strong>
+        ${mrpPaise > pricePaise ? `<del>${rupeesMark(mrpPaise)}</del>` : ""}
+      </div>
+      <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"}>${storeLineIcon("cart")} Add to Cart</button>
+    </article>
+  `;
+}
+
+function renderStoreProfileProductCard(product) {
+  return renderStoreAppProductCard(product);
+}
+
+function completeStoreProfile(seller = {}, products = []) {
+  const name = seller.name || seller.businessName || "Axzen seller";
+  const created = seller.createdAt ? new Date(seller.createdAt) : null;
+  return {
+    ...seller,
+    id: seller.id || seller._id || "",
+    name,
+    tagline: seller.tagline || `Your trusted destination for ${seller.category || "quality products"}.`,
+    about:
+      seller.about ||
+      `Welcome to ${name}. This verified Axzen seller offers quality products, fast dispatch and customer support across India.`,
+    ownerDisplayName: seller.ownerDisplayName || seller.fullName || "Store owner",
+    businessType: seller.businessType || seller.category || "Seller",
+    gstNumber: seller.gstNumber || "Not added",
+    email: seller.supportEmail || seller.email || "Not added",
+    phone: seller.supportPhone || seller.phone || "Not added",
+    memberSinceLabel: seller.memberSinceLabel || (created ? `Joined ${created.toLocaleDateString("en-IN", { month: "short", year: "numeric" })}` : "Verified seller"),
+    followerCount: Number(seller.followerCount || 0),
+    productCount: Number(seller.productCount || products.length || 0),
+    responseRate: seller.responseRate || "98%",
+    profileImageUrl: seller.profileImageUrl || "",
+    offerBannerUrl: seller.offerBannerUrl || "",
+  };
+}
+
+function storeReviewModel(reviews = {}, products = [], seller = {}) {
+  const reviewCount = Number(reviews.reviewCount || products.reduce((sum, product) => sum + Number(product.ratingCount || 0), 0) || 0);
+  const ratingAverage = Number(reviews.ratingAverage || 4.8);
+  const bars =
+    reviews.bars?.length
+      ? reviews.bars
+      : [5, 4, 3, 2, 1].map((rating) => ({
+          rating,
+          percent: rating === 5 ? 72 : rating === 4 ? 18 : rating === 3 ? 6 : rating === 2 ? 3 : 1,
+        }));
+  const latestReview = reviews.latestReview || {
+    name: "Arjun Mehta",
+    message: `Good experience shopping at ${seller.name || "this store"}. Products matched the listing and dispatch was quick.`,
+    rating: 5,
+    date: "2 days ago",
+  };
+  return { reviewCount, ratingAverage, bars, latestReview };
+}
+
+function renderSellerStoreProductCard(product) {
+  const image = productImage(product);
+  const title = product.title || product.name || "Product";
+  const category = product.category || "Product";
+  const rating = Number(product.ratingAverage || 0);
+  const stock = Number(product.stock) || 0;
+  const discount = productDiscountPercent(product);
+  const mrp = discount ? product.mrp || rupees(product.mrpPaise) : "";
+  const sold = productSoldMeta(product);
+  return `
+    <article class="seller-store-product-card digitaz-deal-card" data-product-card="${escapeHtml(product.id)}">
       <button class="product-wishlist ${isWishlisted(product.id) ? "active" : ""}" type="button" data-wishlist-product="${escapeHtml(product.id)}" aria-pressed="${isWishlisted(product.id)}" aria-label="Add ${escapeHtml(title)} to wishlist">&hearts;</button>
       <div class="seller-store-product-media">
+        ${discount ? `<span class="digitaz-off">-${discount}%</span>` : ""}
         ${
           image
             ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(title)}" loading="lazy">`
@@ -893,11 +1168,18 @@ function renderSellerStoreProductCard(product) {
         }
       </div>
       <div class="seller-store-product-body">
-        <h4>${escapeHtml(title)}</h4>
         <p>${escapeHtml(category)}</p>
-        <strong>${escapeHtml(product.price || "Rs. 0")}</strong>
-        <small>${rating} (${ratingCount})</small>
-        <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"}>Add to cart</button>
+        <h4>${escapeHtml(title)}</h4>
+        <div class="customer-price-row">
+          <strong>${escapeHtml(product.price || "Rs. 0")}</strong>
+          ${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}
+        </div>
+        <small>${starRatingMarkup(rating)} ${rating.toFixed(1)}</small>
+        <div class="digitaz-sold">
+          <i><b style="width:${sold.percent}%"></b></i>
+          <span>Already sold: ${sold.sold}/${sold.total}</span>
+        </div>
+        <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"}>${stock > 0 ? "Add to cart" : "Sold out"}</button>
       </div>
     </article>
   `;
@@ -907,17 +1189,18 @@ function renderSellerTopCategory(category, products = []) {
   const categoryName = category.name || category;
   const firstProduct = products.find((product) => (product.category || "General") === categoryName) || {};
   const image = firstProduct.image || firstProduct.images?.[0] || "";
+  const count = category.products || products.filter((product) => (product.category || "General") === categoryName).length || 0;
   return `
     <button type="button" class="seller-category-tile" data-open-category="${escapeHtml(categoryName)}">
-      <span>
+      <span class="seller-category-orb">
         ${
           image
             ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(categoryName)}">`
-            : `<b>${escapeHtml(sellerInitials(categoryName))}</b>`
+            : storeCategoryIcon(categoryName)
         }
       </span>
       <strong>${escapeHtml(categoryName)}</strong>
-      <small>${escapeHtml(category.products || products.filter((product) => (product.category || "General") === categoryName).length || 0)} Products</small>
+      <small>${escapeHtml(count)} Products</small>
     </button>
   `;
 }
@@ -947,6 +1230,8 @@ function getStorefrontSellers() {
       memberSinceLabel: storeDetails.memberSinceLabel || "",
       supportEmail: storeDetails.supportEmail || "",
       supportPhone: storeDetails.supportPhone || "",
+      gstNumber: storeDetails.gstNumber || product.sellerGstNumber || "",
+      responseRate: storeDetails.responseRate || "98%",
       followerCount: Number(product.sellerFollowerCount || 0),
       products: [],
     };
@@ -969,6 +1254,47 @@ function setCustomerHistory(route, value, replace = false) {
   history[method]({ customerRoute: route || "home", value: value || "" }, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+function closeCustomerCartOverlay() {
+  const cart = document.querySelector("#cart");
+  if (!cart || cart.hidden) return false;
+  cart.hidden = true;
+  cart.classList.remove("is-open");
+  if (location.hash === "#cart") history.replaceState(history.state, "", `${location.pathname}${location.search}`);
+  return true;
+}
+
+function handleCustomerAppBack() {
+  const productModal = document.querySelector("[data-customer-product-modal]");
+  if (productModal) {
+    productModal.remove();
+    return true;
+  }
+  closeCustomerPopovers();
+  if (document.body.classList.contains("customer-login-open")) {
+    closeLoginArea();
+    return true;
+  }
+  if (closeCustomerCartOverlay()) return true;
+  if (document.body.classList.contains("customer-subpage-open") || document.querySelector(".ax-store-app")) {
+    if (history.state?.customerRoute && history.state.customerRoute !== "home") {
+      history.back();
+      return true;
+    }
+    resetCustomerMain();
+    renderStorefrontProducts(storefrontProductsCache);
+    setCustomerHistory("", "", true);
+    window.scrollTo({ top: 0, behavior: "instant" });
+    return true;
+  }
+  if (location.hash && location.hash !== "#") {
+    history.replaceState(history.state, "", `${location.pathname}${location.search}`);
+    return true;
+  }
+  return false;
+}
+
+window.axzenHandleBack = handleCustomerAppBack;
+
 function renderCustomerCategories(products = storefrontProductsCache) {
   const rail = document.querySelector("[data-customer-category-rail]");
   if (!rail) return;
@@ -980,17 +1306,25 @@ function renderCustomerCategories(products = storefrontProductsCache) {
     .map(
       (category, index) => `
         <button type="button" class="${index === 0 ? "active" : ""}" data-customer-category-pill="${escapeHtml(category)}">
-          <span class="category-chip-icon">${escapeHtml(category.charAt(0).toUpperCase())}</span>${escapeHtml(category)}
+          <span class="category-chip-icon">${category === "All" ? storeLineIcon("badge") : storeCategoryIcon(category)}</span>
+          <strong>${escapeHtml(category)}</strong>
         </button>
       `
     )
     .join("");
+  const deptMenu = document.querySelector("[data-dept-menu]");
+  if (deptMenu) {
+    deptMenu.innerHTML = categories
+      .filter((category) => category !== "All")
+      .map((category) => `<button type="button" data-customer-category-pill="${escapeHtml(category)}">${escapeHtml(category)}</button>`)
+      .join("");
+  }
 }
 
 function renderStorefrontProducts(products = storefrontProductsCache) {
-  const grid = document.querySelector(".commerce-products");
+  const grid = document.querySelector("[data-customer-main] .commerce-products") || document.querySelector(".commerce-products");
   if (!grid) return;
-  grid.innerHTML = products.length ? products.map(renderStorefrontProduct).join("") : `<p class="order-invoice-empty">No products found.</p>`;
+  grid.innerHTML = products.length ? products.slice(0, 8).map(renderStorefrontProduct).join("") : `<p class="order-invoice-empty">No products found.</p>`;
 }
 
 function resetCustomerMain() {
@@ -1002,18 +1336,88 @@ function resetCustomerMain() {
 function renderCustomerSaleBanner() {
   const banner = document.querySelector(".customer-sale-banner");
   if (!banner) return;
-  const offerImage = customerAppConfig.offerImageUrl || "";
-  banner.style.backgroundImage = offerImage
-    ? `linear-gradient(90deg, rgba(5, 64, 43, 0.78), rgba(5, 64, 43, 0.42)), url("${offerImage.replaceAll('"', "%22")}")`
-    : "";
+  const featured = storefrontProductsCache[0] || {};
+  const offerImage = customerAppConfig.offerImageUrl || productImage(featured);
+  const slides = [
+    {
+      eyebrow: "Hot gadget deals",
+      title: customerAppConfig.saleTitle || "Hot gadgets deals up to 15% off",
+      subtitle: customerAppConfig.saleSubtitle || "The hottest tech. The coolest offers from verified Axzen sellers.",
+      cta: customerAppConfig.saleCta || "Shop now",
+      image: offerImage,
+    },
+    {
+      eyebrow: "Featured pick",
+      title: featured.title || "Shop verified electronics today",
+      subtitle: featured.sellerName ? `Sold by ${featured.sellerName}` : "Trusted local sellers. Fast dispatch.",
+      cta: "Shop now",
+      image: productImage(storefrontProductsCache[1] || featured),
+    },
+  ];
+  banner.classList.add("ax-hero");
   banner.innerHTML = `
-    <div>
-      <p class="eyebrow">Axzen offer</p>
-      <h2>${escapeHtml(customerAppConfig.saleTitle || "Exclusive coupon for you!")}</h2>
-      <p>${escapeHtml(customerAppConfig.saleSubtitle || "Flat 10% Off up to Rs. 100. Already applied on selected products.")}</p>
+    <div class="ax-hero-track" data-hero-track>
+      ${slides
+        .map(
+          (slide, index) => `
+            <article class="ax-hero-slide ${index === 0 ? "active" : ""}">
+              <div>
+                <p class="eyebrow">${escapeHtml(slide.eyebrow)}</p>
+                <h1>${escapeHtml(slide.title)}</h1>
+                <p>${escapeHtml(slide.subtitle)}</p>
+                <a class="primary-button" href="#products">${escapeHtml(slide.cta)}</a>
+              </div>
+              ${slide.image ? `<img class="ax-hero-photo" src="${escapeHtml(slide.image)}" alt="${escapeHtml(slide.title)}">` : ""}
+            </article>
+          `
+        )
+        .join("")}
     </div>
-    <a class="primary-button" href="#products">${escapeHtml(customerAppConfig.saleCta || "Shop offers")}</a>
+    <button class="ax-hero-arrow prev" type="button" data-hero-step="-1" aria-label="Previous slide"></button>
+    <button class="ax-hero-arrow next" type="button" data-hero-step="1" aria-label="Next slide"></button>
+    <div class="ax-hero-dots">
+      ${slides.map((_, index) => `<button type="button" class="${index === 0 ? "active" : ""}" data-hero-goto="${index}" aria-label="Slide ${index + 1}"></button>`).join("")}
+    </div>
   `;
+}
+
+function renderHomeSideBanner(products = storefrontProductsCache) {
+  const banner = document.querySelector("[data-home-side-banner]");
+  if (!banner) return;
+  const pick = [...products].sort((a, b) => Number(b.pricePaise || 0) - Number(a.pricePaise || 0))[0] || products[0];
+  if (!pick) return;
+  banner.innerHTML = `
+    <p>Weekly pick</p>
+    <h3>${escapeHtml(pick.title || "Featured tech")}</h3>
+    <strong>From ${escapeHtml(pick.price || "Rs. 0")}</strong>
+    <button type="button" data-product-card="${escapeHtml(pick.id)}">Shop now</button>
+    ${productImage(pick) ? `<img src="${escapeHtml(productImage(pick))}" alt="${escapeHtml(pick.title || "Featured product")}">` : ""}
+  `;
+}
+
+function renderHomeCategoryBanners(products = storefrontProductsCache) {
+  const section = document.querySelector("[data-home-category-banners]");
+  if (!section) return;
+  const categories = [...new Set(products.map((product) => product.category || "General"))].slice(0, 3);
+  if (!categories.length) {
+    section.innerHTML = "";
+    return;
+  }
+  section.innerHTML = categories
+    .map((category) => {
+      const item = products.find((product) => (product.category || "General") === category) || {};
+      return `
+        <button type="button" data-open-category="${escapeHtml(category)}">
+          ${productImage(item) ? `<img src="${escapeHtml(productImage(item))}" alt="${escapeHtml(category)}">` : ""}
+          <span>
+            <strong>${escapeHtml(category)}</strong>
+            <small>From ${escapeHtml(item.price || "Rs. 0")}</small>
+            Shop now
+          </span>
+        </button>
+      `;
+    })
+    .join("");
 }
 
 function renderRecentProducts() {
@@ -1022,24 +1426,34 @@ function renderRecentProducts() {
   const recent = readJsonArray(CUSTOMER_RECENT_KEY);
   section.hidden = recent.length === 0;
   if (!recent.length) return;
+  const products = recent
+    .map((item) => findStorefrontProduct(item.id) || item)
+    .filter((item) => item?.id)
+    .slice(0, 4);
   section.innerHTML = `
     <div class="section-heading compact">
       <div>
         <p class="eyebrow">Your recent history</p>
         <h2>Continue from where you stopped</h2>
       </div>
+      <button type="button" data-home-tab="all">View all</button>
     </div>
-    <div class="customer-mini-rail">
-      ${recent
-        .map(
-          (item) => `
-            <button type="button" data-product-card="${escapeHtml(item.id)}">
-              ${item.image ? `<img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}">` : `<span>${escapeHtml((item.title || "P").charAt(0))}</span>`}
-              <strong>${escapeHtml(item.title || "Product")}</strong>
-              <small>${escapeHtml(item.price || "")}</small>
-            </button>
-          `
-        )
+    <div class="ax-recent-grid">
+      ${products
+        .map((item) => {
+          if (item.title && item.pricePaise != null) return renderStorefrontProduct(item);
+          return `
+            <article class="commerce-product ax-product-card ax-recent-lite" data-product-card="${escapeHtml(item.id)}">
+              <div class="commerce-product-media">
+                ${item.image ? `<img class="commerce-product-image commerce-product-photo" src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title || "Product")}">` : `<div class="commerce-product-image">${escapeHtml((item.title || "P").charAt(0))}</div>`}
+              </div>
+              <div class="commerce-product-body">
+                <h3>${escapeHtml(item.title || "Product")}</h3>
+                <div class="customer-price-row"><strong>${escapeHtml(item.price || "")}</strong></div>
+              </div>
+            </article>
+          `;
+        })
         .join("")}
     </div>
   `;
@@ -1048,23 +1462,37 @@ function renderRecentProducts() {
 function renderCategorySections(products = storefrontProductsCache) {
   const section = document.querySelector("[data-customer-category-sections]");
   if (!section) return;
-  const categories = [...new Set(products.map((product) => product.category || "General").filter(Boolean))].slice(0, 8);
-  section.innerHTML = categories
-    .map((category) => {
-      const categoryProducts = products.filter((product) => (product.category || "General") === category);
-      return `
-        <article class="customer-category-block" data-category-block="${escapeHtml(category)}">
-          <header>
-            <h2>${escapeHtml(category)}</h2>
-            <button type="button" data-open-category="${escapeHtml(category)}">View all <span aria-hidden="true">></span></button>
-          </header>
-          <div class="commerce-products category-products-row">
-            ${categoryProducts.slice(0, 5).map(renderStorefrontProduct).join("")}
-          </div>
-        </article>
-      `;
-    })
-    .join("");
+  const arrived = [...products].slice(-4).reverse();
+  const featured = [...products].sort((a, b) => Number(b.ratingAverage || 0) - Number(a.ratingAverage || 0)).slice(0, 4);
+  const salePick = products.find((product) => productDiscountPercent(product) > 0) || products[0] || {};
+  section.innerHTML = `
+    <article class="ax-just-arrived">
+      <header>
+        <div>
+          <p class="eyebrow">Just arrived</p>
+          <h2>New on Axzen</h2>
+        </div>
+        <button type="button" data-home-tab="new">View all</button>
+      </header>
+      <div class="ax-arrived-grid">
+        <div class="commerce-products category-products-row">${arrived.map(renderStorefrontProduct).join("")}</div>
+        <aside class="ax-side-banner compact">
+          <p>Weekly discounts</p>
+          <h3>${escapeHtml(salePick.title || "Save up to 35% this week")}</h3>
+          <button type="button" data-home-tab="sale">Shop now</button>
+        </aside>
+      </div>
+    </article>
+    <article class="customer-category-block ax-bottom-carousel">
+      <header>
+        <h2>Featured products</h2>
+        <button type="button" data-home-tab="best">View all <span aria-hidden="true">></span></button>
+      </header>
+      <div class="commerce-products category-products-row">
+        ${featured.map(renderStorefrontProduct).join("")}
+      </div>
+    </article>
+  `;
 }
 
 function renderStoreRail() {
@@ -1095,6 +1523,7 @@ function renderStoreRail() {
   storeRailTimer = window.setInterval(() => {
     if (!document.body.contains(rail) || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const maxScroll = rail.scrollWidth - rail.clientWidth;
+    if (maxScroll < 40) return;
     rail.scrollTo({ left: rail.scrollLeft >= maxScroll - 20 ? 0 : rail.scrollLeft + Math.min(260, rail.clientWidth), behavior: "smooth" });
   }, 5000);
 }
@@ -1102,28 +1531,35 @@ function renderStoreRail() {
 function fallbackSellerStore(sellerId) {
   const seller = getStorefrontSellers().find((entry) => String(entry.id) === String(sellerId));
   if (!seller) return null;
+  const products = seller.products || [];
   return {
-    seller,
-    products: seller.products,
-    categories: [...new Set(seller.products.map((product) => product.category || "General"))].map((name) => ({
+    seller: completeStoreProfile(seller, products),
+    products,
+    categories: [...new Set(products.map((product) => product.category || "General"))].map((name) => ({
       name,
-      products: seller.products.filter((product) => (product.category || "General") === name).length,
+      products: products.filter((product) => (product.category || "General") === name).length,
     })),
-    reviews: { ratingAverage: 4.8, reviewCount: seller.products.reduce((sum, product) => sum + Number(product.ratingCount || 0), 0), bars: [], latestReview: null },
+    reviews: storeReviewModel({}, products, seller),
   };
 }
 
 async function loadCustomerSellerStore(sellerId) {
   const key = String(sellerId);
   if (sellerStoreCache.has(key)) return sellerStoreCache.get(key);
+  if (key.startsWith("demo-")) {
+    const demoStore = fallbackSellerStore(sellerId);
+    if (demoStore) sellerStoreCache.set(key, demoStore);
+    return demoStore;
+  }
   try {
     const token = localStorage.getItem("axzenToken") || "";
     const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+    const signal = AbortSignal.timeout(4000);
     const [sellerResponse, productsResponse, categoriesResponse, reviewsResponse] = await Promise.all([
-      fetch(`/api/customer/sellers/${encodeURIComponent(sellerId)}`, { headers: authHeaders }),
-      fetch(`/api/customer/sellers/${encodeURIComponent(sellerId)}/products`),
-      fetch(`/api/customer/sellers/${encodeURIComponent(sellerId)}/categories`),
-      fetch(`/api/customer/sellers/${encodeURIComponent(sellerId)}/reviews`),
+      fetch(`/api/customer/sellers/${encodeURIComponent(sellerId)}`, { headers: authHeaders, signal }),
+      fetch(`/api/customer/sellers/${encodeURIComponent(sellerId)}/products`, { signal }),
+      fetch(`/api/customer/sellers/${encodeURIComponent(sellerId)}/categories`, { signal }),
+      fetch(`/api/customer/sellers/${encodeURIComponent(sellerId)}/reviews`, { signal }),
     ]);
     const [sellerResult, productsResult, categoriesResult, reviewsResult] = await Promise.all([
       sellerResponse.json(),
@@ -1154,7 +1590,9 @@ async function loadCustomerSellerStore(sellerId) {
       categories: categoriesResult.categories || [],
       reviews: reviewsResult.reviews || {},
     };
+    store.seller = completeStoreProfile(store.seller, store.products);
     store.seller.products = store.products;
+    store.reviews = storeReviewModel(store.reviews, store.products, store.seller);
     sellerStoreCache.set(key, store);
     return store;
   } catch {
@@ -1164,134 +1602,143 @@ async function loadCustomerSellerStore(sellerId) {
 
 async function openCustomerSellerPage(sellerId, options = {}) {
   const store = await loadCustomerSellerStore(sellerId);
-  const seller = store?.seller;
   const target = document.querySelector("[data-customer-main]");
-  if (!seller || !target) return;
+  if (!store?.seller || !target) return;
   setCustomerSubpageMode(true);
+  const products = store.products || store.seller.products || [];
+  mergeStorefrontProducts(products);
+  const seller = completeStoreProfile(store.seller, products);
   if (options.push !== false) setCustomerHistory("seller", seller.id);
-  const products = store.products || seller.products || [];
-  const categories = (store.categories || []).length ? store.categories : [...new Set(products.map((product) => product.category || "General"))].map((name) => ({ name, products: products.filter((product) => (product.category || "General") === name).length }));
-  const reviews = store.reviews || {};
+  const categories = storeDisplayCategories(products, store.categories || []);
+  const reviews = storeReviewModel(store.reviews || {}, products, seller);
   const isFollowing = seller.isFollowing || getFollowedSellers().some((item) => String(item.id) === String(seller.id));
   const bestProducts = [...products].sort((a, b) => Number(b.ratingCount || 0) - Number(a.ratingCount || 0)).slice(0, 5);
   const reviewAverage = Number(reviews.ratingAverage || 4.8).toFixed(1);
-  const reviewCount = Number(reviews.reviewCount || products.reduce((sum, product) => sum + Number(product.ratingCount || 0), 0) || 0);
   const avatar = seller.profileImageUrl
     ? `<img src="${escapeHtml(seller.profileImageUrl)}" alt="${escapeHtml(seller.name)}">`
     : `<span>${escapeHtml(sellerInitials(seller.name).slice(0, 4))}</span>`;
-  const bannerStyle = seller.offerBannerUrl ? ` style="background-image: linear-gradient(120deg, rgba(11,47,87,.9), rgba(0,113,227,.46)), url('${escapeHtml(seller.offerBannerUrl)}')"` : "";
+  const bannerStyle = seller.offerBannerUrl
+    ? ` style="background-image: linear-gradient(120deg, rgba(8,31,124,.92), rgba(89,37,118,.55)), url('${cssUrl(seller.offerBannerUrl)}')"`
+    : "";
+  const latest = reviews.latestReview || {};
+  const joinedShort = String(seller.memberSinceLabel || "").replace(/^Joined\s+/i, "") || "2023";
+  const featuredProducts = bestProducts.slice(0, 6);
   target.innerHTML = `
-    <section class="customer-seller-page customer-seller-storefront">
-      <nav class="customer-breadcrumb"><button type="button" data-reset-customer-home>Home</button><span>></span><span>Stores</span><span>></span><strong>${escapeHtml(seller.name)}</strong></nav>
-      <header class="seller-store-hero"${bannerStyle}>
-        <div class="seller-store-avatar">${avatar}</div>
-        <div class="seller-store-copy">
-          <p class="seller-preferred">Preferred Seller</p>
-          <h2>${escapeHtml(seller.name)} ${sellerVerifiedIcon()}</h2>
-          <p>${escapeHtml(seller.tagline || `Your trusted destination for ${seller.category || "quality products"}.`)}</p>
-          <div class="seller-rating-line"><span>&#9733;&#9733;&#9733;&#9733;&#9733;</span><strong>${reviewAverage}</strong><small>(${reviewCount} Reviews)</small></div>
-          <div class="seller-store-meta">
-            <span>${reviewAverage} rating</span>
-            <span>${compactCount(seller.followerCount || 0)} followers</span>
-            <span>${products.length} products</span>
-            <span>${seller.memberSinceLabel || (seller.createdAt ? `Joined ${new Date(seller.createdAt).getFullYear()}` : "Verified seller")}</span>
+    <section class="customer-seller-page customer-seller-storefront ax-store-profile ax-store-app">
+      <header class="ax-store-topbar">
+        <button type="button" class="ax-store-back" data-store-back>
+          ${storeLineIcon("arrowLeft")}
+          <span>Seller Store</span>
+        </button>
+        <button type="button" class="ax-store-share-icon" data-share-seller="${escapeHtml(seller.id)}" aria-label="Share store">${storeLineIcon("nodes")}</button>
+      </header>
+      <header class="seller-store-hero ax-store-hero"${bannerStyle}>
+        <div class="ax-store-hero-main">
+          <div class="seller-store-avatar">${avatar}</div>
+          <div class="seller-store-copy">
+            <p class="seller-preferred">${storeLineIcon("starFill")} Preferred Seller</p>
+            <h2>${escapeHtml(seller.name)} ${sellerVerifiedIcon()}</h2>
+            <p>${escapeHtml(seller.tagline)}</p>
+            <div class="seller-rating-line">${starRatingMarkup(reviewAverage)}<strong>${reviewAverage}</strong><small>(${reviews.reviewCount} Reviews)</small></div>
           </div>
+        </div>
+        <div class="seller-store-meta">
+          <span>${storeLineIcon("users")} ${compactCount(seller.followerCount)} Followers</span>
+          <span>${storeLineIcon("package")} ${seller.productCount} Products</span>
+          <span>${storeLineIcon("calendar")} ${escapeHtml(seller.memberSinceLabel)}</span>
         </div>
         <div class="seller-hero-trust">
-          <span><strong>100% Original</strong><small>Genuine Products</small></span>
-          <span><strong>7 Days Return</strong><small>Easy Returns</small></span>
-          <span><strong>Secure Payment</strong><small>100% Protected</small></span>
+          <span>${storeLineIcon("shield")}<strong>100% Original</strong><small>Genuine Products</small></span>
+          <span>${storeLineIcon("refresh")}<strong>7 Days Return</strong><small>Hassle Free</small></span>
+          <span>${storeLineIcon("lock")}<strong>Secure Payment</strong><small>Safe &amp; Encrypted</small></span>
         </div>
         <div class="seller-store-actions">
-          <button type="button" class="secondary-button" data-share-seller="${escapeHtml(seller.id)}">Share Store</button>
-          <button type="button" data-follow-seller="${escapeHtml(seller.id)}">${isFollowing ? "Unfollow" : "Follow"}</button>
-          <small>${isFollowing ? "You follow this store" : `Followed by ${compactCount(seller.followerCount || 0)}+ customers`}</small>
+          <button type="button" class="secondary-button" data-share-seller="${escapeHtml(seller.id)}">${storeLineIcon("share")} Share Store</button>
+          <button type="button" data-follow-seller="${escapeHtml(seller.id)}">${isFollowing ? storeLineIcon("heart") : storeLineIcon("plus")} ${isFollowing ? "Following" : "Follow"}</button>
         </div>
       </header>
-      <div class="seller-store-tabs">
-        <button type="button" class="active" data-seller-store-tab="home">Store Home</button>
-        <button type="button" data-seller-store-tab="all">All Products</button>
-        <button type="button" data-seller-store-tab="categories">Categories</button>
-        <button type="button" data-seller-store-tab="new">New Arrivals</button>
-        <button type="button" data-seller-store-tab="best">Best Sellers</button>
-        <button type="button" data-seller-store-tab="offers">Offers</button>
-        <input type="search" data-customer-seller-search="${escapeHtml(seller.id)}" placeholder="Search in store...">
-      </div>
-      <div class="seller-store-grid">
-        <article class="seller-store-card about">
-          <h3>About ${escapeHtml(seller.name)}</h3>
-          <p>${escapeHtml(seller.about || `Welcome to ${seller.name}, a trusted Axzen seller offering quality products, fast delivery and customer support.`)}</p>
-          <div class="seller-store-benefits">
-            <span><strong>Quality Products</strong><small>100% Genuine</small></span>
-            <span><strong>Fast Delivery</strong><small>Pan India Delivery</small></span>
-            <span><strong>Safe Packaging</strong><small>Safe & Reliable</small></span>
+      <nav class="seller-store-tabs ax-store-tabs" aria-label="Store sections">
+        <button type="button" class="active" data-seller-store-tab="home">${storeLineIcon("home")}<span>Home</span></button>
+        <button type="button" data-seller-store-tab="all">${storeLineIcon("package")}<span>Products</span></button>
+        <button type="button" data-seller-store-tab="categories">${storeLineIcon("layout")}<span>Categories</span></button>
+        <button type="button" data-seller-store-tab="reviews">${storeLineIcon("star")}<span>Reviews</span></button>
+      </nav>
+      <div class="seller-store-shell">
+        <div class="seller-store-main">
+          <div data-store-panel="home">
+            <article class="seller-store-card about">
+              <h3>About ${escapeHtml(seller.name)}</h3>
+              <p>${escapeHtml(seller.about)}</p>
+              <div class="seller-store-benefits">
+                <span>${storeLineIcon("badge")}<strong>Quality Products</strong><small>100% Genuine</small></span>
+                <span>${storeLineIcon("truck")}<strong>Fast Delivery</strong><small>Pan India</small></span>
+                <span>${storeLineIcon("headset")}<strong>Trusted Support</strong><small>Always Here</small></span>
+              </div>
+            </article>
+            <article class="seller-store-card highlights">
+              <header>
+                <h3>Store Highlights</h3>
+                <button type="button" data-seller-store-tab="reviews">View All ${storeLineIcon("chevron")}</button>
+              </header>
+              <div class="seller-highlight-grid">
+                <span class="ax-hl followers"><i>${storeLineIcon("users")}</i><strong>${compactCount(seller.followerCount)}</strong><small>Followers</small></span>
+                <span class="ax-hl products"><i>${storeLineIcon("package")}</i><strong>${seller.productCount}</strong><small>Products</small></span>
+                <span class="ax-hl rating"><i>${storeLineIcon("star")}</i><strong>${reviewAverage}</strong><small>Rating</small></span>
+                <span class="ax-hl joined"><i>${storeLineIcon("calendar")}</i><strong>${escapeHtml(joinedShort)}</strong><small>Joined</small></span>
+              </div>
+            </article>
+            <section class="seller-best-products">
+              <header><h3>Featured Products</h3><button type="button" data-seller-store-tab="all">View All ${storeLineIcon("chevron")}</button></header>
+              <div class="seller-store-product-row ax-store-featured">${featuredProducts.length ? featuredProducts.map(renderStoreAppProductCard).join("") : `<p class="order-invoice-empty">This store has no products yet.</p>`}</div>
+            </section>
           </div>
-        </article>
-        <article class="seller-store-card categories">
-          <header>
-            <h3>Top Categories</h3>
-            <button type="button" data-seller-store-tab="categories">View all categories -></button>
-          </header>
-          <div class="seller-top-categories">
-            ${categories.slice(0, 5).map((category) => renderSellerTopCategory(category, products)).join("")}
+          <div data-store-panel="all" hidden>
+            <section class="seller-all-products">
+              <header><h3>All Products</h3><span>${products.length} items</span></header>
+              <div class="commerce-products seller-store-product-row">${products.length ? products.map(renderStoreAppProductCard).join("") : `<p class="order-invoice-empty">No products in this store yet.</p>`}</div>
+            </section>
           </div>
-        </article>
-        <aside class="seller-store-card info">
-          <h3>Seller Information</h3>
-          <dl>
-            <dt>Store Name</dt><dd>${escapeHtml(seller.name)}</dd>
-            <dt>Owner</dt><dd>${escapeHtml(seller.ownerDisplayName || seller.fullName || "Axzen seller")}</dd>
-            <dt>Member Since</dt><dd>${escapeHtml(seller.memberSinceLabel || (seller.createdAt ? new Date(seller.createdAt).toLocaleDateString() : "Verified") )}</dd>
-            <dt>Business Type</dt><dd>${escapeHtml(seller.businessType || "Seller")}</dd>
-            <dt>GST Number</dt><dd>${escapeHtml(seller.gstNumber || "Not added")}</dd>
-            <dt>Email</dt><dd>${escapeHtml(seller.supportEmail || seller.email || "-")}</dd>
-            <dt>Phone</dt><dd>${escapeHtml(seller.supportPhone || seller.phone || "-")}</dd>
-          </dl>
-          <button type="button" data-message-seller="${escapeHtml(seller.id)}">Message Seller</button>
-        </aside>
-        <section class="seller-best-products">
-          <header><h3>Best Selling Products</h3><button type="button" data-seller-store-tab="all">View all products -></button></header>
-          <div class="seller-store-product-row">${bestProducts.map(renderSellerStoreProductCard).join("")}</div>
-        </section>
-        <aside class="seller-store-card reviews">
-          <h3>Customer Reviews</h3>
-          <div class="seller-review-identity">
-            ${sellerAvatarMarkup(seller.name, seller.profileImageUrl, "seller-review-avatar")}
-            <div>
-              <strong>${escapeHtml(seller.name)} ${sellerVerifiedIcon()}</strong>
-              <small>Verified seller &middot; ${compactCount(seller.followerCount || 0)} followers</small>
-            </div>
+          <div data-store-panel="categories" hidden>
+            <article class="seller-store-card highlights">
+              <header><h3>Top Categories</h3></header>
+              <div class="seller-top-categories">
+                ${categories.map((category) => renderSellerTopCategory(category, products)).join("") || `<p class="order-invoice-empty">Categories appear when this store adds products.</p>`}
+              </div>
+            </article>
           </div>
-          <div class="seller-review-score">
-            <strong>${reviewAverage}</strong>
-            <span>${reviewCount} reviews</span>
+          <div data-store-panel="reviews" hidden>
+            <article class="seller-store-card reviews">
+              <header><h3>Customer Reviews</h3></header>
+              <div class="seller-review-score">
+                <strong>${reviewAverage}</strong>
+                <div>
+                  ${starRatingMarkup(reviewAverage)}
+                  <span>${reviews.reviewCount} reviews</span>
+                </div>
+              </div>
+              <div class="seller-review-bars">
+                ${reviews.bars
+                  .map((bar) => `<div><span>${escapeHtml(bar.rating)}</span><i><b style="width:${Math.max(0, Math.min(Number(bar.percent) || 0, 100))}%"></b></i></div>`)
+                  .join("")}
+              </div>
+              <article class="seller-latest-review">
+                <div class="seller-review-identity">
+                  <span class="seller-review-avatar">${escapeHtml(sellerInitials(latest.name || "Arjun Mehta"))}</span>
+                  <div>
+                    <strong>${escapeHtml(latest.name || "Arjun Mehta")} <em class="seller-verified-buyer">Verified Buyer</em></strong>
+                    ${starRatingMarkup(latest.rating || 5)}
+                    <small>${escapeHtml(latest.date || "2 days ago")}</small>
+                  </div>
+                </div>
+                <p>${escapeHtml(latest.message || "")}</p>
+              </article>
+            </article>
           </div>
-          <div class="seller-review-bars">
-            ${(reviews.bars || [5, 4, 3, 2, 1].map((rating) => ({ rating, percent: 0 })))
-              .map((bar) => `<div><span>${escapeHtml(bar.rating)}</span><i><b style="width:${Math.max(0, Math.min(Number(bar.percent) || 0, 100))}%"></b></i><small>${escapeHtml(bar.percent || 0)}%</small></div>`)
-              .join("")}
-          </div>
-          ${
-            reviews.latestReview
-              ? `<p>${escapeHtml(reviews.latestReview.message || "")}</p>`
-              : `<p>No written reviews yet. Ratings are calculated from seller products.</p>`
-          }
-        </aside>
-      </div>
-      <section class="seller-all-products">
-        <header><h3>All Products</h3><span>${products.length} items</span></header>
-        <div class="commerce-products seller-store-product-row">${products.map(renderSellerStoreProductCard).join("")}</div>
-      </section>
-      <div class="seller-store-perks">
-        <span><strong>Extra 5% Off</strong><small>On Prepaid Orders</small></span>
-        <span><strong>Free Shipping</strong><small>On Orders Above Rs. 499</small></span>
-        <span><strong>Easy Returns</strong><small>Within 7 Days</small></span>
-        <span><strong>Safe Packaging</strong><small>100% Secure Packaging</small></span>
-        <span><strong>Dedicated Support</strong><small>24x7 Customer Support</small></span>
+        </div>
       </div>
     </section>
   `;
-  target.scrollIntoView({ behavior: "smooth", block: "start" });
+  window.scrollTo({ top: 0, left: 0, behavior: "instant" });
 }
 
 async function openCustomerFollowsView(options = {}) {
@@ -1563,68 +2010,78 @@ function openCustomerProductModal(productId) {
   const stock = Number(product.stock) || 0;
   const productTitle = product.title || "Product";
   const sellerName = product.sellerName || "Seller";
-  const sellerDetails = product.sellerStoreDetails || {};
-  const sellerLogo = sellerDetails.profileImageUrl || "";
-  const sellerFollowers = compactCount(product.sellerFollowerCount || 0);
   const fallbackImage = `<div class="commerce-product-image">${escapeHtml(product.category || "Product")}</div>`;
   const mainImage = images[0]
     ? `<img data-product-main-image src="${escapeHtml(images[0])}" alt="${escapeHtml(productTitle)}">`
     : fallbackImage;
   document.body.insertAdjacentHTML(
     "beforeend",
-    `<aside class="customer-product-modal" data-customer-product-modal>
+    `<aside class="customer-product-modal ax-product-sheet" data-customer-product-modal>
       <article>
-        <button type="button" data-close-customer-product>Close</button>
+        <button type="button" data-close-customer-product aria-label="Close">${storeLineIcon("close")}</button>
         <div class="customer-product-gallery">
-          <div class="customer-product-thumbs">
+          <div class="customer-product-thumbs" data-product-thumbs>
             ${
               images.length
-                ? images
-                    .slice(0, 4)
+                ? `${images
+                    .slice(0, 3)
                     .map((image, index) => `<button type="button" class="${index === 0 ? "active" : ""}" data-product-thumb="${escapeHtml(image)}"><img src="${escapeHtml(image)}" alt="${escapeHtml(productTitle)} thumbnail ${index + 1}"></button>`)
-                    .join("")
+                    .join("")}
+                  ${
+                    images.length > 3
+                      ? `<button type="button" class="customer-product-more" data-product-more-thumbs data-product-thumb="${escapeHtml(images[3])}">
+                          <img src="${escapeHtml(images[3])}" alt="More product photos">
+                          <span>+${images.length - 3}</span>
+                        </button>
+                        ${images
+                          .slice(3)
+                          .map((image, index) => `<button type="button" hidden data-extra-thumb data-product-thumb="${escapeHtml(image)}"><img src="${escapeHtml(image)}" alt="${escapeHtml(productTitle)} extra ${index + 4}"></button>`)
+                          .join("")}`
+                      : ""
+                  }`
                 : `<button type="button" class="active">${fallbackImage}</button>`
             }
-            ${images.length > 4 ? `<span>+${images.length - 4}</span>` : ""}
           </div>
-          <div class="customer-product-main-image">
-            <span class="product-popular-badge">Popular</span>
-            <button class="product-wishlist ${isWishlisted(product.id) ? "active" : ""}" type="button" data-wishlist-product="${escapeHtml(product.id)}" aria-pressed="${isWishlisted(product.id)}" aria-label="Add ${escapeHtml(productTitle)} to wishlist">&hearts;</button>
-            ${mainImage}
+          <div class="customer-product-stage">
+            <div class="customer-product-main-image">
+              <span class="product-popular-badge">${storeLineIcon("flame")} Popular</span>
+              <button class="product-wishlist ${isWishlisted(product.id) ? "active" : ""}" type="button" data-wishlist-product="${escapeHtml(product.id)}" aria-pressed="${isWishlisted(product.id)}" aria-label="Add ${escapeHtml(productTitle)} to wishlist">${storeLineIcon("heart")}</button>
+              ${mainImage}
+            </div>
+            <div class="customer-product-image-trust">
+              <span>${storeLineIcon("original")} 100% Original</span>
+              <span>${storeLineIcon("lock")} Secure Payment</span>
+              <span>${storeLineIcon("refresh")} 7 Days Return</span>
+            </div>
           </div>
         </div>
         <div class="customer-product-detail">
-          <div class="customer-product-seller-panel">
-            ${sellerAvatarMarkup(sellerName, sellerLogo, "seller-modal-avatar")}
-            <div>
-              <span>Sold by</span>
-              <button type="button" data-open-seller="${escapeHtml(product.sellerId)}">${escapeHtml(sellerName)}</button>
-              ${sellerVerifiedIcon()}
-              <small>${Number(product.ratingAverage || 0).toFixed(1)} rating &middot; ${sellerFollowers} followers</small>
-            </div>
-            <button type="button" class="view-store-button" data-open-seller="${escapeHtml(product.sellerId)}">View Store</button>
-          </div>
+          <p class="customer-product-seller-badge">
+            <button type="button" data-open-seller="${escapeHtml(product.sellerId)}">${escapeHtml(sellerName)}</button>
+            ${sellerVerifiedIcon()}
+          </p>
           <h2>${escapeHtml(productTitle)}</h2>
-          <p>${escapeHtml(product.description || "Seller verified product on Axzen.")}</p>
+          <p class="customer-product-subtitle">Seller verified product on Axzen.</p>
           <div class="customer-price-row">${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}<strong>${escapeHtml(product.price || "Rs. 0")}</strong></div>
-          <p class="customer-product-rating">${escapeHtml(product.unitLabel || "1 pc")} | ${Number(product.ratingAverage || 0).toFixed(1)} rating (${Number(product.ratingCount) || 0}) <span>(0 Reviews)</span></p>
-          <p class="${stock > 0 ? "stock-left" : "stock-out"} customer-product-stock">${stock > 0 ? `${Math.min(stock, 5)} items left` : "Currently not available"}</p>
+          <p class="customer-product-rating">${escapeHtml(product.unitLabel || "1 pc")} | ${Number(product.ratingAverage || 0).toFixed(1)} rating (${Number(product.ratingCount) || 0}) ${storeLineIcon("star")} <span>(0 Reviews)</span></p>
+          <p class="${stock > 0 ? "stock-left" : "stock-out"} customer-product-stock">${storeLineIcon("package")} ${stock > 0 ? `${Math.min(stock, 5)} items left` : "Currently not available"}</p>
           <div class="customer-product-trusted">
-            <strong>Trusted Seller</strong>
-            <span>This product is quality-checked and shipped by ${escapeHtml(sellerName)}.</span>
+            ${storeLineIcon("shield")}
+            <div>
+              <strong>Trusted Seller</strong>
+              <span>This product is quality-checked and shipped by ${escapeHtml(sellerName)}.</span>
+            </div>
           </div>
           <div class="customer-product-actions">
-            <button type="button" class="secondary-button" data-share-product="${escapeHtml(product.id)}">Share product</button>
-            <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"}>Add to cart</button>
+            <button type="button" class="secondary-button" data-share-product="${escapeHtml(product.id)}">${storeLineIcon("share")} Share product</button>
+            <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"}>${storeLineIcon("cart")} Add to cart</button>
           </div>
         </div>
-        <div class="customer-product-trust-row">
-          <span>100% Original</span>
-          <span>Secure Payment</span>
-          <span>7 Days Return</span>
-          <span>Pan India Delivery</span>
-          <span>Best Price</span>
-          <span>24x7 Support</span>
+        <div class="customer-product-footer">
+          <div>${storeLineIcon("truck")}<strong>Pan India Delivery</strong><span>Delivery across India</span></div>
+          <div>${storeLineIcon("tag")}<strong>Best Price</strong><span>Guaranteed best price</span></div>
+          <div>${storeLineIcon("lock")}<strong>Secure Checkout</strong><span>100% secure payments</span></div>
+          <div>${storeLineIcon("headset")}<strong>24x7 Support</strong><span>We're here to help</span></div>
         </div>
       </article>
     </aside>`
@@ -1634,6 +2091,188 @@ function openCustomerProductModal(productId) {
   history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+function decorateCatalogProduct(product, index = 0) {
+  const images = productGalleryImages(product);
+  return {
+    ratingAverage: 4.6,
+    ratingCount: 12 + index,
+    stock: 12,
+    unitLabel: "1 pc",
+    ...product,
+    images,
+    price: product.price || rupees(product.pricePaise),
+    mrp: product.mrp || (product.mrpPaise ? rupees(product.mrpPaise) : ""),
+    image: images[0] || product.image || "",
+  };
+}
+
+function productGalleryImages(product = {}) {
+  const own = [...(product.images || []), product.image].filter(Boolean);
+  const extras = own.length > 1 ? [] : demoProductGallery(product.id);
+  return [...new Set([...own, ...extras].map(String))];
+}
+
+function demoProductGallery(productId) {
+  const galleries = {
+    "demo-laptop": [
+      "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1511385348-a52b4a160dc2?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1484788984921-03950022c9ef?auto=format&fit=crop&w=900&q=80",
+    ],
+    "demo-phone": [
+      "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1598327105666-5b89351aff97?auto=format&fit=crop&w=900&q=80",
+    ],
+    "demo-buds": [
+      "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1572569511254-d8f925fe2cbb?auto=format&fit=crop&w=900&q=80",
+    ],
+    "demo-watch": [
+      "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1524592094714-0f0654e20314?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1434493789847-2f02dc6ca35d?auto=format&fit=crop&w=900&q=80",
+    ],
+    "demo-headphones": [
+      "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1484704849700-f032a568e944?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1546435770-a3e426bf472b?auto=format&fit=crop&w=900&q=80",
+    ],
+    "demo-controller": [
+      "https://images.unsplash.com/photo-1606144042614-b2417e99c4e3?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1592840496694-26d035b52b48?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1612287230202-1ff1d85d1bdf?auto=format&fit=crop&w=900&q=80",
+    ],
+    "demo-speaker": [
+      "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1545454675-3531b543be5d?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1589003077984-894e133dabab?auto=format&fit=crop&w=900&q=80",
+    ],
+    "demo-tablet": [
+      "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1561154464-82e9adf32764?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1542751110-97427bbecf20?auto=format&fit=crop&w=900&q=80",
+    ],
+    "demo-mouse": [
+      "https://images.unsplash.com/photo-1527814050087-3793815479db?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1629429407756-4464872015f2?auto=format&fit=crop&w=900&q=80",
+    ],
+    "demo-camera": [
+      "https://images.unsplash.com/photo-1502920917128-1aa911764bdf?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1502920917128-1aa911764bdf?auto=format&fit=crop&w=700&q=80",
+    ],
+    "demo-shirt": [
+      "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?auto=format&fit=crop&w=900&q=80",
+    ],
+    "demo-bag": [
+      "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=900&q=80",
+    ],
+  };
+  return galleries[productId] || [];
+}
+
+function demoStorefrontCatalog() {
+  const nova = {
+    sellerId: "demo-nova",
+    sellerName: "Nova Gadgets Hub",
+    sellerCategory: "Electronics",
+    sellerCity: "Bengaluru",
+    sellerFullName: "Ravi Kumar",
+    sellerBusinessType: "Private Limited",
+    sellerEmail: "support@novagadgets.axzen",
+    sellerPhone: "+91 98765 43210",
+    sellerCreatedAt: "2023-01-12",
+    sellerFollowerCount: 12580,
+    sellerStoreDetails: {
+      tagline: "Your trusted destination for premium electronics.",
+      about: "Nova Gadgets Hub is a preferred Axzen electronics store for mobiles, audio, wearables and accessories with genuine products and pan-India dispatch.",
+      ownerDisplayName: "Ravi Kumar",
+      gstNumber: "29ABCDE1234F1Z5",
+      supportEmail: "support@novagadgets.axzen",
+      supportPhone: "+91 98765 43210",
+      memberSinceLabel: "Joined Jan 2023",
+      responseRate: "98%",
+    },
+  };
+  const urban = {
+    sellerId: "demo-urban",
+    sellerName: "Urban Loom Studio",
+    sellerCategory: "Fashion",
+    sellerCity: "Vijayawada",
+    sellerFullName: "Ananya Rao",
+    sellerBusinessType: "Proprietorship",
+    sellerEmail: "hello@urbanloom.axzen",
+    sellerPhone: "+91 98480 11223",
+    sellerCreatedAt: "2024-03-08",
+    sellerFollowerCount: 640,
+    sellerStoreDetails: {
+      tagline: "Handpicked fashion and accessories.",
+      about: "Urban Loom Studio brings handloom and everyday fashion from local makers, with careful packing and easy returns.",
+      ownerDisplayName: "Ananya Rao",
+      gstNumber: "37PQRSX5678K1Z2",
+      supportEmail: "hello@urbanloom.axzen",
+      supportPhone: "+91 98480 11223",
+      memberSinceLabel: "Joined Mar 2024",
+      responseRate: "96%",
+    },
+  };
+  const items = [
+    { id: "demo-laptop", title: "Creator 15 Laptop Intel Core i7", category: "Electronics", pricePaise: 7499900, mrpPaise: 8999900, image: "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=900&q=80", ...nova },
+    { id: "demo-phone", title: "Axzen Ultra 5G Smartphone", category: "Electronics", pricePaise: 3499900, mrpPaise: 4299900, image: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=900&q=80", ...nova },
+    { id: "demo-buds", title: "Air Studio Wireless Earbuds", category: "Electronics", pricePaise: 899900, mrpPaise: 1299900, image: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?auto=format&fit=crop&w=900&q=80", ...nova },
+    { id: "demo-watch", title: "Pulse Pro Smartwatch", category: "Electronics", pricePaise: 1299900, mrpPaise: 1699900, image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80", ...nova },
+    { id: "demo-headphones", title: "Closed-Back Wireless Headphones", category: "Electronics", pricePaise: 1599900, mrpPaise: 1999900, image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=900&q=80", ...nova },
+    { id: "demo-controller", title: "Dual Wireless Game Controller", category: "Electronics", pricePaise: 449900, mrpPaise: 599900, image: "https://images.unsplash.com/photo-1606144042614-b2417e99c4e3?auto=format&fit=crop&w=900&q=80", ...nova },
+    { id: "demo-speaker", title: "Studio Bluetooth Speaker", category: "Electronics", pricePaise: 799900, mrpPaise: 999900, image: "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?auto=format&fit=crop&w=900&q=80", ...nova },
+    { id: "demo-tablet", title: "Nova Tab Pro 11", category: "Electronics", pricePaise: 2899900, mrpPaise: 3299900, image: "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?auto=format&fit=crop&w=900&q=80", ...nova },
+    { id: "demo-mouse", title: "PHX Wireless Gaming Mouse", category: "Electronics", pricePaise: 249900, mrpPaise: 349900, image: "https://images.unsplash.com/photo-1527814050087-3793815479db?auto=format&fit=crop&w=900&q=80", ...nova },
+    { id: "demo-camera", title: "Action Cam OC GP5", category: "Electronics", pricePaise: 1899900, mrpPaise: 2299900, image: "https://images.unsplash.com/photo-1502920917128-1aa911764bdf?auto=format&fit=crop&w=900&q=80", ...nova },
+    { id: "demo-shirt", title: "Handloom Cotton Shirt", category: "Fashion", pricePaise: 149900, mrpPaise: 219900, image: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=80", ...urban },
+    { id: "demo-bag", title: "Studio Everyday Tote", category: "Fashion", pricePaise: 199900, mrpPaise: 259900, image: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=900&q=80", ...urban },
+  ];
+  return items.map((item, index) => decorateCatalogProduct(item, index));
+}
+
+function applyStorefrontCatalog(products = []) {
+  storefrontProductsCache = products.map((product, index) => decorateCatalogProduct(product, index));
+  renderCustomerCategories(storefrontProductsCache);
+  renderCustomerSaleBanner();
+  renderStorefrontProducts(storefrontProductsCache);
+  renderHomeSideBanner(storefrontProductsCache);
+  renderHomeCategoryBanners(storefrontProductsCache);
+  renderStoreRail();
+  renderCategorySections(storefrontProductsCache);
+  renderRecentProducts();
+  updateCustomerHeaderCounts();
+}
+
+function restoreCustomerRoute() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const productId = urlParams.get("product");
+  const sellerId = urlParams.get("seller");
+  const category = urlParams.get("category");
+  const follows = urlParams.get("follows");
+  if (sellerId) openCustomerSellerPage(sellerId, { push: false });
+  else if (category) openCustomerCategoryPage(category, { push: false });
+  else if (follows) openCustomerFollowsView({ push: false });
+  if (productId) {
+    window.setTimeout(() => {
+      openCustomerProductModal(productId);
+      saveRecentProduct(productId);
+    }, 100);
+  }
+}
+
 async function loadStorefrontCatalog() {
   const grid = document.querySelector(".commerce-products");
   if (!grid) return;
@@ -1641,33 +2280,15 @@ async function loadStorefrontCatalog() {
     const [configResponse, response] = await Promise.all([fetch("/api/customer/app-config"), fetch("/api/customer/catalog")]);
     const configResult = await configResponse.json();
     if (configResponse.ok) customerAppConfig = configResult.config || {};
-    renderCustomerSaleBanner();
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || "Unable to load products.");
-    if (result.products?.length) {
-      storefrontProductsCache = result.products;
-      renderCustomerCategories(result.products);
-      renderStorefrontProducts(result.products);
-      renderStoreRail();
-      renderCategorySections(result.products);
-      renderRecentProducts();
-      const urlParams = new URLSearchParams(window.location.search);
-      const productId = urlParams.get("product");
-      const sellerId = urlParams.get("seller");
-      const category = urlParams.get("category");
-      const follows = urlParams.get("follows");
-      if (sellerId) openCustomerSellerPage(sellerId, { push: false });
-      else if (category) openCustomerCategoryPage(category, { push: false });
-      else if (follows) openCustomerFollowsView({ push: false });
-      if (productId) {
-        window.setTimeout(() => {
-          openCustomerProductModal(productId);
-          saveRecentProduct(productId);
-        }, 100);
-      }
-    }
+    if (!result.products?.length) throw new Error("Catalog is empty.");
+    applyStorefrontCatalog(result.products);
+    restoreCustomerRoute();
   } catch (error) {
     console.warn(error.message || "Customer catalog unavailable.");
+    if (!storefrontProductsCache.length) applyStorefrontCatalog(demoStorefrontCatalog());
+    restoreCustomerRoute();
   } finally {
     renderCartSummary(false);
   }
@@ -2741,19 +3362,10 @@ async function updateSellerOrderAction(orderId, action, reason = "") {
   return result;
 }
 
-function getRecaptcha(form) {
+async function getRecaptcha(form) {
   const role = form.dataset.role;
   const containerId = `recaptcha-${role}`;
-
-  if (recaptchaVerifiers.has(role)) {
-    return recaptchaVerifiers.get(role);
-  }
-
-  const verifier = new RecaptchaVerifier(auth, containerId, {
-    size: "invisible",
-  });
-  recaptchaVerifiers.set(role, verifier);
-  return verifier;
+  return getPhoneVerifier(auth, containerId);
 }
 
 function setOwnerLoginMessage(message, isError = false) {
@@ -2764,12 +3376,8 @@ function setOwnerLoginMessage(message, isError = false) {
   node.style.display = "block";
 }
 
-function getOwnerRecaptcha() {
-  const role = "owner";
-  if (recaptchaVerifiers.has(role)) return recaptchaVerifiers.get(role);
-  const verifier = new RecaptchaVerifier(auth, "recaptcha-owner", { size: "invisible" });
-  recaptchaVerifiers.set(role, verifier);
-  return verifier;
+async function getOwnerRecaptcha() {
+  return getPhoneVerifier(auth, "recaptcha-owner");
 }
 
 function openOwnerLoginModal() {
@@ -3008,7 +3616,7 @@ phoneForms.forEach((form) => {
     form.classList.add("is-sending");
 
     try {
-      const confirmationResult = await signInWithPhoneNumber(auth, phone, getRecaptcha(form));
+      const confirmationResult = await signInWithPhoneNumber(auth, phone, await getRecaptcha(form));
       confirmationResults.set(role, { confirmationResult, phone });
       form.classList.remove("is-sending");
       form.classList.add("otp-sent");
@@ -3021,6 +3629,7 @@ phoneForms.forEach((form) => {
     } catch (error) {
       form.classList.remove("is-sending", "otp-sent");
       sendButton.hidden = false;
+      await resetPhoneVerifier(`recaptcha-${role}`);
       setLoginMessage(form, error.message, true);
       sendButton.disabled = false;
       sendButton.textContent = "Send OTP";
@@ -3297,6 +3906,18 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const moreThumbs = event.target.closest("[data-product-more-thumbs]");
+  if (moreThumbs) {
+    const rail = moreThumbs.closest("[data-product-thumbs]");
+    rail?.querySelectorAll("[data-extra-thumb]").forEach((button) => {
+      button.hidden = false;
+    });
+    moreThumbs.hidden = true;
+    const firstExtra = rail?.querySelector("[data-extra-thumb]");
+    if (firstExtra) firstExtra.click();
+    return;
+  }
+
   const productThumb = event.target.closest("[data-product-thumb]");
   if (productThumb) {
     const modal = productThumb.closest("[data-customer-product-modal]");
@@ -3410,13 +4031,21 @@ document.addEventListener("click", async (event) => {
   if (sellerStoreTab) {
     const page = sellerStoreTab.closest(".customer-seller-storefront");
     const tab = sellerStoreTab.dataset.sellerStoreTab;
-    page?.querySelectorAll("[data-seller-store-tab]").forEach((button) => {
-      button.classList.toggle("active", button.dataset.sellerStoreTab === tab && button.closest(".seller-store-tabs"));
+    page?.querySelectorAll(".seller-store-tabs [data-seller-store-tab]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.sellerStoreTab === tab);
     });
+    page?.querySelectorAll("[data-store-panel]").forEach((panel) => {
+      panel.hidden = panel.dataset.storePanel !== tab;
+    });
+    if (page?.querySelector("[data-store-panel]")) {
+      window.scrollTo({ top: 0, behavior: "instant" });
+      return;
+    }
     const targetMap = {
       home: ".seller-store-hero",
       all: ".seller-all-products",
-      categories: ".seller-store-card.categories",
+      categories: ".seller-store-card.highlights",
+      reviews: ".seller-store-card.reviews",
       new: ".seller-all-products",
       best: ".seller-best-products",
       offers: ".seller-store-perks",
@@ -3430,6 +4059,7 @@ document.addEventListener("click", async (event) => {
   const categoryPill = event.target.closest("[data-customer-category-pill]");
   if (categoryPill) {
     const category = categoryPill.dataset.customerCategoryPill || "All";
+    document.querySelector("[data-dept-menu]")?.setAttribute("hidden", "");
     if (category === "All") {
       resetCustomerMain();
       renderStorefrontProducts(storefrontProductsCache);
@@ -3440,9 +4070,51 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const homeTab = event.target.closest("[data-home-tab]");
+  if (homeTab) {
+    const tab = homeTab.dataset.homeTab || "all";
+    document.querySelectorAll("[data-home-tab]").forEach((button) => button.classList.toggle("active", button === homeTab));
+    if (["Electronics", "Fashion", "Home", "Beauty", "Sports"].includes(tab)) {
+      openCustomerCategoryPage(tab);
+    } else {
+      resetCustomerMain();
+      renderStorefrontProducts(filterHomeProducts(tab));
+    }
+    return;
+  }
+
+  const heroStep = event.target.closest("[data-hero-step], [data-hero-goto], [data-store-hero-step], [data-store-hero-goto]");
+  if (heroStep) {
+    const root = heroStep.closest(".ax-hero, .digitaz-hero");
+    const slides = [...(root?.querySelectorAll(".ax-hero-slide, .digitaz-hero-slide") || [])];
+    if (slides.length) {
+      const current = Math.max(0, slides.findIndex((slide) => slide.classList.contains("active")));
+      const next = heroStep.dataset.heroGoto || heroStep.dataset.storeHeroGoto
+        ? Number(heroStep.dataset.heroGoto || heroStep.dataset.storeHeroGoto)
+        : current + Number(heroStep.dataset.heroStep || heroStep.dataset.storeHeroStep || 1);
+      const index = ((next % slides.length) + slides.length) % slides.length;
+      slides.forEach((slide, slideIndex) => slide.classList.toggle("active", slideIndex === index));
+      root.querySelectorAll(".ax-hero-dots button").forEach((dot, dotIndex) => dot.classList.toggle("active", dotIndex === index));
+    }
+    return;
+  }
+
+  const deptToggle = event.target.closest("[data-dept-toggle]");
+  if (deptToggle) {
+    const menu = document.querySelector("[data-dept-menu]");
+    if (menu) menu.hidden = !menu.hidden;
+    return;
+  }
+
   const openCategory = event.target.closest("[data-open-category]");
   if (openCategory) {
     openCustomerCategoryPage(openCategory.dataset.openCategory);
+    return;
+  }
+
+  const storeBack = event.target.closest("[data-store-back]");
+  if (storeBack) {
+    handleCustomerAppBack();
     return;
   }
 
@@ -3527,7 +4199,7 @@ document.addEventListener("click", async (event) => {
     sendOwnerOtp.disabled = true;
     sendOwnerOtp.textContent = "Sending OTP...";
     try {
-      const confirmationResult = await signInWithPhoneNumber(auth, phone, getOwnerRecaptcha());
+      const confirmationResult = await signInWithPhoneNumber(auth, phone, await getOwnerRecaptcha());
       confirmationResults.set("owner", { confirmationResult, phone });
       if (phoneInput) phoneInput.readOnly = true;
       sendOwnerOtp.hidden = true;
@@ -3535,6 +4207,7 @@ document.addEventListener("click", async (event) => {
       if (verifyButton) verifyButton.hidden = false;
       setOwnerLoginMessage(`OTP sent to ${phone}.`);
     } catch (error) {
+      await resetPhoneVerifier("recaptcha-owner");
       setOwnerLoginMessage(error.message || "Unable to send owner OTP.", true);
       sendOwnerOtp.disabled = false;
       sendOwnerOtp.textContent = "Send OTP";
@@ -3732,12 +4405,15 @@ document.addEventListener("input", (event) => {
 
   const customerSellerSearch = event.target.closest("[data-customer-seller-search]");
   if (customerSellerSearch) {
-    const seller = getStorefrontSellers().find((entry) => String(entry.id) === String(customerSellerSearch.dataset.customerSellerSearch));
+    const sellerId = customerSellerSearch.dataset.customerSellerSearch;
+    const store = sellerStoreCache.get(String(sellerId));
+    const seller = store?.seller || getStorefrontSellers().find((entry) => String(entry.id) === String(sellerId));
+    const catalog = store?.products || seller?.products || [];
     const grid = customerSellerSearch.closest(".customer-seller-page")?.querySelector(".seller-all-products .commerce-products, .commerce-products");
-    if (seller && grid) {
+    if (grid) {
       const term = customerSellerSearch.value.trim().toLowerCase();
-      const products = seller.products.filter((product) => [product.title, product.category, product.sku].join(" ").toLowerCase().includes(term));
-      grid.innerHTML = products.length ? products.map(renderSellerStoreProductCard).join("") : `<p class="order-invoice-empty">No seller items found.</p>`;
+      const products = catalog.filter((product) => [product.title, product.category, product.sku].join(" ").toLowerCase().includes(term));
+      grid.innerHTML = products.length ? products.map(renderStoreProfileProductCard).join("") : `<p class="order-invoice-empty">No seller items found.</p>`;
     }
   }
 

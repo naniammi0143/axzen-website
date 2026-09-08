@@ -1,0 +1,480 @@
+/* Product sheet — match reference: gallery | details + 4-perk footer */
+.storefront-page.axzen-mall .customer-product-modal.ax-product-sheet {
+  padding: clamp(12px, 3vw, 32px);
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(10px);
+}
+
+.storefront-page.axzen-mall .customer-product-modal.ax-product-sheet > article {
+  width: min(1080px, 100%);
+  max-height: min(92vh, 860px);
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(300px, 0.92fr);
+  grid-template-areas:
+    "gallery detail"
+    "footer footer";
+  gap: 22px 36px;
+  padding: 28px 32px 22px;
+  color: #101828;
+  background: #fff;
+  border: 0;
+  border-radius: 24px;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+  backdrop-filter: none;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-gallery {
+  grid-area: gallery;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-detail {
+  grid-area: detail;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 4px 28px 0 0;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-footer {
+  grid-area: footer;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet [data-close-customer-product] {
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  color: #172033;
+  background: #fff;
+  border: 1.5px solid #d7deea;
+  box-shadow: none;
+  font-size: 0;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet [data-close-customer-product]::before {
+  display: none !important;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet [data-close-customer-product] .ax-line-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet [data-close-customer-product]:hover {
+  transform: none;
+  background: #f4f7fb;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-thumbs {
+  gap: 10px;
+  padding-top: 0;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-thumbs button,
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-thumbs span {
+  width: 68px;
+  height: 68px;
+  background: #f4f6fa;
+  border: 1.5px solid #e6ebf2;
+  border-radius: 12px;
+  box-shadow: none;
+  color: #0061ff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-thumbs button.active,
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-thumbs button:hover {
+  border-color: #0061ff;
+  box-shadow: 0 0 0 2px rgba(0, 97, 255, 0.16);
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-more {
+  position: relative;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-more img {
+  filter: brightness(0.45);
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-more span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: transparent;
+  border: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-stage {
+  display: grid;
+  gap: 14px;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-main-image {
+  min-height: 360px;
+  padding: 28px 20px 36px;
+  background: #eef2f7;
+  border-radius: 18px;
+  box-shadow: none;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-main-image img,
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-main-image .commerce-product-image {
+  max-width: 380px;
+  max-height: 320px;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .product-popular-badge {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  color: #fff;
+  background: linear-gradient(135deg, #c026d3, #7c3aed);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .product-popular-badge .ax-line-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-main-image .product-wishlist {
+  top: 14px;
+  right: 14px;
+  width: 40px;
+  height: 40px;
+  color: #475467;
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 999px;
+  box-shadow: 0 6px 16px rgba(16, 24, 40, 0.08);
+  font-size: 0;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-main-image .product-wishlist .ax-line-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-main-image .product-wishlist.active {
+  color: #e11d2e;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-image-trust {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 6px 0;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-image-trust span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-image-trust .ax-line-icon {
+  width: 15px;
+  height: 15px;
+  color: #0061ff;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-seller-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #0061ff;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-seller-badge button {
+  min-height: 0;
+  padding: 0;
+  color: #0061ff;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-seller-badge .seller-verified-icon,
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-seller-badge .ax-line-icon {
+  width: 16px;
+  height: 16px;
+  color: #0061ff;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-detail h2 {
+  font-size: clamp(28px, 3.2vw, 40px);
+  line-height: 1.12;
+  letter-spacing: -0.04em;
+  font-weight: 700;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-subtitle {
+  max-width: none;
+  margin: 0;
+  color: #667085 !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  line-height: 1.4;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 0;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-price-row del {
+  color: #98a2b3;
+  font-size: 16px;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-price-row strong {
+  color: #101828;
+  font-size: clamp(26px, 3vw, 34px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-rating {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: #475467;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-rating::after {
+  display: none;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-rating .ax-line-icon {
+  width: 13px;
+  height: 13px;
+  color: #98a2b3;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-rating span {
+  color: #0061ff;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-stock {
+  color: #12b76a;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-stock.stock-out {
+  color: #e11d2e;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-stock::before {
+  display: none;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-stock .ax-line-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-trusted {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 6px;
+  padding: 14px 16px;
+  background: #eef4ff;
+  border: 0;
+  border-radius: 14px;
+  box-shadow: none;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-trusted::before {
+  display: none;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-trusted > .ax-line-icon {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  color: #0061ff;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-trusted strong {
+  display: block;
+  color: #0061ff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-trusted span {
+  color: #475467;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-detail button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-detail button:hover {
+  transform: none;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-detail button[data-share-product] {
+  color: #0061ff;
+  background: #fff;
+  border: 1.5px solid #0061ff;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-detail button[data-share-product]::before,
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-detail button[data-add-cart]::before {
+  display: none;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-detail button[data-add-cart] {
+  color: #fff;
+  background: #0b3cc1;
+  border: 0;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-detail button .ax-line-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-footer {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  background: #f7f9fc;
+  border: 1px solid #e8edf4;
+  border-radius: 16px;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-footer > div {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 16px 10px;
+  text-align: center;
+  border-right: 1px solid #e8edf4;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-footer > div:last-child {
+  border-right: 0;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-footer .ax-line-icon {
+  width: 22px;
+  height: 22px;
+  color: #0061ff;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-footer strong {
+  color: #101828;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.storefront-page.axzen-mall .ax-product-sheet .customer-product-footer span {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+@media (max-width: 900px) {
+  .storefront-page.axzen-mall .customer-product-modal.ax-product-sheet > article {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "gallery"
+      "detail"
+      "footer";
+    gap: 18px;
+    padding: 20px 16px 16px;
+  }
+
+  .storefront-page.axzen-mall .ax-product-sheet .customer-product-detail {
+    padding: 0;
+  }
+
+  .storefront-page.axzen-mall .ax-product-sheet .customer-product-footer {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .storefront-page.axzen-mall .ax-product-sheet .customer-product-footer > div:nth-child(2) {
+    border-right: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .storefront-page.axzen-mall .ax-product-sheet .customer-product-gallery {
+    grid-template-columns: 1fr;
+  }
+
+  .storefront-page.axzen-mall .ax-product-sheet .customer-product-thumbs {
+    order: 2;
+    grid-auto-flow: column;
+    grid-auto-columns: 60px;
+    overflow-x: auto;
+  }
+
+  .storefront-page.axzen-mall .ax-product-sheet .customer-product-main-image {
+    min-height: 260px;
+  }
+
+  .storefront-page.axzen-mall .ax-product-sheet .customer-product-detail h2 {
+    font-size: 26px;
+  }
+
+  .storefront-page.axzen-mall .ax-product-sheet .customer-product-image-trust {
+    flex-wrap: wrap;
+  }
+}
