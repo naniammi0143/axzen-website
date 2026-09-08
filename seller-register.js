@@ -6,6 +6,12 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { getPhoneVerifier, prepareFirebasePhoneAuth, resetPhoneVerifier } from "./firebase-phone.js";
+import {
+  fillCountrySelects,
+  isValidE164,
+  otpAuthErrorMessage,
+  phoneFromRoot,
+} from "./phone-countries.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -33,6 +39,9 @@ const maxFileSize = 5 * 1024 * 1024;
 const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png"]);
 
 let confirmationResult = null;
+let verifiedPhone = "";
+
+fillCountrySelects(form);
 
 function showMessage(text, isError = false) {
   message.textContent = text;
@@ -48,34 +57,13 @@ async function getRecaptcha() {
   return getPhoneVerifier(auth, "recaptcha-seller-register");
 }
 
-function otpErrorMessage(error) {
-  const code = error?.code || "";
-
-  if (code.includes("invalid-phone-number")) {
-    return "Mobile number is invalid. Enter a valid 10 digit number.";
-  }
-
-  if (code.includes("too-many-requests")) {
-    return "Too many OTP attempts. Please wait and try again.";
-  }
-
-  if (code.includes("captcha-check-failed")) {
-    return "reCAPTCHA verification failed. Refresh the page and try again.";
-  }
-
-  if (code.includes("unauthorized-domain") || code.includes("invalid-app-credential")) {
-    return "OTP is blocked for this domain. Add seller.axzen.in and axzen.in in Firebase Authentication Authorized domains.";
-  }
-
-  return error?.message || "Unable to send OTP. Please try again.";
-}
-
-function normalizedPhone() {
-  return String(mobileInput.value || "").replace(/\D/g, "");
+function registerPhone() {
+  return phoneFromRoot(form);
 }
 
 function validateFirstStep() {
-  if (!/^\d{10}$/.test(normalizedPhone())) return "Mobile number must be 10 digits.";
+  const { iso, e164 } = registerPhone();
+  if (!isValidE164(e164, iso)) return "Enter a valid mobile number for the selected country.";
   if (!storeInput.value.trim()) return "Seller company name is required.";
   if (!businessInput.value.trim()) return "Business type is required.";
   if (!fullNameInput.value.trim()) return "Contact person name is required.";
@@ -137,15 +125,23 @@ sendOtpButton.addEventListener("click", async () => {
   sendOtpButton.disabled = true;
   sendOtpButton.textContent = "Sending OTP...";
 
+  const { e164 } = registerPhone();
+  const countrySelect = form.querySelector("[data-country-select]");
+
   try {
-    confirmationResult = await signInWithPhoneNumber(auth, `+91${normalizedPhone()}`, await getRecaptcha());
+    confirmationResult = await signInWithPhoneNumber(auth, e164, await getRecaptcha());
+    verifiedPhone = e164;
     mobileInput.readOnly = true;
+    if (countrySelect) countrySelect.disabled = true;
     otpField.hidden = false;
     verifyOtpButton.hidden = false;
-    showMessage(`OTP sent to +91${normalizedPhone()}.`);
+    showMessage(`OTP sent to ${e164}.`);
   } catch (error) {
+    verifiedPhone = "";
+    mobileInput.readOnly = false;
+    if (countrySelect) countrySelect.disabled = false;
     await resetRecaptcha();
-    showMessage(otpErrorMessage(error), true);
+    showMessage(otpAuthErrorMessage(error), true);
     sendOtpButton.disabled = false;
     sendOtpButton.textContent = "Send OTP";
   }
@@ -182,6 +178,7 @@ form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const formData = new FormData(form);
+  if (verifiedPhone) formData.set("mobile", verifiedPhone);
   const validationError = validateForm(formData);
 
   if (validationError) {
@@ -205,14 +202,18 @@ form.addEventListener("submit", async (event) => {
     }
 
     form.reset();
+    fillCountrySelects(form);
     setAfterOtpEnabled(false);
     verifiedBanner.hidden = true;
     mobileInput.readOnly = false;
+    const countrySelect = form.querySelector("[data-country-select]");
+    if (countrySelect) countrySelect.disabled = false;
     sendOtpButton.hidden = false;
     sendOtpButton.disabled = false;
     sendOtpButton.textContent = "Send OTP";
     firebaseTokenInput.value = "";
     confirmationResult = null;
+    verifiedPhone = "";
     successDrop.hidden = false;
     successDrop.scrollIntoView({ behavior: "smooth", block: "center" });
     showMessage("Wait for admin approval.");

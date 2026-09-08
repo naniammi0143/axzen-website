@@ -25,8 +25,19 @@ function toBoolean(value) {
 }
 
 function normalizePhone(mobile) {
-  const digits = clean(mobile).replace(/\D/g, "");
-  return digits.length === 10 ? `+91${digits}` : "";
+  const trimmed = clean(mobile).replace(/[\s-()]/g, "");
+  if (/^\+\d{8,15}$/.test(trimmed)) return trimmed;
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length === 10) return `+91${digits}`;
+  if (digits.length >= 8 && digits.length <= 15) return `+${digits}`;
+  return "";
+}
+
+function phonesMatch(submitted, verified) {
+  if (!submitted || !verified) return false;
+  const a = String(submitted).replace(/\D/g, "");
+  const b = String(verified).replace(/\D/g, "");
+  return a === b || b.endsWith(a);
 }
 
 function validateRegistration(body, files) {
@@ -51,7 +62,8 @@ function validateRegistration(body, files) {
 
   const missing = required.filter((field) => !clean(body[field]));
   if (missing.length) return `${missing.join(", ")} required.`;
-  if (!/^\d{10}$/.test(clean(body.mobile))) return "Mobile number must be 10 digits.";
+  const mobileDigits = clean(body.mobile).replace(/\D/g, "");
+  if (mobileDigits.length < 6 || mobileDigits.length > 15) return "Enter a valid mobile number.";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean(body.email))) return "Email must be valid.";
   if (body.password !== body.confirmPassword) return "Password and confirm password must match.";
   if (clean(body.password).length < 8) return "Password must be at least 8 characters.";
@@ -309,14 +321,21 @@ const registerSeller = asyncHandler(async (req, res) => {
     return;
   }
 
-  const phone = normalizePhone(req.body.mobile);
-  const email = clean(req.body.email).toLowerCase();
   const decoded = await verifyFirebaseToken(req.body.firebaseToken);
+  const phone = decoded.phone_number || "";
+  const submitted = normalizePhone(req.body.mobile);
 
-  if (decoded.phone_number !== phone) {
+  if (!phone) {
+    res.status(400).json({ ok: false, message: "Firebase phone number is missing." });
+    return;
+  }
+
+  if (submitted && !phonesMatch(submitted, phone)) {
     res.status(400).json({ ok: false, message: "Verified OTP mobile does not match registration mobile." });
     return;
   }
+
+  const email = clean(req.body.email).toLowerCase();
 
   const existingSeller = await Seller.findOne({
     $or: [{ phone }, { email }],

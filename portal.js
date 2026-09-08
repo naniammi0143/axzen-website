@@ -6,6 +6,13 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { getPhoneVerifier, prepareFirebasePhoneAuth, resetPhoneVerifier } from "./firebase-phone.js";
+import {
+  fillCountrySelects,
+  getPhoneCountry,
+  isValidE164,
+  otpAuthErrorMessage,
+  phoneFromRoot,
+} from "./phone-countries.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -195,15 +202,7 @@ function setSellerSection(section = "dashboard", updateHash = false) {
   }
 }
 
-function formatPhoneNumber(value) {
-  const trimmed = value.trim();
-
-  if (trimmed.startsWith("+")) {
-    return trimmed;
-  }
-
-  return `+91${trimmed.replace(/\D/g, "")}`;
-}
+fillCountrySelects();
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -3380,7 +3379,16 @@ async function getOwnerRecaptcha() {
 function openOwnerLoginModal() {
   if (!ownerLoginModal) return;
   const phoneInput = ownerLoginModal.querySelector("[data-owner-phone]");
-  if (phoneInput && !phoneInput.value) phoneInput.value = localStorage.getItem("axzenPhone") || "";
+  const countrySelect = ownerLoginModal.querySelector("[data-country-select]");
+  if (phoneInput && !phoneInput.value) {
+    const stored = localStorage.getItem("axzenPhone") || "";
+    const iso = countrySelect?.value || "IN";
+    const dial = getPhoneCountry(iso).dial;
+    const digits = stored.replace(/\D/g, "");
+    phoneInput.value = digits.startsWith(dial) ? digits.slice(dial.length) : digits;
+  }
+  if (countrySelect) countrySelect.disabled = false;
+  if (phoneInput) phoneInput.readOnly = false;
   ownerLoginModal.hidden = false;
   phoneInput?.focus();
 }
@@ -3597,13 +3605,14 @@ phoneForms.forEach((form) => {
   const sendButton = form.querySelector("[data-send-otp]");
   const verifyButton = form.querySelector("[data-verify-otp]");
   const phoneInput = form.querySelector("[name='phone']");
+  const countrySelect = form.querySelector("[data-country-select]");
   const otpInput = form.querySelector("[name='otp']");
   const otpGroup = form.querySelector(".otp-field");
 
   sendButton.addEventListener("click", async () => {
-    const phone = formatPhoneNumber(phoneInput.value);
+    const { iso, e164: phone } = phoneFromRoot(form);
 
-    if (phone.length < 12) {
+    if (!isValidE164(phone, iso)) {
       setLoginMessage(form, "Please enter a valid phone number.", true);
       return;
     }
@@ -3617,7 +3626,8 @@ phoneForms.forEach((form) => {
       confirmationResults.set(role, { confirmationResult, phone });
       form.classList.remove("is-sending");
       form.classList.add("otp-sent");
-      phoneInput.readOnly = true;
+      phoneInput && (phoneInput.readOnly = true);
+      if (countrySelect) countrySelect.disabled = true;
       sendButton.hidden = true;
       otpGroup.hidden = false;
       verifyButton.hidden = false;
@@ -3626,8 +3636,10 @@ phoneForms.forEach((form) => {
     } catch (error) {
       form.classList.remove("is-sending", "otp-sent");
       sendButton.hidden = false;
+      phoneInput && (phoneInput.readOnly = false);
+      if (countrySelect) countrySelect.disabled = false;
       await resetPhoneVerifier(`recaptcha-${role}`);
-      setLoginMessage(form, error.message, true);
+      setLoginMessage(form, otpAuthErrorMessage(error), true);
       sendButton.disabled = false;
       sendButton.textContent = "Send OTP";
     }
@@ -4186,10 +4198,11 @@ document.addEventListener("click", async (event) => {
   const sendOwnerOtp = event.target.closest("[data-send-owner-otp]");
   if (sendOwnerOtp) {
     const phoneInput = ownerLoginModal?.querySelector("[data-owner-phone]");
+    const countrySelect = ownerLoginModal?.querySelector("[data-country-select]");
     const otpWrap = ownerLoginModal?.querySelector("[data-owner-otp-wrap]");
     const verifyButton = ownerLoginModal?.querySelector("[data-verify-owner-otp]");
-    const phone = formatPhoneNumber(phoneInput?.value || "");
-    if (phone.length < 12) {
+    const { iso, e164: phone } = phoneFromRoot(ownerLoginModal || document);
+    if (!isValidE164(phone, iso)) {
       setOwnerLoginMessage("Enter a valid owner mobile number.", true);
       return;
     }
@@ -4199,13 +4212,16 @@ document.addEventListener("click", async (event) => {
       const confirmationResult = await signInWithPhoneNumber(auth, phone, await getOwnerRecaptcha());
       confirmationResults.set("owner", { confirmationResult, phone });
       if (phoneInput) phoneInput.readOnly = true;
+      if (countrySelect) countrySelect.disabled = true;
       sendOwnerOtp.hidden = true;
       if (otpWrap) otpWrap.hidden = false;
       if (verifyButton) verifyButton.hidden = false;
       setOwnerLoginMessage(`OTP sent to ${phone}.`);
     } catch (error) {
       await resetPhoneVerifier("recaptcha-owner");
-      setOwnerLoginMessage(error.message || "Unable to send owner OTP.", true);
+      if (phoneInput) phoneInput.readOnly = false;
+      if (countrySelect) countrySelect.disabled = false;
+      setOwnerLoginMessage(otpAuthErrorMessage(error) || "Unable to send owner OTP.", true);
       sendOwnerOtp.disabled = false;
       sendOwnerOtp.textContent = "Send OTP";
     }

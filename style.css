@@ -524,9 +524,48 @@ a {
   display: none;
 }
 
-.role-login-form.otp-sent [name="phone"] {
+.role-login-form.otp-sent [name="phone"],
+.role-login-form.otp-sent [data-country-select] {
   color: #52636d;
   background: #f4f7f7;
+}
+
+.phone-login-field {
+  display: grid;
+  gap: 8px;
+}
+
+.phone-input-row {
+  display: grid;
+  grid-template-columns: minmax(132px, 0.95fr) minmax(0, 1.35fr);
+  gap: 8px;
+  align-items: stretch;
+}
+
+.phone-input-row select {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0 10px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline-color: var(--brand);
+}
+
+.seller-login-card .phone-input-row select {
+  margin-top: 7px;
+}
+
+.seller-register-form .phone-login-field {
+  grid-column: 1 / -1;
+}
+
+.seller-register-form .phone-input-row select {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 14px;
+  outline-color: #0071e3;
 }
 
 .admin-app {
@@ -2170,6 +2209,7 @@ h3 {
 }
 
 .seller-register-form input,
+.seller-register-form select,
 .seller-register-form textarea {
   width: 100%;
   min-height: 48px;
@@ -3319,6 +3359,7 @@ h1 {
 }
 
 .role-login-form input,
+.role-login-form select,
 .seller-form input,
 .seller-form select,
 .admin-actions input,
@@ -6269,7 +6310,8 @@ h1 {
   font-weight: 900;
 }
 
-.seller-owner-card input {
+.seller-owner-card input,
+.seller-owner-card select {
   width: 100%;
   min-height: 44px;
   padding: 0 13px;

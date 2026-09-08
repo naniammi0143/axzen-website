@@ -4,6 +4,7 @@ const FIREBASE_PHONE_TEST_API_KEY =
   "AVweKoj7kNodfajJbeVCohrscDb4fmgHkKrrTNDnfdgMPZLEfF7WBJJzad2GLtneCnq0kPDsTI7Zw6lWAyJ9oO-PFs_go1_JEHXMoE0U1Q1qgJ1TJ4uqT4shzX-Vk_LPzeVnv_Ud4SSrOJVt7qILgFactg";
 
 const verifierCache = new Map();
+const verifierPending = new Map();
 
 export function isFirebasePhoneTestMode() {
   return Boolean(
@@ -42,41 +43,85 @@ function ensureRecaptchaContainer(containerId) {
   return node;
 }
 
+function emptyRecaptchaContainer(containerId) {
+  const node = document.getElementById(containerId);
+  if (node) node.innerHTML = "";
+}
+
+function clearCachedVerifier(containerId) {
+  const verifier = verifierCache.get(containerId);
+  verifierCache.delete(containerId);
+  if (verifier) {
+    try {
+      verifier.clear();
+    } catch (error) {
+      void error;
+    }
+  }
+  emptyRecaptchaContainer(containerId);
+}
+
+export async function resetPhoneVerifier(containerId) {
+  clearCachedVerifier(containerId);
+}
+
 export async function getPhoneVerifier(auth, containerId) {
   if (verifierCache.has(containerId)) {
     return verifierCache.get(containerId);
   }
 
-  ensureRecaptchaContainer(containerId);
-  const verifier = new RecaptchaVerifier(auth, containerId, {
-    size: "invisible",
+  if (verifierPending.has(containerId)) {
+    return verifierPending.get(containerId);
+  }
+
+  let settle;
+  const create = new Promise((resolve, reject) => {
+    settle = { resolve, reject };
   });
-  verifierCache.set(containerId, verifier);
+  verifierPending.set(containerId, create);
 
-  try {
-    await verifier.render();
-  } catch (error) {
-    verifierCache.delete(containerId);
+  (async () => {
     try {
-      verifier.clear();
-    } catch (clearError) {
-      void clearError;
+      clearCachedVerifier(containerId);
+      ensureRecaptchaContainer(containerId);
+      const verifier = new RecaptchaVerifier(auth, containerId, {
+        size: "invisible",
+      });
+
+      try {
+        await verifier.render();
+        verifierCache.set(containerId, verifier);
+        settle.resolve(verifier);
+        return;
+      } catch (error) {
+        const alreadyRendered = String(error?.message || "").toLowerCase().includes("already been rendered");
+        try {
+          verifier.clear();
+        } catch (clearError) {
+          void clearError;
+        }
+        emptyRecaptchaContainer(containerId);
+
+        if (!alreadyRendered) {
+          throw error;
+        }
+
+        const retry = new RecaptchaVerifier(auth, containerId, {
+          size: "invisible",
+        });
+        await retry.render();
+        verifierCache.set(containerId, retry);
+        settle.resolve(retry);
+      }
+    } catch (error) {
+      clearCachedVerifier(containerId);
+      settle.reject(error);
+    } finally {
+      if (verifierPending.get(containerId) === create) {
+        verifierPending.delete(containerId);
+      }
     }
-    throw error;
-  }
+  })();
 
-  return verifier;
-}
-
-export async function resetPhoneVerifier(containerId) {
-  const verifier = verifierCache.get(containerId);
-  if (!verifier) return;
-  verifierCache.delete(containerId);
-  try {
-    verifier.clear();
-  } catch (error) {
-    void error;
-  }
-  const node = document.getElementById(containerId);
-  if (node) node.innerHTML = "";
+  return create;
 }
