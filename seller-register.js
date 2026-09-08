@@ -1,23 +1,20 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics.js";
 import {
   getAuth,
   signInWithPhoneNumber,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { firebaseConfig } from "./firebase-config.js";
 import { getPhoneVerifier, prepareFirebasePhoneAuth, resetPhoneVerifier } from "./firebase-phone.js";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyBfdpqGOahFlX-vFROEFMvVEX9anZV5TG4",
-  authDomain: "axzen-c70e1.firebaseapp.com",
-  projectId: "axzen-c70e1",
-  storageBucket: "axzen-c70e1.firebasestorage.app",
-  messagingSenderId: "619605129554",
-  appId: "1:619605129554:web:c74e25667a949dac07228b",
-  measurementId: "G-X2QK2EGX7P",
-};
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 prepareFirebasePhoneAuth(auth);
+try {
+  getAnalytics(app);
+} catch (error) {
+  void error;
+}
 const form = document.querySelector("#sellerRegisterForm");
 const message = document.querySelector("#sellerRegisterMessage");
 const sendOtpButton = document.querySelector("[data-send-register-otp]");

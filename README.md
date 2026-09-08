@@ -30,8 +30,9 @@ http://localhost:3000/api/health
 PORT=3000
 MONGO_URI=mongodb+srv://USERNAME:PASSWORD@CLUSTER.mongodb.net/axzen?retryWrites=true&w=majority
 JWT_SECRET=change-this-long-random-secret
-FIREBASE_PROJECT_ID=axzen-c70e1
-FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"axzen-c70e1"}
+FIREBASE_PROJECT_ID=axzen-infotech
+FIREBASE_WEB_API_KEY=AIzaSyDJcBMMp4hsEcZw94gYUybcJK6jzDTlC70
+FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"axzen-infotech"}
 RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxxx
 RAZORPAY_KEY_SECRET=keep-this-secret-in-vercel-env
 PAYMENT_CHARGE_PERCENT=2
