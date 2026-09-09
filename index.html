@@ -10,6 +10,7 @@
         native = !!(window.Capacitor && (!window.Capacitor.isNativePlatform || window.Capacitor.isNativePlatform()));
       } catch (e) {}
       if (!native && location.protocol === "https:" && location.hostname === "localhost") native = true;
+      if (!native && /(?:^|[?&])app=1(?:&|$)/.test(location.search)) native = true;
       if (native) document.documentElement.classList.add("ax-native-app");
     })();
     const axzenHost = window.location.hostname;
@@ -34,9 +35,20 @@
   <link rel="stylesheet" href="product-modal.css">
   <link rel="stylesheet" href="homepage-sections.css">
   <link rel="stylesheet" href="mobile-app.css">
-  <link rel="stylesheet" href="store-mobile.css">
+  <link rel="stylesheet" href="axzen-app.css">
+  <link rel="stylesheet" href="media.css">
+  <link rel="stylesheet" href="track-order.css">
+  <link rel="stylesheet" href="store-mobile.css?v=store8">
 </head>
 <body class="storefront-page axzen-mall">
+  <div class="ax-ios-statusbar" aria-hidden="true">
+    <span>9:41</span>
+    <span class="ax-ios-sys">
+      <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><rect x="0" y="7.5" width="3" height="4.5" rx="0.6"/><rect x="4.5" y="5" width="3" height="7" rx="0.6"/><rect x="9" y="2.5" width="3" height="9.5" rx="0.6"/><rect x="13.5" y="0" width="3" height="12" rx="0.6"/></svg>
+      <svg width="16" height="12" viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1.4 4.4a7.2 7.2 0 0 1 13.2 0"/><path d="M4 6.8a4.4 4.4 0 0 1 8 0"/><path d="M8 10.4h.01" stroke-width="2.4"/></svg>
+      <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.7" y="1.2" width="20.5" height="9.6" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="2.2" y="2.7" width="17.4" height="6.6" rx="1.1" fill="currentColor"/><rect x="22.2" y="4" width="2" height="4" rx="0.7" fill="currentColor"/></svg>
+    </span>
+  </div>
   <div class="ax-topbar ax-home-only">
     <p>Welcome to Axzen worldwide store</p>
     <div>
@@ -54,7 +66,27 @@
       <img class="brand-logo customer-header-logo" src="assets/customer-logo.png" alt="Axzen" onerror="this.hidden=true">
       <span class="brand-mark">A</span>
       <strong class="ax-wordmark">Axzen</strong>
+      <svg class="ax-logo-svg" viewBox="0 0 124 28" aria-hidden="true">
+        <path fill="#102A43" fill-rule="evenodd" d="M14.1 23.4c-4.7 0-7.8-3-7.8-7.4 0-4.6 3.2-7.6 7.9-7.6 4.6 0 7.8 3 7.8 7.6 0 4.4-3.1 7.4-7.9 7.4zm0-2.45c2.75 0 4.4-1.85 4.4-4.95 0-3.15-1.65-5.1-4.4-5.1s-4.4 1.95-4.4 5.1c0 3.1 1.65 4.95 4.4 4.95z"/>
+        <path fill="#102A43" d="M25.2 23.2 28.9 17.4 25.4 11.8h3.35l2.05 3.7 2.05-3.7h3.3L32.6 17.4l3.75 5.8h-3.45l-2.2-3.85-2.2 3.85z"/>
+        <path fill="#102A43" d="M40.6 11.8h11v2.2l-7.55 6.85h7.85v2.35H40.3v-2.2l7.6-6.85H40.6z"/>
+        <path fill="#102A43" d="M55.7 23.4c-4.55 0-7.55-3-7.55-7.4 0-4.7 3.15-7.6 7.65-7.6 3.9 0 6.85 2.05 7.25 5.75h-2.9c-.35-2-1.9-3.25-4.3-3.25-2.75 0-4.5 1.95-4.5 5.15 0 3.05 1.75 4.9 4.6 4.9 2.45 0 4-1.3 4.35-3.4h2.9c-.5 3.7-3.4 5.85-7.3 5.85z"/>
+        <g fill="none" stroke="#102A43" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="75.4" y="10.2" width="15.4" height="13.1" rx="2.1"/>
+          <path d="M79.15 10.35V7.55a2 2 0 0 1 3.85 0v2.8"/>
+          <path d="M83.2 10.35V7.55a2 2 0 0 1 3.85 0v2.8"/>
+          <path d="M75.4 15.35h15.4"/>
+        </g>
+      </svg>
+      <span class="ax-tagline">from startups to yours</span>
     </a>
+
+    <button class="ax-deliver-row" type="button" data-customer-location>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11z"/><circle cx="12" cy="10" r="2.4"/></svg>
+      <small>Deliver to</small>
+      <strong data-deliver-city>Hyderabad</strong>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
 
     <form class="commerce-search ax-search" data-customer-search>
       <select aria-label="Category" name="category" data-customer-category>
@@ -65,10 +97,16 @@
         <option>Beauty</option>
         <option>Sports</option>
       </select>
-      <input type="search" name="search" placeholder="Search products, stores or #seller">
+      <label class="ax-search-field">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" name="search" placeholder="Search products, stores &amp; more">
+      </label>
       <button type="submit" aria-label="Search">
         <svg class="ax-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m20 20-3.5-3.5"/></svg>
-        Search
+        <span>Search</span>
+      </button>
+      <button class="ax-scan-btn" type="button" data-scan-product aria-label="Scan product">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>
       </button>
     </form>
 
@@ -91,6 +129,7 @@
         <svg class="ax-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 1 1 12 0c0 7 3 7 3 7H3s3 0 3-7"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
         <span>Alerts</span>
         <b data-customer-notification-count hidden>0</b>
+        <i class="ax-bell-dot" aria-hidden="true"></i>
       </button>
       <div class="customer-notification-menu" data-customer-notification-panel hidden>
         <strong>Notifications</strong>
@@ -145,11 +184,15 @@
   </div>
 
   <main>
+    <section class="ax-home-title ax-shop-only">
+      <h1>Shop</h1>
+      <p>Find products you’ll love.</p>
+    </section>
     <section class="customer-sale-banner ax-hero ax-home-only" aria-label="Axzen featured deals">
       <div>
         <p class="eyebrow">Hot gadget deals</p>
-        <h1>Hot gadgets. Cool offers. Up to 15% off.</h1>
-        <p>Shop verified electronics, fashion and home products from trusted local sellers.</p>
+        <h1>Big tech. Better prices.</h1>
+        <p>Up to 15% off</p>
         <a class="primary-button" href="#products">Shop now</a>
       </div>
     </section>
@@ -163,6 +206,7 @@
           <strong>Best sellers</strong>
           <small>Top picks this week</small>
         </span>
+        <svg class="ax-line-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
       </button>
       <button type="button" data-home-tab="new">
         <span class="ax-quick-icon new">
@@ -172,6 +216,7 @@
           <strong>New arrivals</strong>
           <small>Fresh on Axzen</small>
         </span>
+        <svg class="ax-line-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
       </button>
       <button type="button" data-home-tab="rated">
         <span class="ax-quick-icon rated">
@@ -181,6 +226,7 @@
           <strong>Top rated</strong>
           <small>Highest reviewed</small>
         </span>
+        <svg class="ax-line-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
       </button>
       <button type="button" data-home-tab="sale">
         <span class="ax-quick-icon sale">
@@ -190,14 +236,16 @@
           <strong>On sale</strong>
           <small>Limited time deals</small>
         </span>
+        <svg class="ax-line-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
       </button>
     </section>
 
     <section class="customer-category-hero ax-home-only">
       <div>
-        <p class="eyebrow">Shop by category</p>
-        <h2>Browse departments</h2>
+        <p class="eyebrow">Browse departments</p>
+        <h2>Shop by category</h2>
       </div>
+      <button class="ax-see-all" type="button" data-open-browse>See all &gt;</button>
       <section class="customer-category-rail ax-category-circles" data-customer-category-rail aria-label="Shop by category">
         <button type="button" class="active" data-customer-category-pill="All"><span class="category-chip-icon">A</span>All</button>
       </section>
@@ -207,17 +255,38 @@
 
     <section class="section commerce-layout ax-featured-row" id="products">
       <div data-customer-main>
+        <div class="ax-product-tabs ax-chip-row" data-home-tabs>
+          <button type="button" class="active" data-home-tab="all">All</button>
+          <button type="button" data-home-tab="Electronics">Electronics</button>
+          <button type="button" data-home-tab="Fashion">Fashion</button>
+          <button type="button" data-home-tab="Home">Home</button>
+          <button type="button" data-home-tab="Beauty">Beauty</button>
+        </div>
+        <article class="ax-shop-hero" aria-label="Browse featured tech">
+          <div>
+            <h2>Smart tech, better living</h2>
+            <p>Discover top picks from verified Axzen sellers.</p>
+            <a class="primary-button" href="#products" data-open-browse>Explore now &gt;</a>
+          </div>
+          <div class="ax-shop-hero-art" aria-hidden="true">
+            <img src="assets/images/headphones.png" alt="">
+            <img src="assets/images/laptop.png" alt="">
+            <img src="assets/images/smartwatch.png" alt="">
+          </div>
+        </article>
         <div class="section-heading ax-featured-heading">
           <div>
-            <p class="eyebrow">Featured products</p>
-            <h2>Recommended for you</h2>
+            <p class="eyebrow"><span class="ax-limited">Limited time</span></p>
+            <h2>Deals for you</h2>
           </div>
-          <div class="ax-product-tabs" data-home-tabs>
-            <button type="button" class="active" data-home-tab="all">All</button>
-            <button type="button" data-home-tab="Electronics">Electronics</button>
-            <button type="button" data-home-tab="Fashion">Fashion</button>
-            <button type="button" data-home-tab="sale">On sale</button>
-          </div>
+          <button class="ax-see-all" type="button" data-open-browse>See all &gt;</button>
+        </div>
+        <div class="ax-browse-tools">
+          <strong>Browse products</strong>
+          <span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+            Sort: <b>Popular</b>
+          </span>
         </div>
         <div class="ax-featured-grid">
           <div class="commerce-products ax-product-grid">
@@ -269,19 +338,20 @@
       <article class="login-card compact-login">
         <button class="customer-login-close" type="button" data-close-customer-login aria-label="Close login">Close</button>
         <div class="login-card-heading">
-          <span class="login-icon">C</span>
+          <span class="login-icon">A</span>
           <div>
-            <p class="eyebrow">Customer login</p>
+            <p class="eyebrow">Axzen login</p>
             <h2>Verify your phone</h2>
           </div>
         </div>
         <form class="role-login-form firebase-phone-form" data-role="customer">
-          <label class="phone-login-field">Phone number
+          <div class="phone-login-field">
+            <span>Phone number</span>
             <div class="phone-input-row">
               <select name="countryCode" data-country-select aria-label="Country"></select>
-              <input name="phone" type="tel" inputmode="numeric" placeholder="98765 43210" required autocomplete="tel">
+              <input name="phone" type="tel" inputmode="numeric" placeholder="98765 43210" required autocomplete="tel" aria-label="Phone number">
             </div>
-          </label>
+          </div>
           <div id="recaptcha-customer" class="recaptcha-box"></div>
           <button type="button" data-send-otp>Send OTP</button>
           <label class="otp-field" hidden>OTP<input name="otp" type="text" inputmode="numeric" placeholder="Enter OTP"></label>
@@ -333,13 +403,31 @@
   </footer>
 
   <nav class="ax-app-nav" aria-label="Customer app">
-    <a href="/" data-app-nav="home">Home</a>
-    <a href="#products" data-app-nav="shop">Shop</a>
-    <a href="#cart" data-app-nav="cart">Cart <b data-cart-count>0</b></a>
-    <a href="#orders" data-app-nav="orders">Orders</a>
-    <button type="button" data-customer-profile-menu data-app-nav="account">Account</button>
+    <a href="/" data-app-nav="home" class="is-active">
+      <i class="ax-nav-ico" aria-hidden="true"></i>
+      Home
+    </a>
+    <a href="#media" data-app-nav="media">
+      <i class="ax-nav-ico" aria-hidden="true"></i>
+      Media
+    </a>
+    <a href="#cart" data-app-nav="cart">
+      <span class="ax-nav-cart">
+        <i class="ax-nav-ico" aria-hidden="true"></i>
+        <b data-cart-count>0</b>
+      </span>
+      Cart
+    </a>
+    <a href="#orders" data-app-nav="orders">
+      <i class="ax-nav-ico" aria-hidden="true"></i>
+      Orders
+    </a>
+    <button type="button" data-app-nav="account">
+      <i class="ax-nav-ico" aria-hidden="true"></i>
+      Account
+    </button>
   </nav>
 
-  <script type="module" src="portal.js"></script>
+  <script type="module" src="portal.js?v=store9"></script>
 </body>
 </html>

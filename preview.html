@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Axzen app preview</title>
+  <style>
+    html, body {
+      margin: 0;
+      background: #1a2332;
+      font-family: Segoe UI, sans-serif;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 12px 0 20px;
+    }
+    .label {
+      margin: 0 0 10px;
+      color: #c5d0dc;
+      font-size: 12px;
+    }
+    .phone {
+      width: 390px;
+      height: 844px;
+      overflow: hidden;
+      background: #000;
+      border-radius: 28px;
+      box-shadow: 0 0 0 8px #0b1220;
+    }
+    iframe {
+      display: block;
+      width: 390px;
+      height: 844px;
+      border: 0;
+      background: #f4f6f9;
+    }
+  </style>
+</head>
+<body>
+  <p class="label">Phone preview · 390 × 844</p>
+  <div class="phone">
+    <iframe
+      id="appFrame"
+      src="index.html?app=1&amp;v=store9"
+      title="Axzen app"
+    ></iframe>
+  </div>
+</body>
+</html>

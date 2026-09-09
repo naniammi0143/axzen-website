@@ -3,6 +3,9 @@ html.ax-native-app,
 html.ax-native-app body {
   width: 100% !important;
   max-width: 100% !important;
+  margin: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
   overflow-x: hidden !important;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
@@ -24,6 +27,7 @@ html.ax-native-app .storefront-page.axzen-mall .ax-header {
   grid-template-columns: minmax(0, 1fr) auto !important;
   grid-template-areas:
     "logo actions"
+    "deliver deliver"
     "search search" !important;
   gap: 10px 8px !important;
   min-height: 0 !important;
@@ -50,7 +54,6 @@ html.ax-native-app .storefront-page.axzen-mall .commerce-nav {
   overflow: visible !important;
 }
 
-html.ax-native-app .storefront-page.axzen-mall .ax-header-actions .customer-notification-button,
 html.ax-native-app .storefront-page.axzen-mall .ax-header-actions .ax-icon-link[data-customer-follows-link] {
   display: none !important;
 }
@@ -58,9 +61,11 @@ html.ax-native-app .storefront-page.axzen-mall .ax-header-actions .ax-icon-link[
 html.ax-native-app .storefront-page.axzen-mall .ax-icon-link,
 html.ax-native-app .storefront-page.axzen-mall .ax-account-btn,
 html.ax-native-app .storefront-page.axzen-mall .ax-cart-link {
-  min-width: 44px !important;
-  min-height: 44px !important;
-  padding: 4px 6px !important;
+  display: none !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-deliver-row {
+  grid-area: deliver !important;
 }
 
 html.ax-native-app .storefront-page.axzen-mall .commerce-search,
@@ -69,6 +74,10 @@ html.ax-native-app .storefront-page.axzen-mall .ax-search {
   width: 100% !important;
   flex-direction: row !important;
   min-height: 42px !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .commerce-search button[type="submit"] {
+  display: none !important;
 }
 
 html.ax-native-app .storefront-page.axzen-mall .commerce-search select {
@@ -97,6 +106,15 @@ html.ax-native-app .storefront-page.axzen-mall .commerce-search button .ax-nav-i
   height: 18px !important;
 }
 
+html.ax-native-app body.ax-vstore-open .storefront-page.axzen-mall .commerce-layout,
+html.ax-native-app body.ax-vstore-open .storefront-page.axzen-mall.customer-subpage-open [data-customer-main],
+html.ax-native-app body.ax-vstore-open .storefront-page.axzen-mall .ax-store-profile {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
 html.ax-native-app .storefront-page.axzen-mall .commerce-layout,
 html.ax-native-app .storefront-page.axzen-mall .ax-featured-row,
 html.ax-native-app .storefront-page.axzen-mall .ax-just-arrived,
@@ -108,10 +126,10 @@ html.ax-native-app .storefront-page.axzen-mall .customer-category-hero,
 html.ax-native-app .storefront-page.axzen-mall #stores,
 html.ax-native-app .storefront-page.axzen-mall.customer-subpage-open [data-customer-main],
 html.ax-native-app .storefront-page.axzen-mall .ax-store-profile {
-  width: calc(100% - 24px) !important;
+  width: 100% !important;
   max-width: none !important;
-  margin-left: auto !important;
-  margin-right: auto !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
 }
 
 html.ax-native-app .storefront-page.axzen-mall .customer-sale-banner.ax-hero,

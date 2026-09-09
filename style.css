@@ -266,7 +266,7 @@ a {
   color: #fff;
   background:
     linear-gradient(120deg, rgba(16, 24, 32, 0.94), rgba(16, 24, 32, 0.55)),
-    url("https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1800&q=80") center/cover;
+    url("assets/hero-tech.png") center/cover;
 }
 
 .commerce-hero h1,
@@ -429,13 +429,13 @@ a {
   overflow: hidden;
   background:
     linear-gradient(135deg, rgba(245, 247, 248, 0.97), rgba(245, 247, 248, 0.84)),
-    url("https://images.unsplash.com/photo-1556740758-90de374c12ad?auto=format&fit=crop&w=1800&q=80") center/cover;
+    url("assets/hero-tech.png") center/cover;
 }
 
 .admin-auth {
   background:
     linear-gradient(135deg, rgba(245, 247, 248, 0.98), rgba(245, 247, 248, 0.82)),
-    url("https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1800&q=80") center/cover;
+    url("assets/splash.png") center/cover;
 }
 
 .auth-copy {
@@ -511,8 +511,26 @@ a {
   overflow: hidden;
 }
 
+.recaptcha-box.recaptcha-visible {
+  width: min(100%, 304px);
+  height: auto;
+  min-height: 78px;
+  margin: 4px 0 10px;
+  overflow: visible;
+}
+
+html.ax-native-app .grecaptcha-badge {
+  visibility: visible;
+}
+
 .grecaptcha-badge {
   visibility: hidden;
+}
+
+iframe[src*="recaptcha"],
+iframe[title*="reCAPTCHA"],
+div[style*="z-index: 2000000000"] {
+  z-index: 2147483646 !important;
 }
 
 .otp-field {
@@ -533,6 +551,19 @@ a {
 .phone-login-field {
   display: grid;
   gap: 8px;
+}
+
+.phone-login-field > span {
+  color: #3b4951;
+  font-weight: 700;
+}
+
+.seller-login-card .phone-login-field > span {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .phone-input-row {
@@ -900,13 +931,13 @@ a {
 .seller-portal {
   background:
     linear-gradient(120deg, rgba(7, 63, 57, 0.96), rgba(35, 76, 124, 0.72)),
-    url("https://images.unsplash.com/photo-1556740758-90de374c12ad?auto=format&fit=crop&w=1800&q=80") center/cover;
+    url("assets/hero-tech.png") center/cover;
 }
 
 .admin-portal {
   background:
     linear-gradient(120deg, rgba(16, 24, 32, 0.96), rgba(10, 107, 95, 0.72)),
-    url("https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1800&q=80") center/cover;
+    url("assets/splash.png") center/cover;
 }
 
 .portal-hero p {
@@ -967,7 +998,7 @@ a {
   padding: clamp(44px, 7vw, 92px) clamp(18px, 5vw, 72px) 54px;
   background:
     linear-gradient(120deg, rgba(245, 247, 248, 0.98) 0%, rgba(245, 247, 248, 0.9) 45%, rgba(245, 247, 248, 0.64) 100%),
-    url("https://images.unsplash.com/photo-1556740758-90de374c12ad?auto=format&fit=crop&w=1800&q=80") center/cover;
+    url("assets/hero-tech.png") center/cover;
 }
 
 .hero-copy {
@@ -1326,7 +1357,7 @@ h3 {
   color: #fff;
   background:
     linear-gradient(120deg, rgba(16, 24, 32, 0.96), rgba(35, 76, 124, 0.76)),
-    url("https://images.unsplash.com/photo-1556740758-90de374c12ad?auto=format&fit=crop&w=1800&q=80") center/cover;
+    url("assets/hero-tech.png") center/cover;
 }
 
 .customer-login-copy {
@@ -2692,7 +2723,7 @@ button:hover,
   color: #f5f5f7;
   background:
     linear-gradient(135deg, rgba(0, 0, 0, 0.82), rgba(0, 0, 0, 0.36)),
-    url("https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1800&q=80") center/cover;
+    url("assets/hero-tech.png") center/cover;
 }
 
 .portal-auth,

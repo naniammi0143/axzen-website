@@ -774,6 +774,7 @@
           data.items,
           (row) => `
             <button data-action="product-approve" data-id="${row._id}">Approve</button>
+            <button data-action="product-clean-bg" data-id="${row._id}">Clean BG</button>
             <button data-action="product-rating" data-id="${row._id}">Save rating</button>
             <button data-action="product-reject" data-id="${row._id}">Reject</button>
             <button data-action="product-block" data-id="${row._id}">Block</button>
@@ -1488,6 +1489,17 @@
       if (action === "seller-reject") return patch(`/api/admin/sellers/${id}/reject`, {});
       if (action === "seller-toggle") return patch(`/api/admin/sellers/${id}`, { status: target.dataset.status });
       if (action === "product-approve") return patch(`/api/admin/products/${id}/approve`, {});
+      if (action === "product-clean-bg") {
+        toast("Grok AI is removing the background...");
+        try {
+          await api(`/api/admin/products/${id}/clean-images`, { method: "POST", body: "{}" });
+          toast("Background removed.");
+          await loadView();
+        } catch (error) {
+          toast(error.message, true);
+        }
+        return;
+      }
       if (action === "product-rating") {
         return patch(`/api/admin/products/${id}`, {
           ratingAverage: Number(qs(`[data-product-rating="${id}"]`)?.value || 0),

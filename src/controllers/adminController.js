@@ -13,6 +13,8 @@ const { success } = require("../utils/apiResponse");
 const { formatRupees, getPaymentChargePercent } = require("../utils/money");
 const { notifyFollowersForProduct } = require("./notificationController");
 const { hashPassword } = require("../utils/password");
+const { grokConfigured, removeBackgroundFromUrl } = require("../utils/grokBackground");
+const { uploadImageBuffer } = require("../utils/cloudinary");
 
 const orderStatuses = ["pending", "confirmed", "packed", "shipped", "out_for_delivery", "delivered", "cancelled", "returned"];
 const productStatuses = ["pending_approval", "approved", "active", "rejected", "blocked", "inactive"];
@@ -562,6 +564,40 @@ const approveProduct = asyncHandler(async (req, res) => {
 const rejectProduct = asyncHandler(async (req, res) => {
   req.body.status = "rejected";
   return updateProduct(req, res);
+});
+
+const cleanProductImages = asyncHandler(async (req, res) => {
+  if (!grokConfigured()) {
+    res.status(400).json({ ok: false, message: "Grok AI key is not configured on the server." });
+    return;
+  }
+  const product = await Product.findById(req.params.id);
+  if (!product) {
+    res.status(404).json({ ok: false, message: "Product not found." });
+    return;
+  }
+  const sourceImages = (product.images || []).filter(Boolean);
+  if (!sourceImages.length) {
+    res.status(400).json({ ok: false, message: "This product has no images to clean." });
+    return;
+  }
+  const nextImages = [];
+  for (const imageUrl of sourceImages) {
+    const cleaned = await removeBackgroundFromUrl(imageUrl);
+    if (cleaned) {
+      const uploaded = await uploadImageBuffer(cleaned, {
+        folder: `axzen/products/${product.sellerId}/${product.sku || "item"}`,
+        format: "png",
+      });
+      nextImages.push(uploaded.url);
+    } else {
+      nextImages.push(imageUrl);
+    }
+  }
+  product.images = nextImages;
+  await product.save();
+  await audit(req, "product.clean-images", "product", req.params.id, { count: nextImages.length });
+  success(res, { product });
 });
 
 const listOrders = asyncHandler(async (req, res) => {
@@ -1276,6 +1312,7 @@ const listAuditLogs = asyncHandler(async (req, res) => {
 module.exports = {
   adminOverview,
   approveProduct,
+  cleanProductImages,
   approveSeller,
   createEmployee,
   exportCsv,

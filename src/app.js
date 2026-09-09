@@ -25,6 +25,7 @@ const {
 const { createSellerProduct, listProducts, listSellerProducts, updateSellerInventory } = require("./controllers/productController");
 const { getPublicSeller, getPublicSellerCategories, getPublicSellerProducts, getPublicSellerReviews } = require("./controllers/sellerController");
 const { financeSummary, publicCustomerAppConfig } = require("./controllers/adminController");
+const { verifyWhatsappWebhook, receiveWhatsappWebhook } = require("./controllers/whatsappController");
 const {
   followSeller,
   listCustomerFollows,
@@ -49,7 +50,7 @@ app.use(
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || env.allowedOrigins.includes(origin)) {
+      if (!origin || env.isAllowedOrigin(origin)) {
         callback(null, true);
         return;
       }
@@ -78,6 +79,8 @@ app.get("/api", (req, res) => {
 app.get("/api/health", (req, res) => {
   res.json({ ok: true, service: "Axzen API" });
 });
+app.get("/api/whatsapp/webhook", verifyWhatsappWebhook);
+app.post("/api/whatsapp/webhook", receiveWhatsappWebhook);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", authRoutes);

@@ -54,12 +54,13 @@
           </div>
         </div>
         <form class="role-login-form firebase-phone-form" data-role="seller">
-          <label class="phone-login-field">Phone number
+          <div class="phone-login-field">
+            <span>Phone number</span>
             <div class="phone-input-row">
               <select name="countryCode" data-country-select aria-label="Country"></select>
-              <input name="phone" type="tel" inputmode="numeric" placeholder="98765 43210" required autocomplete="tel">
+              <input name="phone" type="tel" inputmode="numeric" placeholder="98765 43210" required autocomplete="tel" aria-label="Phone number">
             </div>
-          </label>
+          </div>
           <div id="recaptcha-seller" class="recaptcha-box"></div>
           <button type="button" data-send-otp>Send OTP</button>
           <label class="otp-field" hidden>OTP<input name="otp" type="text" inputmode="numeric" placeholder="Enter OTP"></label>
@@ -156,12 +157,13 @@
         <p class="eyebrow">Owner verification</p>
         <h2>Login as owner</h2>
         <p>Verify the seller mobile number with OTP to open the full Seller Workspace.</p>
-        <label class="phone-login-field">Owner mobile number
+        <div class="phone-login-field">
+          <span>Owner mobile number</span>
           <div class="phone-input-row">
             <select name="ownerCountryCode" data-country-select aria-label="Country"></select>
-            <input name="ownerPhone" type="tel" inputmode="numeric" data-owner-phone placeholder="98765 43210">
+            <input name="ownerPhone" type="tel" inputmode="numeric" data-owner-phone placeholder="98765 43210" aria-label="Owner mobile number">
           </div>
-        </label>
+        </div>
         <div id="recaptcha-owner" class="recaptcha-box"></div>
         <button type="button" data-send-owner-otp>Send OTP</button>
         <label data-owner-otp-wrap hidden>OTP<input name="ownerOtp" type="text" inputmode="numeric" data-owner-otp placeholder="Enter OTP"></label>

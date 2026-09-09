@@ -1,0 +1,6 @@
+assets/
+  icons/          UI SVGs (home, search, cart, bell, ...)
+  illustrations/  delivery-truck, package, empty-cart, order-success, ...
+  images/         headphones, laptop, phone, grocery, fruits, ...
+  fonts/          Inter Regular / Medium / SemiBold
+  media/          short videos

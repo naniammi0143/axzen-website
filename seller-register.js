@@ -5,7 +5,7 @@ import {
   signInWithPhoneNumber,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { firebaseConfig } from "./firebase-config.js";
-import { getPhoneVerifier, prepareFirebasePhoneAuth, resetPhoneVerifier } from "./firebase-phone.js";
+import { getPhoneVerifier, prepareFirebasePhoneAuth, resetPhoneVerifier, withTimeout } from "./firebase-phone.js";
 import {
   fillCountrySelects,
   isValidE164,
@@ -129,7 +129,7 @@ sendOtpButton.addEventListener("click", async () => {
   const countrySelect = form.querySelector("[data-country-select]");
 
   try {
-    confirmationResult = await signInWithPhoneNumber(auth, e164, await getRecaptcha());
+    confirmationResult = await withTimeout(signInWithPhoneNumber(auth, e164, await getRecaptcha()), 45000);
     verifiedPhone = e164;
     mobileInput.readOnly = true;
     if (countrySelect) countrySelect.disabled = true;

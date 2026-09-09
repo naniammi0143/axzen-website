@@ -226,11 +226,17 @@ export function otpAuthErrorMessage(error) {
   if (code.includes("too-many-requests")) {
     return "Too many OTP attempts. Please wait and try again.";
   }
+  if (code.includes("timeout") || /timed out/i.test(message)) {
+    return "Verification timed out. Complete the check and tap Send OTP again.";
+  }
+  if (/INVALID_ID_TOKEN/i.test(message) || /session expired/i.test(message)) {
+    return "Session expired. Send a new OTP.";
+  }
   if (code.includes("captcha-check-failed") || /already been rendered/i.test(message)) {
     return "Verification reset. Tap Send OTP again.";
   }
   if (code.includes("unauthorized-domain") || code.includes("invalid-app-credential")) {
-    return "OTP is blocked for this domain. Add axzen.in, www.axzen.in, admin.axzen.in and seller.axzen.in in Firebase Authorized domains.";
+    return "OTP is blocked for this app origin. In Firebase Authorized domains add axzen.in, www.axzen.in, admin.axzen.in, seller.axzen.in and localhost.";
   }
   return message || "Unable to send OTP. Please try again.";
 }
@@ -244,6 +250,7 @@ export function fillCountrySelects(root = document) {
     ).join("");
     select.value = countryByIso.has(current) ? current : DEFAULT_PHONE_COUNTRY;
     if (!select.value) select.value = DEFAULT_PHONE_COUNTRY;
+    select.setAttribute("aria-label", "Country");
   });
 }
 

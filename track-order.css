@@ -1,0 +1,744 @@
+/* Axzen customer Track order overlay — matches the mobile production screen */
+
+body.ax-track-open {
+  overflow: hidden;
+}
+
+body.ax-track-open .ax-app-nav {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body.ax-track-open .customer-toast,
+body.ax-track-open [data-customer-toast] {
+  z-index: 620;
+  right: 16px;
+  bottom: calc(122px + env(safe-area-inset-bottom, 0px));
+}
+
+.ax-track-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  justify-content: center;
+  background: #f7f9fb;
+  color: #102a43;
+  overflow: hidden;
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ax-track-screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 390px;
+  height: 100%;
+  height: 100dvh;
+  background: #f7f9fb;
+  overflow: hidden;
+}
+
+.ax-track-top {
+  flex: none;
+  padding: 0 18px;
+  background: #f7f9fb;
+}
+
+.ax-track-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 38px;
+  padding: 6px 4px 0;
+  color: #102a43;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.ax-track-sys {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ax-track-sys svg {
+  display: block;
+  color: #102a43;
+}
+
+.ax-track-battery {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+html.ax-native-app .ax-track-statusbar {
+  display: none;
+}
+
+html.ax-native-app .ax-track-overlay {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.ax-track-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-height: 36px;
+  padding: 0;
+}
+
+.ax-track-brand {
+  display: grid;
+  gap: 2px;
+  color: #102a43;
+  text-decoration: none;
+}
+
+.ax-track-wordmark {
+  display: flex;
+  align-items: flex-end;
+  color: #102a43;
+  line-height: 0.9;
+}
+
+.ax-track-logo-svg {
+  display: block;
+  width: 118px;
+  height: 26px;
+}
+
+.ax-track-bag-letter {
+  width: 18px;
+  height: 22px;
+  margin: 0 0 0 1px;
+}
+
+.ax-track-tagline {
+  color: #758394;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
+.ax-track-notify-host {
+  position: relative;
+  flex: none;
+  margin-top: 2px;
+}
+
+.ax-track-bell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: #102a43;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.ax-track-bell svg {
+  width: 22px;
+  height: 22px;
+}
+
+.ax-track-bell-dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 8px;
+  height: 8px;
+  background: #ef4444;
+  border: 1.5px solid #f7f9fb;
+  border-radius: 50%;
+}
+
+.ax-track-notify-host .customer-notification-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: auto;
+  z-index: 30;
+  width: min(320px, calc(100vw - 32px));
+}
+
+.ax-track-pagehead {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 0 6px;
+  align-items: start;
+  padding: 0 0 6px;
+}
+
+.ax-track-back {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 32px;
+  margin-top: 2px;
+  padding: 0;
+  color: #102a43;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.ax-track-back svg {
+  width: 22px;
+  height: 22px;
+}
+
+.ax-track-pagehead h1 {
+  margin: 0;
+  color: #102a43;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+}
+
+.ax-track-pagehead p {
+  margin: 2px 0 0;
+  color: #758394;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ax-track-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 16px 8px;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.ax-track-card {
+  margin: 0 0 6px;
+  background: #fff;
+  border: 1px solid #e1e7ed;
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(16, 42, 67, 0.03), 0 8px 20px rgba(16, 42, 67, 0.04);
+}
+
+.ax-track-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 100px;
+  align-items: center;
+  gap: 2px;
+  min-height: 94px;
+  padding: 10px 4px 10px 14px;
+  background: #eef3f8;
+  border: 0;
+  box-shadow: none;
+}
+
+.ax-track-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 6px;
+  padding: 4px 9px 4px 7px;
+  color: #ff5733;
+  background: #fff1ed;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ax-track-pill svg {
+  width: 13px;
+  height: 13px;
+}
+
+.ax-track-hero h2 {
+  margin: 0;
+  color: #102a43;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.ax-track-hero .ax-track-date {
+  margin: 4px 0 0;
+  color: #758394;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.ax-track-hero .ax-track-note {
+  margin: 3px 0 0;
+  color: #758394;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.ax-track-hero-art {
+  width: 118px;
+  height: 92px;
+  justify-self: end;
+  object-fit: contain;
+}
+
+.ax-track-product {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 8px;
+}
+
+.ax-track-product img {
+  display: block;
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  background: #eef1f5;
+  border-radius: 12px;
+}
+
+.ax-track-product h3 {
+  margin: 0;
+  color: #102a43;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.ax-track-product .ax-track-meta {
+  margin: 3px 0 0;
+  color: #758394;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.ax-track-price-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.ax-track-price-row strong {
+  color: #102a43;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.ax-track-paid {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  color: #ff5733;
+  background: #fff1ed;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ax-track-progress {
+  padding: 12px 12px 4px;
+}
+
+.ax-track-progress > h3 {
+  margin: 0 0 6px;
+  color: #102a43;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.ax-track-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ax-track-steps li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  min-height: 30px;
+  padding: 0 4px 6px 2px;
+}
+
+.ax-track-steps li.is-current {
+  margin: 0 -6px 0;
+  padding: 5px 10px 6px 8px;
+  background: #eaf0f5;
+  border-radius: 12px;
+}
+
+.ax-track-steps li:last-child {
+  padding-bottom: 6px;
+}
+
+.ax-track-steps li:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 24px;
+  bottom: 0;
+  width: 2px;
+  background: #ff5733;
+}
+
+.ax-track-steps li.is-current:not(:last-child)::before {
+  left: 19px;
+  top: 30px;
+  bottom: -2px;
+  background: repeating-linear-gradient(
+    to bottom,
+    #c5ced6 0,
+    #c5ced6 3px,
+    transparent 3px,
+    transparent 6px
+  );
+}
+
+.ax-track-steps li.is-pending:not(:last-child)::before {
+  background: repeating-linear-gradient(
+    to bottom,
+    #c5ced6 0,
+    #c5ced6 3px,
+    transparent 3px,
+    transparent 6px
+  );
+}
+
+.ax-track-marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  border-radius: 50%;
+}
+
+.ax-track-steps li.is-done .ax-track-marker {
+  color: #fff;
+  background: #ff5733;
+}
+
+.ax-track-steps li.is-current .ax-track-marker {
+  color: #fff;
+  background: #102a43;
+}
+
+.ax-track-steps li.is-pending .ax-track-marker {
+  background: #fff;
+  border: 1.6px solid #c5ced6;
+}
+
+.ax-track-marker svg {
+  width: 12px;
+  height: 12px;
+}
+
+.ax-track-steps li.is-current .ax-track-marker svg {
+  width: 13px;
+  height: 13px;
+}
+
+.ax-track-steps strong {
+  display: block;
+  color: #102a43;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.ax-track-steps small {
+  display: block;
+  margin-top: 2px;
+  color: #758394;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.ax-track-steps p {
+  margin: 3px 0 0;
+  color: #758394;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.ax-track-ship-meta {
+  display: grid;
+  gap: 0;
+  margin: 2px 2px 0;
+  padding: 2px 0 4px;
+  border-top: 1px solid #e1e7ed;
+}
+
+.ax-track-ship-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  padding: 1px 2px;
+  color: #758394;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ax-track-ship-row + .ax-track-ship-row {
+  border-top: 1px solid #e1e7ed;
+}
+
+.ax-track-ship-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ax-track-ship-label svg {
+  width: 16px;
+  height: 16px;
+  color: #102a43;
+}
+
+.ax-track-ship-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  color: #102a43;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ax-track-copy {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: #102a43;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.ax-track-copy svg {
+  width: 15px;
+  height: 15px;
+}
+
+.ax-track-address {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 10px 12px;
+}
+
+.ax-track-pin {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: #102a43;
+  background: #eef3f8;
+  border-radius: 10px;
+}
+
+.ax-track-pin svg {
+  width: 18px;
+  height: 18px;
+}
+
+.ax-track-address-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  color: #102a43;
+  font-size: 14.5px;
+  font-weight: 800;
+}
+
+.ax-track-home {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  color: #102a43;
+  background: #e8eef4;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.ax-track-address strong {
+  display: block;
+  color: #102a43;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+.ax-track-address p {
+  margin: 2px 0 0;
+  color: #758394;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.ax-track-cta-bar {
+  flex: none;
+  padding: 4px 16px 8px;
+  background: #f7f9fb;
+}
+
+.ax-track-help {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 46px;
+  margin: 0;
+  padding: 0 16px;
+  color: #fff;
+  background: #102a43;
+  border: 0;
+  border-radius: 14px;
+  box-shadow: none;
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ax-track-help svg {
+  width: 18px;
+  height: 18px;
+}
+
+.ax-track-nav {
+  position: relative;
+  flex: none;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: center;
+  height: calc(58px + env(safe-area-inset-bottom, 0px));
+  padding: 4px 8px calc(4px + env(safe-area-inset-bottom, 0px));
+  background: #fff;
+  border-top: 1px solid #e1e7ed;
+  box-shadow: 0 -8px 20px rgba(16, 42, 67, 0.05);
+}
+
+.ax-track-nav-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 5px 4px;
+  color: #8a96a3;
+  background: none;
+  border: 0;
+  border-radius: 16px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.ax-track-nav-item svg {
+  width: 20px;
+  height: 20px;
+}
+
+.ax-track-nav-item.is-active {
+  color: #102a43;
+  background: #e8eef3;
+}
+
+.ax-track-nav-cart {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.ax-track-cart-badge {
+  position: absolute;
+  top: -6px;
+  right: -9px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  color: #fff;
+  background: #ef4444;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 15px;
+  text-align: center;
+}
+
+@media (max-width: 389px) {
+  .ax-track-top {
+    padding: 0 16px;
+  }
+
+  .ax-track-scroll {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .ax-track-pagehead h1 {
+    font-size: 23px;
+  }
+
+  .ax-track-hero {
+    grid-template-columns: minmax(0, 1fr) 96px;
+    min-height: 96px;
+  }
+
+  .ax-track-hero h2 {
+    font-size: 20px;
+  }
+
+  .ax-track-hero-art {
+    width: 100px;
+    height: 92px;
+  }
+}
+
+@media (min-width: 760px) {
+  .ax-track-overlay {
+    background: #eef1f4;
+  }
+
+  .ax-track-screen {
+    border-left: 1px solid #e1e7ed;
+    border-right: 1px solid #e1e7ed;
+    box-shadow: 0 0 0 1px rgba(16, 42, 67, 0.02), 0 18px 50px rgba(16, 42, 67, 0.08);
+  }
+}

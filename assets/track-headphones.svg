@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" role="img" aria-label="Wireless Headphones">
+  <rect width="80" height="80" rx="12" fill="#EEF1F5"/>
+  <path d="M18 44c1-18 43-18 44 0" fill="none" stroke="#1C2430" stroke-width="7" stroke-linecap="round"/>
+  <path d="M18 44c1-14 43-14 44 0" fill="none" stroke="#2B3442" stroke-width="3" stroke-linecap="round"/>
+  <rect x="11" y="38" width="16" height="26" rx="8" fill="#1C2430"/>
+  <rect x="53" y="38" width="16" height="26" rx="8" fill="#1C2430"/>
+  <rect x="14" y="42" width="10" height="18" rx="5" fill="#3A4554"/>
+  <rect x="56" y="42" width="10" height="18" rx="5" fill="#3A4554"/>
+  <rect x="16.5" y="46" width="5" height="10" rx="2.5" fill="#D7DEE6"/>
+  <rect x="58.5" y="46" width="5" height="10" rx="2.5" fill="#D7DEE6"/>
+</svg>

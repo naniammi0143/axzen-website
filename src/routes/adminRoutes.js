@@ -3,6 +3,7 @@ const {
   adminOverview,
   approveProduct,
   approveSeller,
+  cleanProductImages,
   createEmployee,
   exportCsv,
   financeSummary,
@@ -57,6 +58,7 @@ router.patch("/sellers/:id/reject", authorizeAdminAccess("sellers"), rejectSelle
 router.get("/products", authorizeAdminAccess("products"), listProducts);
 router.patch("/products/:id", authorizeAdminAccess("products"), updateProduct);
 router.patch("/products/:id/approve", authorizeAdminAccess("products"), approveProduct);
+router.post("/products/:id/clean-images", authorizeAdminAccess("products"), cleanProductImages);
 router.patch("/products/:id/reject", authorizeAdminAccess("products"), rejectProduct);
 
 router.get("/orders", authorizeAdminAccess("orders"), listOrders);

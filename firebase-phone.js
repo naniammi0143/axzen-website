@@ -1,51 +1,53 @@
 import { RecaptchaVerifier } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
-const FIREBASE_PHONE_TEST_API_KEY =
-  "AVweKoj7kNodfajJbeVCohrscDb4fmgHkKrrTNDnfdgMPZLEfF7WBJJzad2GLtneCnq0kPDsTI7Zw6lWAyJ9oO-PFs_go1_JEHXMoE0U1Q1qgJ1TJ4uqT4shzX-Vk_LPzeVnv_Ud4SSrOJVt7qILgFactg";
-
 const verifierCache = new Map();
 const verifierPending = new Map();
 
-export function isFirebasePhoneTestMode() {
-  return Boolean(
-    window.Capacitor?.isNativePlatform?.() ||
-      document.documentElement.classList.contains("ax-native-app") ||
-      location.hostname === "localhost" ||
-      location.hostname === "127.0.0.1"
-  );
+export function isNativeApp() {
+  return Boolean(window.Capacitor?.isNativePlatform?.() || document.documentElement.classList.contains("ax-native-app"));
 }
 
-if (isFirebasePhoneTestMode()) {
-  globalThis.FIREBASE_APPCHECK_DEBUG_TOKEN = FIREBASE_PHONE_TEST_API_KEY;
+export function isLocalBrowserTestHost() {
+  const host = location.hostname;
+  return !isNativeApp() && (host === "localhost" || host === "127.0.0.1");
+}
+
+export function isFirebasePhoneTestMode() {
+  return isLocalBrowserTestHost();
 }
 
 export function prepareFirebasePhoneAuth(auth) {
   auth.languageCode = "en";
 
-  if (isFirebasePhoneTestMode()) {
-    globalThis.FIREBASE_APPCHECK_DEBUG_TOKEN = FIREBASE_PHONE_TEST_API_KEY;
+  if (isLocalBrowserTestHost()) {
     auth.settings.appVerificationDisabledForTesting = true;
     return;
   }
 
+  auth.settings.appVerificationDisabledForTesting = false;
   import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js")
     .then((mod) => mod.initializeRecaptchaConfig?.(auth))
     .catch(() => {});
 }
 
-function ensureRecaptchaContainer(containerId) {
+function ensureRecaptchaContainer(containerId, visible) {
   let node = document.getElementById(containerId);
-  if (node) return node;
-  node = document.createElement("div");
-  node.id = containerId;
-  node.className = "recaptcha-box";
-  document.body.appendChild(node);
+  if (!node) {
+    node = document.createElement("div");
+    node.id = containerId;
+    document.body.appendChild(node);
+  }
+  node.classList.add("recaptcha-box");
+  node.classList.toggle("recaptcha-visible", Boolean(visible));
   return node;
 }
 
 function emptyRecaptchaContainer(containerId) {
   const node = document.getElementById(containerId);
-  if (node) node.innerHTML = "";
+  if (node) {
+    node.innerHTML = "";
+    node.classList.remove("recaptcha-visible");
+  }
 }
 
 function clearCachedVerifier(containerId) {
@@ -63,6 +65,20 @@ function clearCachedVerifier(containerId) {
 
 export async function resetPhoneVerifier(containerId) {
   clearCachedVerifier(containerId);
+}
+
+export function withTimeout(promise, ms, message = "Verification timed out. Complete the check and tap Send OTP again.") {
+  let timer;
+  return Promise.race([
+    Promise.resolve(promise).finally(() => clearTimeout(timer)),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        const error = new Error(message);
+        error.code = "timeout";
+        reject(error);
+      }, ms);
+    }),
+  ]);
 }
 
 export async function getPhoneVerifier(auth, containerId) {
@@ -83,39 +99,42 @@ export async function getPhoneVerifier(auth, containerId) {
   (async () => {
     try {
       clearCachedVerifier(containerId);
-      ensureRecaptchaContainer(containerId);
+      const visible = isNativeApp();
+      ensureRecaptchaContainer(containerId, visible);
       const verifier = new RecaptchaVerifier(auth, containerId, {
-        size: "invisible",
+        size: visible ? "normal" : "invisible",
       });
+      await verifier.render();
+      verifierCache.set(containerId, verifier);
+      settle.resolve(verifier);
+    } catch (error) {
+      const alreadyRendered = String(error?.message || "")
+        .toLowerCase()
+        .includes("already been rendered");
+      try {
+        clearCachedVerifier(containerId);
+      } catch (clearError) {
+        void clearError;
+      }
+
+      if (!alreadyRendered) {
+        settle.reject(error);
+        return;
+      }
 
       try {
-        await verifier.render();
-        verifierCache.set(containerId, verifier);
-        settle.resolve(verifier);
-        return;
-      } catch (error) {
-        const alreadyRendered = String(error?.message || "").toLowerCase().includes("already been rendered");
-        try {
-          verifier.clear();
-        } catch (clearError) {
-          void clearError;
-        }
-        emptyRecaptchaContainer(containerId);
-
-        if (!alreadyRendered) {
-          throw error;
-        }
-
+        const visible = isNativeApp();
+        ensureRecaptchaContainer(containerId, visible);
         const retry = new RecaptchaVerifier(auth, containerId, {
-          size: "invisible",
+          size: visible ? "normal" : "invisible",
         });
         await retry.render();
         verifierCache.set(containerId, retry);
         settle.resolve(retry);
+      } catch (retryError) {
+        clearCachedVerifier(containerId);
+        settle.reject(retryError);
       }
-    } catch (error) {
-      clearCachedVerifier(containerId);
-      settle.reject(error);
     } finally {
       if (verifierPending.get(containerId) === create) {
         verifierPending.delete(containerId);

@@ -42,13 +42,15 @@ async function uploadImageBuffer(file, options = {}) {
     folder: options.folder || "axzen/products",
     timestamp,
   };
+  if (options.format) params.format = options.format;
   const signature = signParams(params, config.apiSecret);
   const form = new FormData();
 
-  form.append("file", new Blob([file.buffer], { type: file.mimetype }), file.originalName || "product-image.jpg");
+  form.append("file", new Blob([file.buffer], { type: file.mimetype || "image/png" }), file.originalName || "product-image.png");
   form.append("api_key", config.apiKey);
   form.append("folder", params.folder);
   form.append("timestamp", String(timestamp));
+  if (options.format) form.append("format", options.format);
   form.append("signature", signature);
 
   const response = await fetch(`https://api.cloudinary.com/v1_1/${config.cloudName}/image/upload`, {
@@ -67,17 +69,27 @@ async function uploadImageBuffer(file, options = {}) {
   };
 }
 
+const { removeBackgroundFromFile } = require("./grokBackground");
+
 async function uploadProductImages(files, options = {}) {
   const imageFiles = files.filter(Boolean);
   const uploaded = [];
+  const removeBackground = options.removeBackground !== false;
 
   for (const file of imageFiles) {
-    uploaded.push(await uploadImageBuffer(file, options));
+    const prepared = removeBackground ? (await removeBackgroundFromFile(file)) || file : file;
+    uploaded.push(
+      await uploadImageBuffer(prepared, {
+        ...options,
+        format: prepared.mimetype === "image/png" || removeBackground ? "png" : options.format,
+      })
+    );
   }
 
   return uploaded;
 }
 
 module.exports = {
+  uploadImageBuffer,
   uploadProductImages,
 };

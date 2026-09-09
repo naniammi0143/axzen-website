@@ -35,7 +35,7 @@ function validateProductImages(files) {
 }
 
 const listProducts = asyncHandler(async (req, res) => {
-  const products = await Product.find({ status: { $in: ["active", "approved"] } }).sort({ updatedAt: -1 }).limit(200).lean();
+  const products = await Product.find({ status: { $in: ["active", "approved"] } }).sort({ updatedAt: -1 }).limit(500).lean();
   const sellerIds = [...new Set(products.map((product) => String(product.sellerId)).filter(Boolean))];
   const sellers = sellerIds.length
     ? await Seller.find({ _id: { $in: sellerIds }, isActive: true, status: "active" })

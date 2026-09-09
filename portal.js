@@ -5,7 +5,8 @@ import {
   signInWithPhoneNumber,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { firebaseConfig } from "./firebase-config.js";
-import { getPhoneVerifier, prepareFirebasePhoneAuth, resetPhoneVerifier } from "./firebase-phone.js";
+import { getPhoneVerifier, isFirebasePhoneTestMode, isNativeApp, prepareFirebasePhoneAuth, resetPhoneVerifier, withTimeout } from "./firebase-phone.js";
+import { closeMediaFeed, isMediaOpen, openMediaFeed } from "./media.js";
 import {
   fillCountrySelects,
   getPhoneCountry,
@@ -13,6 +14,20 @@ import {
   otpAuthErrorMessage,
   phoneFromRoot,
 } from "./phone-countries.js";
+
+(function patchNativeCatalogFetch() {
+  const liveOrigin = "https://www.axzen.in";
+  const native =
+    document.documentElement.classList.contains("ax-native-app") || Boolean(window.Capacitor?.isNativePlatform?.());
+  if (!native) return;
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = (input, init) => {
+    if (typeof input === "string" && input.startsWith("/api/")) {
+      return originalFetch(liveOrigin + input, init);
+    }
+    return originalFetch(input, init);
+  };
+})();
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -72,7 +87,42 @@ const SELLER_NOTIFICATION_HISTORY_KEY = "axzenSellerNotificationHistory";
 const SELLER_NOTIFICATION_UNREAD_KEY = "axzenSellerNotificationUnread";
 const DELIVERY_CHARGE_PAISE = 4000;
 const RAZORPAY_CHECKOUT_SRC = "https://checkout.razorpay.com/v1/checkout.js";
-const SELLER_SIREN_SRC = "/assets/siren.mp3";
+const SELLER_SIREN_SRC = "/assets/siren.wav";
+const AX_IMG = {
+  laptop: "assets/images/laptop.png",
+  phone: "assets/images/phone.png",
+  earbuds: "assets/images/earbuds.png",
+  watch: "assets/images/smartwatch.png",
+  headphones: "assets/images/headphones.png",
+  controller: "assets/images/controller.png",
+  speaker: "assets/images/speaker.png",
+  tablet: "assets/images/tablet.png",
+  mouse: "assets/images/mouse.png",
+  camera: "assets/images/camera.png",
+  shirt: "assets/images/shirt.png",
+  bag: "assets/images/bag.png",
+  sneakers: "assets/images/sneakers.png",
+  tv: "assets/images/tv.png",
+  fruits: "assets/images/fruits.png",
+  foodBowl: "assets/images/food-bowl.png",
+  food: "assets/images/food.png",
+  grocery: "assets/images/grocery.png",
+  hero: "assets/hero-tech.png",
+  truck: "assets/illustrations/delivery-truck.png",
+  emptyCart: "assets/illustrations/empty-cart.png",
+  noOrders: "assets/illustrations/no-orders.png",
+  orderSuccess: "assets/illustrations/order-success.png",
+};
+
+function categoryPhoto(name = "") {
+  const key = String(name).toLowerCase();
+  if (key.includes("electron")) return "assets/categories/electronics.png";
+  if (key.includes("fashion")) return "assets/categories/fashion.png";
+  if (key.includes("home")) return "assets/categories/home.png";
+  if (key.includes("beauty")) return "assets/categories/beauty.png";
+  if (key.includes("groc") || key.includes("food")) return "assets/images/grocery.png";
+  return "";
+}
 
 const sellerSectionLabels = {
   dashboard: "Dashboard",
@@ -115,13 +165,116 @@ function setLoginMessage(form, message, isError = false) {
 function openLoginArea() {
   if (!loginSection) return;
   closeCustomerPopovers();
+  loginSection.querySelectorAll(".firebase-phone-form").forEach(resetPhoneLoginForm);
   loginSection.hidden = false;
   if (loginSection.classList.contains("customer-login-section")) {
     document.body.classList.add("customer-login-open");
     loginSection.querySelector("input[name='phone']")?.focus();
+    if (isNativeApp()) {
+      loginSection.querySelectorAll(".firebase-phone-form").forEach((form) => {
+        getRecaptcha(form).catch(() => {});
+      });
+    }
     return;
   }
   loginSection.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function resetPhoneLoginForm(form) {
+  if (!form) return;
+  form.classList.remove("is-sending", "otp-sent");
+  const sendButton = form.querySelector("[data-send-otp]");
+  const verifyButton = form.querySelector("[data-verify-otp]");
+  const phoneInput = form.querySelector("[name='phone']");
+  const countrySelect = form.querySelector("[data-country-select]");
+  const otpInput = form.querySelector("[name='otp']");
+  const otpGroup = form.querySelector(".otp-field");
+  const messageElement = form.querySelector(".login-message");
+  if (sendButton) {
+    sendButton.hidden = false;
+    sendButton.disabled = false;
+    sendButton.textContent = "Send OTP";
+  }
+  if (verifyButton) verifyButton.hidden = true;
+  if (phoneInput) phoneInput.readOnly = false;
+  if (countrySelect) countrySelect.disabled = false;
+  if (otpInput) otpInput.value = "";
+  if (otpGroup) otpGroup.hidden = true;
+  if (messageElement) {
+    messageElement.textContent = "";
+    messageElement.classList.remove("error");
+    messageElement.style.display = "none";
+  }
+}
+
+function showCustomerDashboard() {
+  if (document.body.classList.contains("storefront-page")) {
+    openCustomerAccountView({ push: false });
+    return;
+  }
+  if (!dashboardSection) return;
+  dashboardSection.hidden = false;
+  dashboardSection.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function syncStorefrontAuthHash() {
+  if (!document.body.classList.contains("storefront-page")) return;
+  const hash = location.hash;
+  const loggedIn = Boolean(localStorage.getItem("axzenToken") && localStorage.getItem("axzenRole") === "customer");
+  if (hash === "#orders") {
+    closeMediaFeed();
+    closeCustomerAccountView();
+    openCustomerTrackOrderView({ push: false });
+    setAppNavActive("orders");
+    return;
+  }
+  if (hash !== "#orders") closeCustomerTrackOrderView();
+  if (hash === "#media") {
+    closeCustomerAccountView();
+    openMediaFeed({ push: false });
+    setAppNavActive("media");
+    return;
+  }
+  if (hash !== "#media") closeMediaFeed();
+  if (hash === "#login") {
+    closeCustomerAccountView();
+    openLoginArea();
+    setAppNavActive("account");
+    return;
+  }
+  if (hash === "#dashboard") {
+    if (!loggedIn) {
+      history.replaceState(null, "", `${location.pathname}${location.search}#login`);
+      openLoginArea();
+      setAppNavActive("account");
+      return;
+    }
+    showCustomerDashboard();
+    return;
+  }
+  if (hash === "#cart") {
+    const cart = document.querySelector("#cart");
+    if (cart) {
+      cart.hidden = false;
+      cart.classList.add("is-open");
+      renderCartSummary(false);
+    }
+    setAppNavActive("cart");
+    return;
+  }
+  if (hash === "#products") {
+    closeCustomerAccountView();
+    closeMediaFeed();
+    document.body.classList.add("ax-shop-mode");
+    setAppNavActive("home");
+    return;
+  }
+  if (!hash || hash === "#") {
+    closeCustomerAccountView();
+    closeMediaFeed();
+    document.body.classList.remove("ax-shop-mode");
+    setAppNavActive("home");
+  }
 }
 
 function closeLoginArea() {
@@ -353,7 +506,14 @@ function storeLineIcon(name = "badge") {
     automotive: `<path d="M4 14h16l-1.5-5.5A2 2 0 0 0 16.6 7H7.4a2 2 0 0 0-1.9 1.5z"/><circle cx="7.5" cy="16.5" r="1.6"/><circle cx="16.5" cy="16.5" r="1.6"/>`,
     star: `<path d="m12 3.2 2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 15.6 7.2 18.1l.9-5.4L4.2 8.9l5.4-.8z"/>`,
     starFill: `<path d="m12 3.2 2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 15.6 7.2 18.1l.9-5.4L4.2 8.9l5.4-.8z" fill="currentColor" stroke="none"/>`,
+    starHalf: `<path d="m12 3.2 2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 15.6 7.2 18.1l.9-5.4L4.2 8.9l5.4-.8z"/><path d="M12 3.2v12.4L7.2 18.1l.9-5.4L4.2 8.9l5.4-.8L12 3.2z" fill="currentColor" stroke="none"/>`,
     plus: `<path d="M12 5v14M5 12h14"/>`,
+    pencil: `<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>`,
+    thumbsUp: `<path d="M7 10v10H4v-10z"/><path d="M7 10h4.2l.8-4.2A2 2 0 0 1 14 4h.5v4.5H20l-2 11H7"/>`,
+    more: `<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>`,
+    sliders: `<path d="M4 8h10M18 8h2M4 16h2M10 16h10"/><circle cx="16" cy="8" r="2"/><circle cx="8" cy="16" r="2"/>`,
+    chevronDown: `<path d="m6 9 6 6 6-6"/>`,
+    photo: `<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.4"/><path d="m21 16-4.5-4.5L9 19"/>`,
     users: `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>`,
     calendar: `<rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/>`,
     chevron: `<path d="m9 6 6 6-6 6"/>`,
@@ -387,11 +547,10 @@ function storeCategoryIcon(name = "") {
 
 function storeDisplayCategories(products = [], categories = []) {
   const departments = [
-    { name: "Audio", match: /(audio|earbud|headphone)/i },
-    { name: "Mobile", match: /(mobile|phone|tablet)/i },
+    { name: "Mobiles", match: /(mobile|phone|tablet)/i },
+    { name: "Audio", match: /(audio|earbud|headphone|speaker)/i },
+    { name: "Watches", match: /(watch)/i },
     { name: "Accessories", match: /(access|mouse|controller|camera|cam)/i },
-    { name: "Smart Watch", match: /(watch)/i },
-    { name: "Speakers", match: /(speaker)/i },
   ];
   const derived = departments
     .map((department) => ({
@@ -453,6 +612,11 @@ function productImage(product = {}) {
   return product.image || product.images?.[0] || "";
 }
 
+function productImgTag(src, alt, extra = "") {
+  const url = src || "assets/logo.png";
+  return `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" ${extra} onerror="this.onerror=null;this.src='assets/logo.png'">`;
+}
+
 function findStorefrontProduct(productId) {
   const fromCatalog = storefrontProductsCache.find((item) => String(item.id) === String(productId));
   if (fromCatalog) return fromCatalog;
@@ -497,8 +661,13 @@ function updateCustomerHeaderCounts() {
 
 function starRatingMarkup(value = 0) {
   const rating = Math.max(0, Math.min(5, Number(value) || 0));
-  const full = Math.round(rating);
-  return `<span class="ax-stars" aria-label="${rating.toFixed(1)} rating">${Array.from({ length: 5 }, (_, index) => storeLineIcon(index < full ? "starFill" : "star")).join("")}</span>`;
+  const full = Math.floor(rating);
+  const half = rating - full >= 0.25 && full < 5;
+  return `<span class="ax-stars" aria-label="${rating.toFixed(1)} rating">${Array.from({ length: 5 }, (_, index) => {
+    if (index < full) return storeLineIcon("starFill");
+    if (half && index === full) return storeLineIcon("starHalf");
+    return storeLineIcon("star");
+  }).join("")}</span>`;
 }
 
 function dealCountdownMarkup(extraMs = 6 * 60 * 60 * 1000) {
@@ -712,11 +881,7 @@ function renderCartSummary(showCheckout = false) {
                       return `
                         <article class="cart-line">
                           <div class="cart-line-media">
-                            ${
-                              item.image
-                                ? `<img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}">`
-                                : `<span>${escapeHtml((item.title || "P").charAt(0))}</span>`
-                            }
+                            ${productImgTag(item.image, item.title || "Product")}
                           </div>
                           <div class="cart-line-info">
                             <strong>${escapeHtml(item.title)}</strong>
@@ -743,7 +908,7 @@ function renderCartSummary(showCheckout = false) {
                     }
                   )
                   .join("")
-              : `<div class="cart-empty-state"><strong>No items added yet.</strong><span>Add products to continue checkout.</span></div>`
+              : `<div class="cart-empty-state"><img src="${AX_IMG.emptyCart}" alt="Empty cart"><strong>No items added yet.</strong><span>Add products to continue checkout.</span></div>`
           }
         </div>
         <aside class="cart-price-panel">
@@ -1036,14 +1201,14 @@ function renderStorefrontProduct(product) {
   const sellerLogo = sellerDetails.profileImageUrl || "";
   const category = product.category || "Product";
   const discount = productDiscountPercent(product);
-  const mrp = discount ? product.mrp || rupees(product.mrpPaise) : "";
-  const rating = Number(product.ratingAverage || 0).toFixed(1);
+  const mrp = discount ? rupeesMark(product.mrpPaise) : "";
+  const rating = Number(product.ratingAverage || 4.8).toFixed(1);
+  const reviews = Number(product.ratingCount) || 0;
   const stock = Number(product.stock) || 0;
-  const badge = discount ? "Sale" : Number(product.ratingCount || 0) > 8 ? "Bestseller" : "Hot";
   return `
     <article class="commerce-product ax-product-card" data-product-card="${escapeHtml(product.id)}">
       <div class="commerce-product-media">
-        <span class="product-popular-badge ax-badge ${badge.toLowerCase()}">${badge}</span>
+        ${discount ? `<span class="product-popular-badge ax-badge ax-off-pill">${discount}% OFF</span>` : ""}
         ${
           image
             ? `<img class="commerce-product-image commerce-product-photo" src="${escapeHtml(image)}" alt="${escapeHtml(title)}" loading="lazy">`
@@ -1059,18 +1224,20 @@ function renderStorefrontProduct(product) {
           <button class="seller-hash-link" type="button" data-open-seller="${escapeHtml(product.sellerId)}">${escapeHtml(sellerName)}</button>
           ${sellerVerifiedIcon()}
         </p>
-        <div class="customer-price-row">
-          <strong>${escapeHtml(product.price || "Rs. 0")}</strong>
-          ${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}
+        <small>${storeLineIcon("starFill")} ${rating} (${reviews ? compactCount(reviews) : "New"})</small>
+        <div class="ax-card-foot">
+          <div class="customer-price-row">
+            <strong>${rupeesMark(product.pricePaise)}</strong>
+            ${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}
+          </div>
+          <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"} aria-label="Add to cart">${storeLineIcon("cart")}</button>
         </div>
-        <small>${starRatingMarkup(rating)} ${rating} (${Number(product.ratingCount) || 0})</small>
-        <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"}>${stock > 0 ? `${storeLineIcon("cart")} Add to cart` : "Sold out"}</button>
       </div>
     </article>
   `;
 }
 
-function renderStoreAppProductCard(product) {
+function renderStoreAppProductCard(product, variant = "featured") {
   const image = productImage(product);
   const title = product.title || product.name || "Product";
   const spec = product.unitLabel || product.category || "1 pc";
@@ -1078,14 +1245,28 @@ function renderStoreAppProductCard(product) {
   const mrpPaise = Number(product.mrpPaise) || pricePaise;
   const off = mrpPaise > pricePaise ? Math.round(((mrpPaise - pricePaise) / mrpPaise) * 100) : 0;
   const stock = Number(product.stock) || 0;
+  const rating = Number(product.ratingAverage || 4.8);
+  const reviews = Number(product.ratingCount || 165);
+  const department = productStoreDepartment(product);
+  const grid = variant === "grid";
   return `
-    <article class="ax-store-product-card" data-product-card="${escapeHtml(product.id)}">
+    <article class="ax-store-product-card${grid ? " ax-store-product-card--grid" : ""}" data-product-card="${escapeHtml(product.id)}" data-product-title="${escapeHtml(title)}" data-product-category="${escapeHtml(spec)}" data-product-department="${escapeHtml(department)}" data-product-price="${pricePaise}">
       ${off ? `<span class="ax-store-off">-${off}%</span>` : ""}
+      ${
+        grid
+          ? `<button class="product-wishlist ${isWishlisted(product.id) ? "active" : ""}" type="button" data-wishlist-product="${escapeHtml(product.id)}" aria-pressed="${isWishlisted(product.id)}" aria-label="Save ${escapeHtml(title)}">${storeLineIcon("heart")}</button>`
+          : ""
+      }
       <div class="ax-store-product-media">
-        ${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(title)}" loading="lazy">` : `<span>${escapeHtml(spec)}</span>`}
+        ${productImgTag(image, title, 'loading="lazy"')}
       </div>
       <h4>${escapeHtml(title)}</h4>
       <p>${escapeHtml(spec)}</p>
+      ${
+        grid
+          ? `<small class="ax-store-product-rating">${storeLineIcon("starFill")} ${rating.toFixed(1)} (${reviews})</small>`
+          : ""
+      }
       <div class="ax-store-product-price">
         <strong>${rupeesMark(pricePaise)}</strong>
         ${mrpPaise > pricePaise ? `<del>${rupeesMark(mrpPaise)}</del>` : ""}
@@ -1093,6 +1274,124 @@ function renderStoreAppProductCard(product) {
       <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"}>${storeLineIcon("cart")} Add to Cart</button>
     </article>
   `;
+}
+
+function renderStoreGridProductCard(product) {
+  return renderStoreAppProductCard(product, "grid");
+}
+
+function renderVstoreReviewCard(review = {}) {
+  const name = review.name || "Axzen shopper";
+  const initials = sellerInitials(name).slice(0, 2);
+  const helpful = Number(review.helpful || 0);
+  return `
+    <article class="ax-review-card" data-review-card>
+      <div class="ax-review-identity">
+        <span class="ax-review-avatar">${escapeHtml(initials)}</span>
+        <div>
+          <strong>${escapeHtml(name)} ${review.verified === false ? "" : `<em class="seller-verified-buyer">Verified Buyer</em>`}</strong>
+          ${starRatingMarkup(review.rating || 5)}
+        </div>
+        <small>${escapeHtml(review.date || "2 days ago")}</small>
+      </div>
+      ${review.title ? `<h4>${escapeHtml(review.title)}</h4>` : ""}
+      <p>${escapeHtml(review.message || "")}</p>
+      ${review.photo ? `<div class="ax-review-photo">${productImgTag(review.photo, "Review photo", 'loading="lazy"')}</div>` : ""}
+      <div class="ax-review-actions">
+        <button type="button" data-review-helpful>${storeLineIcon("thumbsUp")} Helpful <b>${helpful}</b></button>
+        <button type="button" class="ax-review-more" aria-label="More">${storeLineIcon("more")}</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderVstoreCategoryTile(category, products = []) {
+  const categoryName = category.name || category;
+  const firstProduct =
+    products.find((product) => productStoreDepartment(product) === categoryName) ||
+    products.find((product) => (product.category || "General") === categoryName) ||
+    {};
+  const image = productImage(firstProduct);
+  const count = Number(category.products || products.filter((product) => productStoreDepartment(product) === categoryName).length || 0);
+  return `
+    <button type="button" class="ax-vstore-cat-tile" data-store-open-category="${escapeHtml(categoryName)}">
+      <span class="ax-vstore-cat-media">${image ? productImgTag(image, categoryName, 'loading="lazy"') : storeCategoryIcon(categoryName)}</span>
+      <strong>${escapeHtml(categoryName)}</strong>
+      <small>${count} products</small>
+    </button>
+  `;
+}
+
+function storeTabTitle(tab = "home") {
+  return { home: "Seller Store", all: "All Products", categories: "Categories", reviews: "Store Reviews" }[tab] || "Seller Store";
+}
+
+function activateSellerStoreTab(page, tab, { animate = true } = {}) {
+  if (!page || !tab) return;
+  const current = page.dataset.storeTab || "home";
+  page.querySelectorAll(".seller-store-tabs [data-seller-store-tab]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.sellerStoreTab === tab);
+  });
+  const title = page.querySelector("[data-store-title]");
+  if (title) title.textContent = storeTabTitle(tab);
+  page.classList.remove("ax-vstore-mode-home", "ax-vstore-mode-all", "ax-vstore-mode-categories", "ax-vstore-mode-reviews");
+  page.classList.add(`ax-vstore-mode-${tab}`);
+  page.dataset.storeTab = tab;
+  page.querySelectorAll("[data-store-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.storePanel !== tab;
+  });
+  const stage = page.querySelector(".ax-vstore-body");
+  if (animate && stage && current !== tab) {
+    stage.classList.remove("ax-vstore-zoom-in", "ax-vstore-zoom-out");
+    void stage.offsetWidth;
+    stage.classList.add(tab === "home" ? "ax-vstore-zoom-out" : "ax-vstore-zoom-in");
+  }
+  window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+}
+
+function filterVstoreCatalog(page) {
+  if (!page) return;
+  const query = String(page.querySelector("[data-store-search]")?.value || "").trim().toLowerCase();
+  const chip = page.querySelector("[data-store-panel='all'] [data-store-chip].active")?.dataset.storeChip || "all";
+  const cards = page.querySelectorAll("[data-store-panel='all'] [data-product-card]");
+  let visible = 0;
+  cards.forEach((card) => {
+    const hay = `${card.dataset.productTitle || ""} ${card.dataset.productCategory || ""} ${card.dataset.productDepartment || ""}`.toLowerCase();
+    const chipOk = chip === "all" || String(card.dataset.productDepartment || "").toLowerCase() === String(chip).toLowerCase();
+    const queryOk = !query || hay.includes(query);
+    const show = chipOk && queryOk;
+    card.hidden = !show;
+    if (show) visible += 1;
+  });
+  const count = page.querySelector("[data-store-count]");
+  if (count) count.textContent = `${visible} products`;
+}
+
+function selectStoreChip(page, name = "all") {
+  if (!page) return;
+  const wanted = String(name || "all");
+  page.querySelectorAll("[data-store-chip]").forEach((button) => {
+    button.classList.toggle("active", String(button.dataset.storeChip) === wanted);
+  });
+  filterVstoreCatalog(page);
+}
+
+function sortVstoreCatalog(page) {
+  const grid = page?.querySelector("[data-store-product-grid]");
+  if (!grid) return "popular";
+  const current = page.dataset.storeSort || "popular";
+  const next = current === "popular" ? "price" : current === "price" ? "newest" : "popular";
+  page.dataset.storeSort = next;
+  const cards = [...grid.querySelectorAll("[data-product-card]")];
+  cards.sort((left, right) => {
+    if (next === "price") return Number(left.dataset.productPrice || 0) - Number(right.dataset.productPrice || 0);
+    if (next === "newest") return String(right.dataset.productTitle || "").localeCompare(String(left.dataset.productTitle || ""));
+    return Number(right.dataset.productPrice || 0) - Number(left.dataset.productPrice || 0);
+  });
+  cards.forEach((card) => grid.append(card));
+  const label = page.querySelector("[data-store-sort] span");
+  if (label) label.textContent = next === "price" ? "Price" : next === "newest" ? "Newest" : "Sort";
+  return next;
 }
 
 function renderStoreProfileProductCard(product) {
@@ -1124,8 +1423,62 @@ function completeStoreProfile(seller = {}, products = []) {
   };
 }
 
+function productStoreDepartment(product = {}) {
+  const hay = `${product.title || ""} ${product.category || ""}`;
+  if (/(mobile|phone|tablet)/i.test(hay)) return "Mobiles";
+  if (/(audio|earbud|headphone|speaker)/i.test(hay)) return "Audio";
+  if (/(watch)/i.test(hay)) return "Watches";
+  if (/(access|mouse|controller|camera|cam)/i.test(hay)) return "Accessories";
+  return product.category || "All";
+}
+
+function storeChipNames(products = [], categories = []) {
+  const preferred = ["Mobiles", "Audio", "Watches"];
+  const present = preferred.filter((name) => products.some((product) => productStoreDepartment(product) === name));
+  const extra = storeDisplayCategories(products, categories)
+    .map((item) => item.name)
+    .filter((name) => name && !present.includes(name));
+  return [...present, ...extra].slice(0, 4);
+}
+
+function defaultStoreReviews(seller = {}, products = []) {
+  const photo = productImage(products[0] || {});
+  const storeName = seller.name || "this store";
+  return [
+    {
+      name: "Rahul K.",
+      title: "Genuine product and fast delivery",
+      message: `Ordered from ${storeName} and the item was original, packed well, and reached earlier than expected.`,
+      rating: 5,
+      date: "2 days ago",
+      helpful: 24,
+      verified: true,
+      photo,
+    },
+    {
+      name: "Ananya S.",
+      title: "Battery life is excellent",
+      message: "Sound quality is clear and the battery easily lasts a full workday. Seller also answered my questions quickly.",
+      rating: 5,
+      date: "5 days ago",
+      helpful: 18,
+      verified: true,
+    },
+    {
+      name: "Vikram M.",
+      title: "Packing was safe and original",
+      message: "Seal was intact and the product matched the listing photos. Would buy accessories from this store again.",
+      rating: 4,
+      date: "1 week ago",
+      helpful: 9,
+      verified: true,
+    },
+  ];
+}
+
 function storeReviewModel(reviews = {}, products = [], seller = {}) {
-  const reviewCount = Number(reviews.reviewCount || products.reduce((sum, product) => sum + Number(product.ratingCount || 0), 0) || 0);
+  const summed = products.reduce((sum, product) => sum + Number(product.ratingCount || 0), 0);
+  const reviewCount = Number(reviews.reviewCount || summed || (String(seller.id || "").startsWith("demo-") ? 165 : 0));
   const ratingAverage = Number(reviews.ratingAverage || 4.8);
   const bars =
     reviews.bars?.length
@@ -1134,13 +1487,14 @@ function storeReviewModel(reviews = {}, products = [], seller = {}) {
           rating,
           percent: rating === 5 ? 72 : rating === 4 ? 18 : rating === 3 ? 6 : rating === 2 ? 3 : 1,
         }));
-  const latestReview = reviews.latestReview || {
+  const list = Array.isArray(reviews.list) && reviews.list.length ? reviews.list : defaultStoreReviews(seller, products);
+  const latestReview = reviews.latestReview || list[0] || {
     name: "Arjun Mehta",
     message: `Good experience shopping at ${seller.name || "this store"}. Products matched the listing and dispatch was quick.`,
     rating: 5,
     date: "2 days ago",
   };
-  return { reviewCount, ratingAverage, bars, latestReview };
+  return { reviewCount, ratingAverage, bars, latestReview, list };
 }
 
 function renderSellerStoreProductCard(product) {
@@ -1247,7 +1601,7 @@ function setCustomerHistory(route, value, replace = false) {
   ["seller", "category", "follows"].forEach((key) => url.searchParams.delete(key));
   if (route && value) url.searchParams.set(route, value);
   const method = replace ? "replaceState" : "pushState";
-  history[method]({ customerRoute: route || "home", value: value || "" }, "", `${url.pathname}${url.search}${url.hash}`);
+  history[method]({ customerRoute: route || "home", value: value || "" }, "", `${url.pathname}${url.search}`);
 }
 
 function closeCustomerCartOverlay() {
@@ -1259,7 +1613,448 @@ function closeCustomerCartOverlay() {
   return true;
 }
 
+function restoreTrackNotificationPanel(overlay) {
+  const panel = overlay?.querySelector("[data-customer-notification-panel]");
+  const header = document.querySelector(".ax-header-actions");
+  if (panel && header) {
+    header.appendChild(panel);
+    panel.hidden = true;
+  }
+}
+
+function closeCustomerTrackOrderView(options = {}) {
+  const overlay = document.querySelector("[data-customer-track-order]");
+  if (!overlay) return false;
+  restoreTrackNotificationPanel(overlay);
+  overlay.remove();
+  document.body.classList.remove("ax-track-open");
+  if (options.clearHash && location.hash === "#orders") {
+    const nextState = history.state?.customerRoute === "track" ? { customerRoute: "home", value: "" } : history.state;
+    history.replaceState(nextState, "", `${location.pathname}${location.search}`);
+  }
+  return true;
+}
+
+function trackOrderIcon(paths) {
+  return `<svg class="ax-track-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+}
+
+function getCustomerTrackOrderMarkup() {
+  const headphones = AX_IMG.headphones;
+  return `
+    <section class="ax-track-overlay" data-customer-track-order>
+      <div class="ax-track-screen">
+        <div class="ax-track-top">
+          <div class="ax-track-statusbar">
+            <span>9:41</span>
+            <span class="ax-track-sys">
+              <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor" aria-hidden="true"><rect x="0" y="7.5" width="3" height="4.5" rx="0.6"/><rect x="4.5" y="5" width="3" height="7" rx="0.6"/><rect x="9" y="2.5" width="3" height="9.5" rx="0.6"/><rect x="13.5" y="0" width="3" height="12" rx="0.6"/></svg>
+              <svg width="16" height="12" viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M1.4 4.4a7.2 7.2 0 0 1 13.2 0"/><path d="M4 6.8a4.4 4.4 0 0 1 8 0"/><path d="M8 10.4h.01" stroke-width="2.4"/></svg>
+              <span class="ax-track-battery">
+                <svg width="25" height="12" viewBox="0 0 25 12" aria-hidden="true"><rect x="0.7" y="1.2" width="20.5" height="9.6" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="2.2" y="2.7" width="17.4" height="6.6" rx="1.1" fill="currentColor"/><rect x="22.2" y="4" width="2" height="4" rx="0.7" fill="currentColor"/></svg>
+                100
+              </span>
+            </span>
+          </div>
+          <div class="ax-track-head">
+            <a class="ax-track-brand" href="/" data-track-nav="home" aria-label="Axzen home">
+              <span class="ax-track-wordmark">
+                <svg class="ax-track-logo-svg" viewBox="0 0 124 28" aria-hidden="true">
+                  <path fill="#102A43" fill-rule="evenodd" d="M14.1 23.4c-4.7 0-7.8-3-7.8-7.4 0-4.6 3.2-7.6 7.9-7.6 4.6 0 7.8 3 7.8 7.6 0 4.4-3.1 7.4-7.9 7.4zm0-2.45c2.75 0 4.4-1.85 4.4-4.95 0-3.15-1.65-5.1-4.4-5.1s-4.4 1.95-4.4 5.1c0 3.1 1.65 4.95 4.4 4.95z"/>
+                  <path fill="#102A43" d="M25.2 23.2 28.9 17.4 25.4 11.8h3.35l2.05 3.7 2.05-3.7h3.3L32.6 17.4l3.75 5.8h-3.45l-2.2-3.85-2.2 3.85z"/>
+                  <path fill="#102A43" d="M40.6 11.8h11v2.2l-7.55 6.85h7.85v2.35H40.3v-2.2l7.6-6.85H40.6z"/>
+                  <path fill="#102A43" d="M55.7 23.4c-4.55 0-7.55-3-7.55-7.4 0-4.7 3.15-7.6 7.65-7.6 3.9 0 6.85 2.05 7.25 5.75h-2.9c-.35-2-1.9-3.25-4.3-3.25-2.75 0-4.5 1.95-4.5 5.15 0 3.05 1.75 4.9 4.6 4.9 2.45 0 4-1.3 4.35-3.4h2.9c-.5 3.7-3.4 5.85-7.3 5.85z"/>
+                  <g fill="none" stroke="#102A43" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="75.4" y="10.2" width="15.4" height="13.1" rx="2.1"/>
+                    <path d="M79.15 10.35V7.55a2 2 0 0 1 3.85 0v2.8"/>
+                    <path d="M83.2 10.35V7.55a2 2 0 0 1 3.85 0v2.8"/>
+                    <path d="M75.4 15.35h15.4"/>
+                  </g>
+                </svg>
+              </span>
+              <span class="ax-track-tagline">from startups to yours</span>
+            </a>
+            <div class="ax-track-notify-host" data-track-notify-host>
+              <button class="ax-track-bell" type="button" data-customer-notification-bell aria-label="Notifications">
+                ${trackOrderIcon('<path d="M6 8.2a6 6 0 1 1 12 0c0 7 3 7.3 3 7.3H3S6 15.2 6 8.2"/><path d="M10 19.2a2 2 0 0 0 4 0"/>')}
+                <span class="ax-track-bell-dot"></span>
+              </button>
+            </div>
+          </div>
+          <div class="ax-track-pagehead">
+            <button class="ax-track-back" type="button" data-track-back aria-label="Back">
+              ${trackOrderIcon('<path d="M19 12H5"/><path d="m11 18-6-6 6-6"/>')}
+            </button>
+            <div>
+              <h1>Track order</h1>
+              <p>Order #AXZ102458</p>
+            </div>
+          </div>
+        </div>
+        <div class="ax-track-scroll">
+          <article class="ax-track-card ax-track-hero">
+            <div>
+              <span class="ax-track-pill">${trackOrderIcon('<path d="M3 7h11v8H3z"/><path d="M14 10h4l3 3v2h-7"/><circle cx="7" cy="18" r="1.5"/><circle cx="17.5" cy="18" r="1.5"/>')} On the way</span>
+              <h2>Arriving tomorrow</h2>
+              <p class="ax-track-date">Thursday, 10 September</p>
+              <p class="ax-track-note">Your package is moving closer to you.</p>
+            </div>
+            <img class="ax-track-hero-art" src="${AX_IMG.truck}" alt="Axzen delivery">
+          </article>
+          <article class="ax-track-card ax-track-product">
+            <img src="${headphones}" alt="Wireless Headphones">
+            <div>
+              <h3>Wireless Headphones</h3>
+              <p class="ax-track-meta">Black • Qty: 1</p>
+              <div class="ax-track-price-row">
+                <strong>₹1,499</strong>
+                <span class="ax-track-paid">Paid</span>
+              </div>
+            </div>
+          </article>
+          <article class="ax-track-card ax-track-progress">
+            <h3>Delivery progress</h3>
+            <ol class="ax-track-steps">
+              <li class="is-done">
+                <span class="ax-track-marker">${trackOrderIcon('<path d="M20 6 9 17l-5-5"/>')}</span>
+                <div>
+                  <strong>Order confirmed</strong>
+                  <small>8 Sep · 10:30 AM</small>
+                </div>
+              </li>
+              <li class="is-done">
+                <span class="ax-track-marker">${trackOrderIcon('<path d="M20 6 9 17l-5-5"/>')}</span>
+                <div>
+                  <strong>Packed</strong>
+                  <small>8 Sep · 2:15 PM</small>
+                </div>
+              </li>
+              <li class="is-current">
+                <span class="ax-track-marker">${trackOrderIcon('<path d="M3 7h11v8H3z"/><path d="M14 10h4l3 3v2h-7"/><circle cx="7" cy="18" r="1.5"/><circle cx="17.5" cy="18" r="1.5"/>')}</span>
+                <div>
+                  <strong>Shipped</strong>
+                  <small>9 Sep · 8:45 AM</small>
+                  <p>Package reached Hyderabad hub</p>
+                </div>
+              </li>
+              <li class="is-pending">
+                <span class="ax-track-marker"></span>
+                <div>
+                  <strong>Out for delivery</strong>
+                  <small>Next step</small>
+                </div>
+              </li>
+              <li class="is-pending">
+                <span class="ax-track-marker"></span>
+                <div>
+                  <strong>Delivered</strong>
+                  <small>Expected 10 Sep</small>
+                </div>
+              </li>
+            </ol>
+            <div class="ax-track-ship-meta">
+              <div class="ax-track-ship-row">
+                <span class="ax-track-ship-label">${trackOrderIcon('<path d="M3 7h11v8H3z"/><path d="M14 10h4l3 3v2h-7"/><circle cx="7" cy="18" r="1.5"/><circle cx="17.5" cy="18" r="1.5"/>')} Delivery partner</span>
+                <span class="ax-track-ship-value">Axzen Delivery</span>
+              </div>
+              <div class="ax-track-ship-row">
+                <span class="ax-track-ship-label">${trackOrderIcon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/>')} Tracking ID</span>
+                <span class="ax-track-ship-value">
+                  AXD847291630
+                  <button class="ax-track-copy" type="button" data-copy-tracking="AXD847291630" aria-label="Copy tracking ID">
+                    ${trackOrderIcon('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>')}
+                  </button>
+                </span>
+              </div>
+            </div>
+          </article>
+          <article class="ax-track-card ax-track-address">
+            <span class="ax-track-pin">${trackOrderIcon('<path d="M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11z"/><circle cx="12" cy="10" r="2.4"/>')}</span>
+            <div>
+              <p class="ax-track-address-title">Delivering to <span class="ax-track-home">HOME</span></p>
+              <strong>Axzen Member</strong>
+              <p>Madhapur, Hyderabad<br>Telangana 500081<br>+91 ••••• ••210</p>
+            </div>
+          </article>
+        </div>
+        <div class="ax-track-cta-bar">
+          <button class="ax-track-help" type="button" data-track-help>
+            ${trackOrderIcon('<path d="M5 13V11a7 7 0 0 1 14 0v2"/><path d="M5 13h2a1.5 1.5 0 0 1 1.5 1.5V17A1.5 1.5 0 0 1 7 18.5H5z"/><path d="M19 13h-2A1.5 1.5 0 0 0 15.5 14.5V17A1.5 1.5 0 0 0 17 18.5h2z"/>')}
+            Need help with this order?
+          </button>
+        </div>
+        <nav class="ax-track-nav" aria-label="Track order navigation">
+          <button class="ax-track-nav-item" type="button" data-track-nav="home">
+            ${trackOrderIcon('<path d="m4 11 8-7 8 7"/><path d="M6 10.5V20h12v-9.5"/>')}
+            Home
+          </button>
+          <button class="ax-track-nav-item" type="button" data-track-nav="media">
+            ${trackOrderIcon('<path d="M4 11h16v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="m8 11 3.2-7 2.6 1.1L11.4 11"/><path d="m13.2 11 3.3-7 2.5 1.1L16.6 11"/><path d="M10 15.2 15 18l-5 2.8z"/>')}
+            Media
+          </button>
+          <button class="ax-track-nav-item" type="button" data-track-nav="cart">
+            <span class="ax-track-nav-cart">
+              ${trackOrderIcon('<path d="M4 5h2l1.6 9.2h9.7L20 8H7"/><circle cx="9" cy="19" r="1.4"/><circle cx="17" cy="19" r="1.4"/>')}
+              <b class="ax-track-cart-badge" data-cart-count>0</b>
+            </span>
+            Cart
+          </button>
+          <button class="ax-track-nav-item is-active" type="button" data-track-nav="orders">
+            ${trackOrderIcon('<rect x="6" y="3.5" width="12" height="17" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/>')}
+            Orders
+          </button>
+          <button class="ax-track-nav-item" type="button" data-track-nav="account">
+            ${trackOrderIcon('<circle cx="12" cy="8" r="3.2"/><path d="M5 19.2a7 7 0 0 1 14 0"/>')}
+            Account
+          </button>
+        </nav>
+      </div>
+    </section>
+  `;
+}
+
+function openCustomerTrackOrderView(options = {}) {
+  if (!document.body.classList.contains("storefront-page")) return;
+  closeCustomerPopovers();
+  document.querySelector("[data-customer-orders-modal]")?.remove();
+  if (!document.querySelector("[data-customer-track-order]")) {
+    document.body.insertAdjacentHTML("beforeend", getCustomerTrackOrderMarkup());
+    const panel = document.querySelector(".ax-header-actions > [data-customer-notification-panel]");
+    const host = document.querySelector("[data-track-notify-host]");
+    if (panel && host) host.appendChild(panel);
+  }
+  document.body.classList.add("ax-track-open");
+  updateCustomerHeaderCounts();
+  setAppNavActive("orders");
+  if (options.push !== false && history.state?.customerRoute !== "track") {
+    const url = new URL(window.location.href);
+    url.hash = "orders";
+    history.pushState({ customerRoute: "track", value: "1" }, "", `${url.pathname}${url.search}${url.hash}`);
+  } else if (options.push !== false && location.hash !== "#orders") {
+    const url = new URL(window.location.href);
+    url.hash = "orders";
+    history.replaceState({ customerRoute: "track", value: "1" }, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+}
+
+function axAppIcon(paths) {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+}
+
+function axBrandLockup(extraClass = "") {
+  return `
+    <span class="ax-track-wordmark ${extraClass}">
+      <svg class="ax-track-logo-svg ax-account-logo-svg" viewBox="0 0 124 28" aria-hidden="true">
+        <path fill="#102A43" fill-rule="evenodd" d="M14.1 23.4c-4.7 0-7.8-3-7.8-7.4 0-4.6 3.2-7.6 7.9-7.6 4.6 0 7.8 3 7.8 7.6 0 4.4-3.1 7.4-7.9 7.4zm0-2.45c2.75 0 4.4-1.85 4.4-4.95 0-3.15-1.65-5.1-4.4-5.1s-4.4 1.95-4.4 5.1c0 3.1 1.65 4.95 4.4 4.95z"/>
+        <path fill="#102A43" d="M25.2 23.2 28.9 17.4 25.4 11.8h3.35l2.05 3.7 2.05-3.7h3.3L32.6 17.4l3.75 5.8h-3.45l-2.2-3.85-2.2 3.85z"/>
+        <path fill="#102A43" d="M40.6 11.8h11v2.2l-7.55 6.85h7.85v2.35H40.3v-2.2l7.6-6.85H40.6z"/>
+        <path fill="#102A43" d="M55.7 23.4c-4.55 0-7.55-3-7.55-7.4 0-4.7 3.15-7.6 7.65-7.6 3.9 0 6.85 2.05 7.25 5.75h-2.9c-.35-2-1.9-3.25-4.3-3.25-2.75 0-4.5 1.95-4.5 5.15 0 3.05 1.75 4.9 4.6 4.9 2.45 0 4-1.3 4.35-3.4h2.9c-.5 3.7-3.4 5.85-7.3 5.85z"/>
+        <g fill="none" stroke="#102A43" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="75.4" y="10.2" width="15.4" height="13.1" rx="2.1"/>
+          <path d="M79.15 10.35V7.55a2 2 0 0 1 3.85 0v2.8"/>
+          <path d="M83.2 10.35V7.55a2 2 0 0 1 3.85 0v2.8"/>
+          <path d="M75.4 15.35h15.4"/>
+        </g>
+      </svg>
+    </span>
+  `;
+}
+
+function maskCustomerPhone(phone = "") {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (digits.length < 4) return "+91 ••••• •••••";
+  return `+${digits.slice(0, digits.length - 10) || "91"} ••••• ••${digits.slice(-3)}`;
+}
+
+function setAppNavActive(name = "home") {
+  document.querySelectorAll(".ax-app-nav [data-app-nav]").forEach((item) => {
+    item.classList.toggle("is-active", item.dataset.appNav === name);
+  });
+}
+
+function goCustomerHome() {
+  closeCustomerAccountView();
+  closeMediaFeed({ clearHash: true });
+  closeCustomerTrackOrderView({ clearHash: true });
+  closeCustomerCartOverlay();
+  closeLoginArea();
+  document.body.classList.remove("ax-shop-mode");
+  resetCustomerMain();
+  renderStorefrontProducts(storefrontProductsCache);
+  history.replaceState({ customerRoute: "home", value: "" }, "", `${location.pathname}${location.search}`);
+  setAppNavActive("home");
+  window.scrollTo({ top: 0, behavior: "instant" });
+}
+
+function openCustomerBrowse() {
+  closeCustomerAccountView();
+  closeMediaFeed();
+  closeCustomerTrackOrderView({ clearHash: true });
+  closeCustomerCartOverlay();
+  document.body.classList.add("ax-shop-mode");
+  setCustomerSubpageMode(false);
+  setAppNavActive("home");
+  history.replaceState({ customerRoute: "browse", value: "1" }, "", `${location.pathname}${location.search}#products`);
+  window.scrollTo({ top: 0, behavior: "instant" });
+}
+
+function closeCustomerAccountView(options = {}) {
+  const overlay = document.querySelector("[data-customer-account]");
+  if (!overlay) return false;
+  overlay.remove();
+  document.body.classList.remove("ax-account-open");
+  if (dashboardSection && document.body.classList.contains("storefront-page")) dashboardSection.hidden = true;
+  if (options.clearHash && location.hash === "#dashboard") {
+    history.replaceState({ customerRoute: "home", value: "" }, "", `${location.pathname}${location.search}`);
+  }
+  return true;
+}
+
+function getCustomerAccountMarkup() {
+  const phone = localStorage.getItem("axzenPhone") || "";
+  const latest = customerOrdersCache[0];
+  const latestItem = latest ? customerOrderPrimaryItem(latest) : null;
+  const latestImage = latestItem?.image || latestItem?.images?.[0] || AX_IMG.headphones;
+  return `
+    <section class="ax-account-overlay" data-customer-account>
+      <div class="ax-account-screen">
+        <div class="ax-account-top">
+          <div class="ax-account-statusbar">
+            <span>9:41</span>
+            <span class="ax-ios-sys">
+              <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><rect x="0" y="7.5" width="3" height="4.5" rx="0.6"/><rect x="4.5" y="5" width="3" height="7" rx="0.6"/><rect x="9" y="2.5" width="3" height="9.5" rx="0.6"/><rect x="13.5" y="0" width="3" height="12" rx="0.6"/></svg>
+            </span>
+          </div>
+          <div class="ax-account-head">
+            <a class="ax-account-brand" href="/" data-app-nav="home">
+              ${axBrandLockup()}
+              <span class="ax-account-tagline">from startups to yours</span>
+            </a>
+            <button class="ax-track-bell" type="button" data-customer-notification-bell aria-label="Notifications">
+              ${axAppIcon('<path d="M6 8.2a6 6 0 1 1 12 0c0 7 3 7.3 3 7.3H3S6 15.2 6 8.2"/><path d="M10 19.2a2 2 0 0 0 4 0"/>')}
+              <span class="ax-track-bell-dot"></span>
+            </button>
+          </div>
+          <div class="ax-account-title">
+            <h1>My Account</h1>
+            <p>Everything you need, in one place.</p>
+          </div>
+        </div>
+        <div class="ax-account-scroll">
+          <article class="ax-account-card ax-account-profile">
+            <span class="ax-account-avatar">${axAppIcon('<circle cx="12" cy="8" r="3.2"/><path d="M5 19.2a7 7 0 0 1 14 0"/>')}</span>
+            <div>
+              <h2>Hello, Axzen Member</h2>
+              <p>${escapeHtml(maskCustomerPhone(phone))}</p>
+            </div>
+            <button class="ax-account-edit" type="button" data-account-action="profile">
+              ${axAppIcon('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>')}
+              Edit profile
+            </button>
+          </article>
+          <div class="ax-account-grid">
+            <button class="ax-account-tile" type="button" data-account-action="orders">
+              <span class="ax-account-tile-icon orders">${axAppIcon('<path d="m3.5 8 8.5-4.5L20.5 8 12 12.5z"/><path d="M3.5 8v8L12 20.5 20.5 16V8"/>')}</span>
+              <span><strong>My Orders</strong><small>Track &amp; manage</small></span>
+              ${axAppIcon('<path d="m9 6 6 6-6 6"/>')}
+            </button>
+            <button class="ax-account-tile" type="button" data-account-action="wishlist">
+              <span class="ax-account-tile-icon wish">${axAppIcon('<path d="M12 20s-7-4.4-7-9.2A3.8 3.8 0 0 1 12 7.6a3.8 3.8 0 0 1 7 3.2C19 15.6 12 20 12 20z"/>')}</span>
+              <span><strong>Wishlist</strong><small>Your saved finds</small></span>
+              ${axAppIcon('<path d="m9 6 6 6-6 6"/>')}
+            </button>
+            <button class="ax-account-tile" type="button" data-account-action="addresses">
+              <span class="ax-account-tile-icon addr">${axAppIcon('<path d="M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11z"/><circle cx="12" cy="10" r="2.4"/>')}</span>
+              <span><strong>Addresses</strong><small>Manage delivery</small></span>
+              ${axAppIcon('<path d="m9 6 6 6-6 6"/>')}
+            </button>
+            <button class="ax-account-tile" type="button" data-account-action="payments">
+              <span class="ax-account-tile-icon pay">${axAppIcon('<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/>')}</span>
+              <span><strong>Payments</strong><small>Cards &amp; UPI</small></span>
+              ${axAppIcon('<path d="m9 6 6 6-6 6"/>')}
+            </button>
+          </div>
+          <div class="ax-account-section-head">
+            <h3>Latest order</h3>
+            <button class="ax-account-see" type="button" data-account-action="orders">View all &gt;</button>
+          </div>
+          <article class="ax-account-card ax-account-latest">
+            <img src="${escapeHtml(latestImage)}" alt="${escapeHtml(latestItem?.title || "Latest order")}">
+            <div>
+              <h4>${escapeHtml(latestItem?.title || "Wireless Headphones")}</h4>
+              <span class="ax-account-status">${axAppIcon('<path d="M3 7h11v8H3z"/><path d="M14 10h4l3 3v2h-7"/><circle cx="7" cy="18" r="1.5"/><circle cx="17.5" cy="18" r="1.5"/>')} ${escapeHtml(latest ? customerOrderStatusLabel(latest.status) : "On the way")}</span>
+              <p>${latest ? "Tap track for live updates." : "Arriving tomorrow"}</p>
+              <button class="ax-account-track" type="button" data-account-action="track">Track order</button>
+            </div>
+          </article>
+          <article class="ax-account-card ax-account-list">
+            <button class="ax-account-row" type="button" data-account-action="profile"><span>${axAppIcon('<circle cx="12" cy="8" r="3.2"/><path d="M5 19.2a7 7 0 0 1 14 0"/>')} Personal information</span>${axAppIcon('<path d="m9 6 6 6-6 6"/>')}</button>
+            <button class="ax-account-row" type="button" data-account-action="alerts"><span>${axAppIcon('<path d="M6 8.2a6 6 0 1 1 12 0c0 7 3 7.3 3 7.3H3S6 15.2 6 8.2"/>')} Notifications</span>${axAppIcon('<path d="m9 6 6 6-6 6"/>')}</button>
+            <button class="ax-account-row" type="button" data-account-action="language"><span>${axAppIcon('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>')} Language</span><em>English</em></button>
+            <button class="ax-account-row" type="button" data-account-action="privacy"><span>${axAppIcon('<rect x="6" y="11" width="12" height="9" rx="2"/><path d="M9 11V8a3 3 0 0 1 6 0v3"/>')} Privacy &amp; security</span>${axAppIcon('<path d="m9 6 6 6-6 6"/>')}</button>
+            <button class="ax-account-row" type="button" data-account-action="help"><span>${axAppIcon('<path d="M5 13V11a7 7 0 0 1 14 0v2"/><path d="M5 13h2a1.5 1.5 0 0 1 1.5 1.5V17A1.5 1.5 0 0 1 7 18.5H5z"/>')} Help &amp; support</span>${axAppIcon('<path d="m9 6 6 6-6 6"/>')}</button>
+            <button class="ax-account-row" type="button" data-account-action="about"><span>${axAppIcon('<circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/>')} About Axzen</span>${axAppIcon('<path d="m9 6 6 6-6 6"/>')}</button>
+            <button class="ax-account-row is-logout" type="button" data-account-action="logout"><span>${axAppIcon('<path d="M9 7V5a2 2 0 0 1 2-2h8v18h-8a2 2 0 0 1-2-2v-2"/><path d="M15 12H3m3-4-4 4 4 4"/>')} Log out</span></button>
+          </article>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+async function openCustomerAccountView(options = {}) {
+  if (!document.body.classList.contains("storefront-page")) return;
+  const loggedIn = Boolean(localStorage.getItem("axzenToken") && localStorage.getItem("axzenRole") === "customer");
+  if (!loggedIn) {
+    history.replaceState(null, "", `${location.pathname}${location.search}#login`);
+    openLoginArea();
+    setAppNavActive("account");
+    return;
+  }
+  closeCustomerPopovers();
+  closeMediaFeed();
+  closeCustomerTrackOrderView({ clearHash: false });
+  closeCustomerCartOverlay();
+  if (dashboardSection) dashboardSection.hidden = true;
+  if (!customerOrdersCache.length) {
+    try {
+      const token = localStorage.getItem("axzenToken");
+      const response = await fetch("/api/orders/customer", { headers: { Authorization: `Bearer ${token}` } });
+      const result = await response.json();
+      if (response.ok) customerOrdersCache = result.orders || [];
+    } catch (error) {
+      void error;
+    }
+  }
+  document.querySelector("[data-customer-account]")?.remove();
+  document.body.insertAdjacentHTML("beforeend", getCustomerAccountMarkup());
+  document.body.classList.add("ax-account-open");
+  setAppNavActive("account");
+  if (options.push !== false && location.hash !== "#dashboard") {
+    history.pushState({ customerRoute: "account", value: "1" }, "", `${location.pathname}${location.search}#dashboard`);
+  }
+}
+
 function handleCustomerAppBack() {
+  if (isMediaOpen()) {
+    if (history.state?.customerRoute === "media") history.back();
+    else closeMediaFeed({ clearHash: true });
+    return true;
+  }
+  if (document.querySelector("[data-customer-account]")) {
+    if (history.state?.customerRoute === "account") history.back();
+    else closeCustomerAccountView({ clearHash: true });
+    setAppNavActive("home");
+    return true;
+  }
+  if (document.querySelector("[data-customer-track-order]")) {
+    if (history.state?.customerRoute === "track") {
+      history.back();
+    } else {
+      closeCustomerTrackOrderView({ clearHash: true });
+    }
+    return true;
+  }
   const productModal = document.querySelector("[data-customer-product-modal]");
   if (productModal) {
     productModal.remove();
@@ -1271,6 +2066,10 @@ function handleCustomerAppBack() {
     return true;
   }
   if (closeCustomerCartOverlay()) return true;
+  if (document.body.classList.contains("ax-shop-mode")) {
+    goCustomerHome();
+    return true;
+  }
   if (document.body.classList.contains("customer-subpage-open") || document.querySelector(".ax-store-app")) {
     if (history.state?.customerRoute && history.state.customerRoute !== "home") {
       history.back();
@@ -1294,19 +2093,21 @@ window.axzenHandleBack = handleCustomerAppBack;
 function renderCustomerCategories(products = storefrontProductsCache) {
   const rail = document.querySelector("[data-customer-category-rail]");
   if (!rail) return;
-  const baseCategories = ["Electronics", "Fashion", "Home & Living", "Beauty", "Sports", "Automotive"];
+  const baseCategories = ["Electronics", "Fashion", "Home & Living", "Beauty", "Grocery"];
   const configured = Array.isArray(customerAppConfig.categoryOrder) && customerAppConfig.categoryOrder.length ? customerAppConfig.categoryOrder : baseCategories;
   const detected = [...new Set(products.map((product) => product.category || "General").filter(Boolean))];
   const categories = ["All", ...new Set([...configured, ...detected])].slice(0, 12);
   rail.innerHTML = categories
-    .map(
-      (category, index) => `
+    .map((category, index) => {
+      const sample = products.find((product) => (product.category || "General") === category);
+      const photo = categoryPhoto(category) || (sample ? productImage(sample) : "");
+      return `
         <button type="button" class="${index === 0 ? "active" : ""}" data-customer-category-pill="${escapeHtml(category)}">
-          <span class="category-chip-icon">${category === "All" ? storeLineIcon("badge") : storeCategoryIcon(category)}</span>
-          <strong>${escapeHtml(category)}</strong>
+          <span class="category-chip-icon">${photo ? `<img src="${escapeHtml(photo)}" alt="${escapeHtml(category)}">` : category === "All" ? storeLineIcon("badge") : storeCategoryIcon(category)}</span>
+          <strong>${escapeHtml(category === "Home & Living" ? "Home" : category)}</strong>
         </button>
-      `
-    )
+      `;
+    })
     .join("");
   const deptMenu = document.querySelector("[data-dept-menu]");
   if (deptMenu) {
@@ -1326,6 +2127,8 @@ function renderStorefrontProducts(products = storefrontProductsCache) {
 function resetCustomerMain() {
   const target = document.querySelector("[data-customer-main]");
   if (target && !target.querySelector(".section-heading")) target.innerHTML = customerMainDefaultHtml;
+  document.body.classList.remove("ax-shop-mode");
+  document.body.classList.remove("ax-vstore-open");
   setCustomerSubpageMode(false);
 }
 
@@ -1337,16 +2140,16 @@ function renderCustomerSaleBanner() {
   const slides = [
     {
       eyebrow: "Hot gadget deals",
-      title: customerAppConfig.saleTitle || "Hot gadgets deals up to 15% off",
-      subtitle: customerAppConfig.saleSubtitle || "The hottest tech. The coolest offers from verified Axzen sellers.",
+      title: customerAppConfig.saleTitle || "Big tech. Better prices.",
+      subtitle: customerAppConfig.saleSubtitle || "Up to 15% off",
       cta: customerAppConfig.saleCta || "Shop now",
       image: offerImage,
     },
     {
       eyebrow: "Featured pick",
-      title: featured.title || "Shop verified electronics today",
-      subtitle: featured.sellerName ? `Sold by ${featured.sellerName}` : "Trusted local sellers. Fast dispatch.",
-      cta: "Shop now",
+      title: featured.title || "Smart tech, better living.",
+      subtitle: featured.sellerName ? `Sold by ${featured.sellerName}` : "Discover top picks from verified Axzen sellers.",
+      cta: "Explore now",
       image: productImage(storefrontProductsCache[1] || featured),
     },
   ];
@@ -1361,7 +2164,7 @@ function renderCustomerSaleBanner() {
                 <p class="eyebrow">${escapeHtml(slide.eyebrow)}</p>
                 <h1>${escapeHtml(slide.title)}</h1>
                 <p>${escapeHtml(slide.subtitle)}</p>
-                <a class="primary-button" href="#products">${escapeHtml(slide.cta)}</a>
+                <a class="primary-button" href="#products" data-open-browse>${escapeHtml(slide.cta)}</a>
               </div>
               ${slide.image ? `<img class="ax-hero-photo" src="${escapeHtml(slide.image)}" alt="${escapeHtml(slide.title)}">` : ""}
             </article>
@@ -1600,6 +2403,8 @@ async function openCustomerSellerPage(sellerId, options = {}) {
   const store = await loadCustomerSellerStore(sellerId);
   const target = document.querySelector("[data-customer-main]");
   if (!store?.seller || !target) return;
+  document.body.classList.remove("ax-shop-mode");
+  document.body.classList.add("ax-vstore-open");
   setCustomerSubpageMode(true);
   const products = store.products || store.seller.products || [];
   mergeStorefrontProducts(products);
@@ -1614,126 +2419,137 @@ async function openCustomerSellerPage(sellerId, options = {}) {
     ? `<img src="${escapeHtml(seller.profileImageUrl)}" alt="${escapeHtml(seller.name)}">`
     : `<span>${escapeHtml(sellerInitials(seller.name).slice(0, 4))}</span>`;
   const bannerStyle = seller.offerBannerUrl
-    ? ` style="background-image: linear-gradient(120deg, rgba(8,31,124,.92), rgba(89,37,118,.55)), url('${cssUrl(seller.offerBannerUrl)}')"`
+    ? ` style="background-image: radial-gradient(circle at 86% 18%, rgba(255,255,255,.28), transparent 18%), radial-gradient(circle at 72% 78%, rgba(120,80,255,.42), transparent 32%), linear-gradient(135deg, rgba(47,107,255,.94), rgba(122,98,255,.9)), url('${cssUrl(seller.offerBannerUrl)}')"`
     : "";
-  const latest = reviews.latestReview || {};
-  const joinedShort = String(seller.memberSinceLabel || "").replace(/^Joined\s+/i, "") || "2023";
-  const featuredProducts = bestProducts.slice(0, 6);
+  const featuredProducts = bestProducts.slice(0, 3);
+  const joinedShort = String(seller.memberSinceLabel || "Jan 2023").replace(/^Joined\s+/i, "");
+  const chips = storeChipNames(products, store.categories || []);
+  const followMarkup = `${isFollowing ? storeLineIcon("heart") : storeLineIcon("plus")} ${isFollowing ? "Following" : "Follow"}`;
+  const initialTab = options.tab || "home";
   target.innerHTML = `
-    <section class="customer-seller-page customer-seller-storefront ax-store-profile ax-store-app">
-      <header class="ax-store-topbar">
-        <button type="button" class="ax-store-back" data-store-back>
-          ${storeLineIcon("arrowLeft")}
-          <span>Seller Store</span>
-        </button>
-        <button type="button" class="ax-store-share-icon" data-share-seller="${escapeHtml(seller.id)}" aria-label="Share store">${storeLineIcon("nodes")}</button>
-      </header>
-      <header class="seller-store-hero ax-store-hero"${bannerStyle}>
-        <div class="ax-store-hero-main">
-          <div class="seller-store-avatar">${avatar}</div>
-          <div class="seller-store-copy">
-            <p class="seller-preferred">${storeLineIcon("starFill")} Preferred Seller</p>
+    <section class="customer-seller-page customer-seller-storefront ax-vstore ax-store-app ax-vstore-mode-home" data-store-tab="home">
+      <div class="ax-vstore-top">
+        <button type="button" class="ax-vstore-iconbtn" data-store-back aria-label="Back">${storeLineIcon("arrowLeft")}</button>
+        <strong data-store-title>Seller Store</strong>
+        <button type="button" class="ax-vstore-iconbtn" data-share-seller="${escapeHtml(seller.id)}" aria-label="Share store">${storeLineIcon("nodes")}</button>
+      </div>
+      <div class="ax-vstore-hero">
+        <div class="ax-vstore-profile">
+          <div class="ax-vstore-avatar">${avatar}</div>
+          <div class="ax-vstore-copy">
+            <p class="ax-vstore-badge">${storeLineIcon("starFill")} Preferred Seller</p>
             <h2>${escapeHtml(seller.name)} ${sellerVerifiedIcon()}</h2>
-            <p>${escapeHtml(seller.tagline)}</p>
-            <div class="seller-rating-line">${starRatingMarkup(reviewAverage)}<strong>${reviewAverage}</strong><small>(${reviews.reviewCount} Reviews)</small></div>
+            <p class="ax-vstore-tag">${escapeHtml(seller.tagline)}</p>
+            <div class="ax-vstore-rating ax-vstore-rating-full">${starRatingMarkup(reviewAverage)}<strong>${reviewAverage}</strong><small>(${reviews.reviewCount} reviews)</small></div>
+            <p class="ax-vstore-rating ax-vstore-rating-compact">${storeLineIcon("starFill")} <strong>${reviewAverage}</strong> &bull; ${reviews.reviewCount} reviews</p>
           </div>
+          <button type="button" class="ax-vstore-follow ax-vstore-follow-inline" data-follow-seller="${escapeHtml(seller.id)}">${followMarkup}</button>
         </div>
-        <div class="seller-store-meta">
-          <span>${storeLineIcon("users")} ${compactCount(seller.followerCount)} Followers</span>
-          <span>${storeLineIcon("package")} ${seller.productCount} Products</span>
-          <span>${storeLineIcon("calendar")} ${escapeHtml(seller.memberSinceLabel)}</span>
+        <div class="ax-vstore-stats">
+          <span>${storeLineIcon("users")}<b>${compactCount(seller.followerCount)}</b> Followers</span>
+          <span>${storeLineIcon("package")}<b>${seller.productCount}</b> Products</span>
+          <span>${storeLineIcon("calendar")}<b>${escapeHtml(joinedShort)}</b> Joined</span>
         </div>
-        <div class="seller-hero-trust">
-          <span>${storeLineIcon("shield")}<strong>100% Original</strong><small>Genuine Products</small></span>
-          <span>${storeLineIcon("refresh")}<strong>7 Days Return</strong><small>Hassle Free</small></span>
-          <span>${storeLineIcon("lock")}<strong>Secure Payment</strong><small>Safe &amp; Encrypted</small></span>
+        <div class="ax-vstore-cta">
+          <button type="button" class="ax-vstore-share" data-share-seller="${escapeHtml(seller.id)}">${storeLineIcon("share")} Share Store</button>
+          <button type="button" class="ax-vstore-follow" data-follow-seller="${escapeHtml(seller.id)}">${followMarkup}</button>
         </div>
-        <div class="seller-store-actions">
-          <button type="button" class="secondary-button" data-share-seller="${escapeHtml(seller.id)}">${storeLineIcon("share")} Share Store</button>
-          <button type="button" data-follow-seller="${escapeHtml(seller.id)}">${isFollowing ? storeLineIcon("heart") : storeLineIcon("plus")} ${isFollowing ? "Following" : "Follow"}</button>
-        </div>
-      </header>
-      <nav class="seller-store-tabs ax-store-tabs" aria-label="Store sections">
+      </div>
+      <div class="ax-vstore-trust">
+        <span>${storeLineIcon("shield")}<strong>100% Original</strong><small>Genuine Products</small></span>
+        <span>${storeLineIcon("refresh")}<strong>7 Days Return</strong><small>Hassle Free</small></span>
+        <span>${storeLineIcon("lock")}<strong>Secure Payment</strong><small>Safe &amp; Encrypted</small></span>
+      </div>
+      <nav class="ax-vstore-tabs seller-store-tabs" aria-label="Store sections">
         <button type="button" class="active" data-seller-store-tab="home">${storeLineIcon("home")}<span>Home</span></button>
         <button type="button" data-seller-store-tab="all">${storeLineIcon("package")}<span>Products</span></button>
         <button type="button" data-seller-store-tab="categories">${storeLineIcon("layout")}<span>Categories</span></button>
         <button type="button" data-seller-store-tab="reviews">${storeLineIcon("star")}<span>Reviews</span></button>
       </nav>
-      <div class="seller-store-shell">
-        <div class="seller-store-main">
+      <div class="ax-vstore-body">
           <div data-store-panel="home">
-            <article class="seller-store-card about">
+            <section class="ax-vstore-featured">
+              <div class="ax-vstore-head"><h3>Featured Products</h3><button type="button" data-seller-store-tab="all">View all ${storeLineIcon("chevron")}</button></div>
+              <div class="ax-vstore-products">${featuredProducts.length ? featuredProducts.map((product) => renderStoreAppProductCard(product)).join("") : `<p class="order-invoice-empty">This store has no products yet.</p>`}</div>
+            </section>
+            <article class="ax-vstore-about">
               <h3>About ${escapeHtml(seller.name)}</h3>
               <p>${escapeHtml(seller.about)}</p>
-              <div class="seller-store-benefits">
-                <span>${storeLineIcon("badge")}<strong>Quality Products</strong><small>100% Genuine</small></span>
-                <span>${storeLineIcon("truck")}<strong>Fast Delivery</strong><small>Pan India</small></span>
-                <span>${storeLineIcon("headset")}<strong>Trusted Support</strong><small>Always Here</small></span>
+              <div class="ax-vstore-perks">
+                <span>${storeLineIcon("badge")}<strong>Quality Products</strong></span>
+                <span>${storeLineIcon("truck")}<strong>Pan-India Delivery</strong></span>
+                <span>${storeLineIcon("headset")}<strong>Trusted Support</strong></span>
               </div>
             </article>
-            <article class="seller-store-card highlights">
-              <header>
-                <h3>Store Highlights</h3>
-                <button type="button" data-seller-store-tab="reviews">View All ${storeLineIcon("chevron")}</button>
-              </header>
-              <div class="seller-highlight-grid">
-                <span class="ax-hl followers"><i>${storeLineIcon("users")}</i><strong>${compactCount(seller.followerCount)}</strong><small>Followers</small></span>
-                <span class="ax-hl products"><i>${storeLineIcon("package")}</i><strong>${seller.productCount}</strong><small>Products</small></span>
-                <span class="ax-hl rating"><i>${storeLineIcon("star")}</i><strong>${reviewAverage}</strong><small>Rating</small></span>
-                <span class="ax-hl joined"><i>${storeLineIcon("calendar")}</i><strong>${escapeHtml(joinedShort)}</strong><small>Joined</small></span>
-              </div>
-            </article>
-            <section class="seller-best-products">
-              <header><h3>Featured Products</h3><button type="button" data-seller-store-tab="all">View All ${storeLineIcon("chevron")}</button></header>
-              <div class="seller-store-product-row ax-store-featured">${featuredProducts.length ? featuredProducts.map(renderStoreAppProductCard).join("") : `<p class="order-invoice-empty">This store has no products yet.</p>`}</div>
-            </section>
           </div>
           <div data-store-panel="all" hidden>
-            <section class="seller-all-products">
-              <header><h3>All Products</h3><span>${products.length} items</span></header>
-              <div class="commerce-products seller-store-product-row">${products.length ? products.map(renderStoreAppProductCard).join("") : `<p class="order-invoice-empty">No products in this store yet.</p>`}</div>
+            <section class="ax-vstore-catalog">
+              <label class="ax-vstore-search">
+                ${storeLineIcon("search")}
+                <input type="search" data-store-search placeholder="Search in this store" autocomplete="off">
+              </label>
+              <div class="ax-vstore-chips">
+                <button type="button" class="active" data-store-chip="all">All</button>
+                ${chips.map((name) => `<button type="button" data-store-chip="${escapeHtml(name)}">${escapeHtml(name)}</button>`).join("")}
+              </div>
+              <div class="ax-vstore-meta">
+                <span data-store-count>${products.length} products</span>
+                <div>
+                  <button type="button" data-store-sort>${storeLineIcon("chevronDown")} <span>Sort</span></button>
+                  <button type="button" data-store-filter>${storeLineIcon("sliders")} Filter</button>
+                </div>
+              </div>
+              <div class="ax-vstore-grid" data-store-product-grid>${products.length ? products.map(renderStoreGridProductCard).join("") : `<p class="order-invoice-empty">No products in this store yet.</p>`}</div>
             </section>
           </div>
           <div data-store-panel="categories" hidden>
-            <article class="seller-store-card highlights">
-              <header><h3>Top Categories</h3></header>
-              <div class="seller-top-categories">
-                ${categories.map((category) => renderSellerTopCategory(category, products)).join("") || `<p class="order-invoice-empty">Categories appear when this store adds products.</p>`}
+            <section class="ax-vstore-catalog">
+              <label class="ax-vstore-search">
+                ${storeLineIcon("search")}
+                <input type="search" data-store-category-search placeholder="Search categories" autocomplete="off">
+              </label>
+              <div class="ax-vstore-chips">
+                <button type="button" class="active" data-store-chip="all">All</button>
+                ${chips.map((name) => `<button type="button" data-store-chip="${escapeHtml(name)}">${escapeHtml(name)}</button>`).join("")}
               </div>
-            </article>
+              <div class="ax-vstore-cat-grid">
+                ${categories.map((category) => renderVstoreCategoryTile(category, products)).join("") || `<p class="order-invoice-empty">Categories appear when this store adds products.</p>`}
+              </div>
+            </section>
           </div>
           <div data-store-panel="reviews" hidden>
-            <article class="seller-store-card reviews">
-              <header><h3>Customer Reviews</h3></header>
-              <div class="seller-review-score">
-                <strong>${reviewAverage}</strong>
-                <div>
+            <section class="ax-vstore-reviews">
+              <div class="ax-review-summary">
+                <div class="ax-review-score">
+                  <strong>${reviewAverage}</strong>
                   ${starRatingMarkup(reviewAverage)}
-                  <span>${reviews.reviewCount} reviews</span>
+                  <small>Based on ${reviews.reviewCount} reviews</small>
+                </div>
+                <div class="ax-review-bars">
+                  ${reviews.bars
+                    .map((bar) => `<div><span>${escapeHtml(bar.rating)}</span><i><b style="width:${Math.max(0, Math.min(Number(bar.percent) || 0, 100))}%"></b></i></div>`)
+                    .join("")}
                 </div>
               </div>
-              <div class="seller-review-bars">
-                ${reviews.bars
-                  .map((bar) => `<div><span>${escapeHtml(bar.rating)}</span><i><b style="width:${Math.max(0, Math.min(Number(bar.percent) || 0, 100))}%"></b></i></div>`)
-                  .join("")}
+              <div class="ax-review-filters">
+                <button type="button" class="active" data-review-filter="all">All reviews</button>
+                <button type="button" data-review-filter="photos">${storeLineIcon("photo")} With photos</button>
+                <button type="button" data-review-filter="newest">Newest ${storeLineIcon("chevronDown")}</button>
               </div>
-              <article class="seller-latest-review">
-                <div class="seller-review-identity">
-                  <span class="seller-review-avatar">${escapeHtml(sellerInitials(latest.name || "Arjun Mehta"))}</span>
-                  <div>
-                    <strong>${escapeHtml(latest.name || "Arjun Mehta")} <em class="seller-verified-buyer">Verified Buyer</em></strong>
-                    ${starRatingMarkup(latest.rating || 5)}
-                    <small>${escapeHtml(latest.date || "2 days ago")}</small>
-                  </div>
-                </div>
-                <p>${escapeHtml(latest.message || "")}</p>
-              </article>
-            </article>
+              <div class="ax-review-head">
+                <h3>${reviews.reviewCount} reviews</h3>
+                <button type="button" data-write-review>${storeLineIcon("pencil")} Write a review</button>
+              </div>
+              <div class="ax-review-list">
+                ${(reviews.list || []).map(renderVstoreReviewCard).join("") || `<p class="order-invoice-empty">No reviews yet.</p>`}
+              </div>
+            </section>
           </div>
-        </div>
       </div>
     </section>
   `;
+  const page = target.querySelector(".ax-vstore");
+  if (initialTab !== "home") activateSellerStoreTab(page, initialTab, { animate: false });
   window.scrollTo({ top: 0, left: 0, behavior: "instant" });
 }
 
@@ -1923,7 +2739,7 @@ async function openCustomerOrdersView() {
       <div class="customer-product-detail wide">
         <p class="eyebrow">My orders</p>
         <h2>Order history</h2>
-        ${orders.length ? `<div class="customer-order-history">${orders.map(renderCustomerOrderCard).join("")}</div>` : `<p class="order-invoice-empty">No orders yet.</p>`}
+        ${orders.length ? `<div class="customer-order-history">${orders.map(renderCustomerOrderCard).join("")}</div>` : `<p class="order-invoice-empty"><img src="${AX_IMG.noOrders}" alt="">No orders yet.</p>`}
       </div>
     `;
   } catch (error) {
@@ -2110,69 +2926,23 @@ function productGalleryImages(product = {}) {
 
 function demoProductGallery(productId) {
   const galleries = {
-    "demo-laptop": [
-      "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1511385348-a52b4a160dc2?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1484788984921-03950022c9ef?auto=format&fit=crop&w=900&q=80",
-    ],
-    "demo-phone": [
-      "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1598327105666-5b89351aff97?auto=format&fit=crop&w=900&q=80",
-    ],
-    "demo-buds": [
-      "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1572569511254-d8f925fe2cbb?auto=format&fit=crop&w=900&q=80",
-    ],
-    "demo-watch": [
-      "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1524592094714-0f0654e20314?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1434493789847-2f02dc6ca35d?auto=format&fit=crop&w=900&q=80",
-    ],
-    "demo-headphones": [
-      "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1484704849700-f032a568e944?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1546435770-a3e426bf472b?auto=format&fit=crop&w=900&q=80",
-    ],
-    "demo-controller": [
-      "https://images.unsplash.com/photo-1606144042614-b2417e99c4e3?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1592840496694-26d035b52b48?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1612287230202-1ff1d85d1bdf?auto=format&fit=crop&w=900&q=80",
-    ],
-    "demo-speaker": [
-      "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1545454675-3531b543be5d?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1589003077984-894e133dabab?auto=format&fit=crop&w=900&q=80",
-    ],
-    "demo-tablet": [
-      "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1561154464-82e9adf32764?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1542751110-97427bbecf20?auto=format&fit=crop&w=900&q=80",
-    ],
-    "demo-mouse": [
-      "https://images.unsplash.com/photo-1527814050087-3793815479db?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1629429407756-4464872015f2?auto=format&fit=crop&w=900&q=80",
-    ],
-    "demo-camera": [
-      "https://images.unsplash.com/photo-1502920917128-1aa911764bdf?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1502920917128-1aa911764bdf?auto=format&fit=crop&w=700&q=80",
-    ],
-    "demo-shirt": [
-      "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?auto=format&fit=crop&w=900&q=80",
-    ],
-    "demo-bag": [
-      "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=900&q=80",
-    ],
+    "demo-laptop": [AX_IMG.laptop, AX_IMG.hero, AX_IMG.tablet, AX_IMG.mouse],
+    "demo-phone": [AX_IMG.phone, AX_IMG.tablet, AX_IMG.watch],
+    "demo-buds": [AX_IMG.earbuds, AX_IMG.headphones, AX_IMG.speaker],
+    "demo-watch": [AX_IMG.watch, AX_IMG.phone, AX_IMG.headphones],
+    "demo-headphones": [AX_IMG.headphones, AX_IMG.earbuds, AX_IMG.speaker],
+    "demo-controller": [AX_IMG.controller, AX_IMG.mouse, AX_IMG.headphones],
+    "demo-speaker": [AX_IMG.speaker, AX_IMG.headphones, AX_IMG.earbuds],
+    "demo-tablet": [AX_IMG.tablet, AX_IMG.laptop, AX_IMG.phone],
+    "demo-mouse": [AX_IMG.mouse, AX_IMG.controller, AX_IMG.laptop],
+    "demo-camera": [AX_IMG.camera, AX_IMG.tablet, AX_IMG.phone],
+    "demo-shirt": [AX_IMG.shirt, AX_IMG.bag, AX_IMG.sneakers],
+    "demo-bag": [AX_IMG.bag, AX_IMG.shirt, AX_IMG.sneakers],
+    "demo-tv": [AX_IMG.tv, AX_IMG.laptop, AX_IMG.speaker],
+    "demo-fruits": [AX_IMG.fruits, AX_IMG.grocery, AX_IMG.food],
+    "demo-bowl": [AX_IMG.foodBowl, AX_IMG.food, AX_IMG.fruits],
+    "demo-food": [AX_IMG.food, AX_IMG.foodBowl, AX_IMG.grocery],
+    "demo-grocery": [AX_IMG.grocery, AX_IMG.fruits, AX_IMG.food],
   };
   return galleries[productId] || [];
 }
@@ -2223,18 +2993,23 @@ function demoStorefrontCatalog() {
     },
   };
   const items = [
-    { id: "demo-laptop", title: "Creator 15 Laptop Intel Core i7", category: "Electronics", pricePaise: 7499900, mrpPaise: 8999900, image: "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=900&q=80", ...nova },
-    { id: "demo-phone", title: "Axzen Ultra 5G Smartphone", category: "Electronics", pricePaise: 3499900, mrpPaise: 4299900, image: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=900&q=80", ...nova },
-    { id: "demo-buds", title: "Air Studio Wireless Earbuds", category: "Electronics", pricePaise: 899900, mrpPaise: 1299900, image: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?auto=format&fit=crop&w=900&q=80", ...nova },
-    { id: "demo-watch", title: "Pulse Pro Smartwatch", category: "Electronics", pricePaise: 1299900, mrpPaise: 1699900, image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80", ...nova },
-    { id: "demo-headphones", title: "Closed-Back Wireless Headphones", category: "Electronics", pricePaise: 1599900, mrpPaise: 1999900, image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=900&q=80", ...nova },
-    { id: "demo-controller", title: "Dual Wireless Game Controller", category: "Electronics", pricePaise: 449900, mrpPaise: 599900, image: "https://images.unsplash.com/photo-1606144042614-b2417e99c4e3?auto=format&fit=crop&w=900&q=80", ...nova },
-    { id: "demo-speaker", title: "Studio Bluetooth Speaker", category: "Electronics", pricePaise: 799900, mrpPaise: 999900, image: "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?auto=format&fit=crop&w=900&q=80", ...nova },
-    { id: "demo-tablet", title: "Nova Tab Pro 11", category: "Electronics", pricePaise: 2899900, mrpPaise: 3299900, image: "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?auto=format&fit=crop&w=900&q=80", ...nova },
-    { id: "demo-mouse", title: "PHX Wireless Gaming Mouse", category: "Electronics", pricePaise: 249900, mrpPaise: 349900, image: "https://images.unsplash.com/photo-1527814050087-3793815479db?auto=format&fit=crop&w=900&q=80", ...nova },
-    { id: "demo-camera", title: "Action Cam OC GP5", category: "Electronics", pricePaise: 1899900, mrpPaise: 2299900, image: "https://images.unsplash.com/photo-1502920917128-1aa911764bdf?auto=format&fit=crop&w=900&q=80", ...nova },
-    { id: "demo-shirt", title: "Handloom Cotton Shirt", category: "Fashion", pricePaise: 149900, mrpPaise: 219900, image: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=80", ...urban },
-    { id: "demo-bag", title: "Studio Everyday Tote", category: "Fashion", pricePaise: 199900, mrpPaise: 259900, image: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=900&q=80", ...urban },
+    { id: "demo-laptop", title: "Creator 15 Laptop Intel Core i7", category: "Electronics", pricePaise: 7499900, mrpPaise: 8999900, image: AX_IMG.laptop, ...nova },
+    { id: "demo-phone", title: "Axzen Ultra 5G Smartphone", category: "Electronics", pricePaise: 3499900, mrpPaise: 4299900, image: AX_IMG.phone, ...nova },
+    { id: "demo-buds", title: "Air Studio Wireless Earbuds", category: "Electronics", pricePaise: 899900, mrpPaise: 1299900, image: AX_IMG.earbuds, ...nova },
+    { id: "demo-watch", title: "Pulse Pro Smartwatch", category: "Electronics", pricePaise: 1299900, mrpPaise: 1699900, image: AX_IMG.watch, ...nova },
+    { id: "demo-headphones", title: "Closed-Back Wireless Headphones", category: "Electronics", pricePaise: 1599900, mrpPaise: 1999900, image: AX_IMG.headphones, ...nova },
+    { id: "demo-controller", title: "Dual Wireless Game Controller", category: "Electronics", pricePaise: 449900, mrpPaise: 599900, image: AX_IMG.controller, ...nova },
+    { id: "demo-speaker", title: "Studio Bluetooth Speaker", category: "Electronics", pricePaise: 799900, mrpPaise: 999900, image: AX_IMG.speaker, ...nova },
+    { id: "demo-tablet", title: "Nova Tab Pro 11", category: "Electronics", pricePaise: 2899900, mrpPaise: 3299900, image: AX_IMG.tablet, ...nova },
+    { id: "demo-mouse", title: "PHX Wireless Gaming Mouse", category: "Electronics", pricePaise: 249900, mrpPaise: 349900, image: AX_IMG.mouse, ...nova },
+    { id: "demo-camera", title: "Action Cam OC GP5", category: "Electronics", pricePaise: 1899900, mrpPaise: 2299900, image: AX_IMG.camera, ...nova },
+    { id: "demo-shirt", title: "Handloom Cotton Shirt", category: "Fashion", pricePaise: 149900, mrpPaise: 219900, image: AX_IMG.shirt, ...urban },
+    { id: "demo-bag", title: "Studio Everyday Tote", category: "Fashion", pricePaise: 199900, mrpPaise: 259900, image: AX_IMG.bag, ...urban },
+    { id: "demo-tv", title: "Nova 43-inch Smart TV", category: "Electronics", pricePaise: 2499900, mrpPaise: 2999900, image: AX_IMG.tv, ...nova },
+    { id: "demo-fruits", title: "Fresh Fruit Basket", category: "Grocery", pricePaise: 29900, mrpPaise: 39900, image: AX_IMG.fruits, ...urban },
+    { id: "demo-bowl", title: "Everyday Salad Bowl", category: "Grocery", pricePaise: 14900, mrpPaise: 19900, image: AX_IMG.foodBowl, ...urban },
+    { id: "demo-food", title: "Cafe Breakfast Combo", category: "Grocery", pricePaise: 24900, mrpPaise: 32900, image: AX_IMG.food, ...urban },
+    { id: "demo-grocery", title: "Weekly Grocery Bag", category: "Grocery", pricePaise: 79900, mrpPaise: 99900, image: AX_IMG.grocery, ...urban },
   ];
   return items.map((item, index) => decorateCatalogProduct(item, index));
 }
@@ -2278,35 +3053,47 @@ async function loadStorefrontCatalog() {
     if (configResponse.ok) customerAppConfig = configResult.config || {};
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || "Unable to load products.");
-    if (!result.products?.length) throw new Error("Catalog is empty.");
-    applyStorefrontCatalog(result.products);
+    applyStorefrontCatalog(result.products || []);
     restoreCustomerRoute();
   } catch (error) {
     console.warn(error.message || "Customer catalog unavailable.");
-    if (!storefrontProductsCache.length) applyStorefrontCatalog(demoStorefrontCatalog());
+    const nativeApp = document.documentElement.classList.contains("ax-native-app");
+    if (!storefrontProductsCache.length && !nativeApp) applyStorefrontCatalog(demoStorefrontCatalog());
     restoreCustomerRoute();
   } finally {
     renderCartSummary(false);
   }
 }
 
+function setDeliverCityLabel(label) {
+  const city = String(label || "")
+    .replace(/^Location set\s*/i, "")
+    .replace(/^Deliver to\s*/i, "")
+    .trim() || "Hyderabad";
+  document.querySelectorAll("[data-deliver-city]").forEach((node) => {
+    node.textContent = city;
+  });
+  if (customerLocationChip && !customerLocationChip.matches(".ax-deliver-row")) {
+    customerLocationChip.textContent = label || "Location not set";
+  }
+}
+
 function initCustomerLocation() {
-  if (!customerLocationChip) return;
   const saved = localStorage.getItem(CUSTOMER_LOCATION_KEY);
   if (saved) {
-    customerLocationChip.textContent = saved;
+    setDeliverCityLabel(saved);
     return;
   }
-  customerLocationChip.textContent = "Select delivery location";
+  setDeliverCityLabel("Hyderabad");
   if (!navigator.geolocation) return;
   navigator.geolocation.getCurrentPosition(
     (position) => {
       const label = `Location set ${position.coords.latitude.toFixed(2)}, ${position.coords.longitude.toFixed(2)}`;
       localStorage.setItem(CUSTOMER_LOCATION_KEY, label);
-      customerLocationChip.textContent = label;
+      setDeliverCityLabel(label);
     },
     () => {
-      customerLocationChip.textContent = "Location not set";
+      setDeliverCityLabel("Hyderabad");
     },
     { timeout: 5000, maximumAge: 86400000 }
   );
@@ -2517,7 +3304,7 @@ function renderSellerProductManager(products = []) {
         <label class="wide">Product details<textarea name="description" placeholder="Material, warranty, ingredients, size, or usage details"></textarea></label>
         <label class="seller-product-file">Product images
           <input name="productImages" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple required>
-          <small>Maximum 5 images, 5MB each.</small>
+          <small>Maximum 5 JPG/PNG images, 5MB each. Grok AI removes the background automatically on upload.</small>
         </label>
         <button type="submit">Submit product for approval</button>
       </form>
@@ -3361,7 +4148,11 @@ async function updateSellerOrderAction(orderId, action, reason = "") {
 async function getRecaptcha(form) {
   const role = form.dataset.role;
   const containerId = `recaptcha-${role}`;
-  return getPhoneVerifier(auth, containerId);
+  return withTimeout(
+    getPhoneVerifier(auth, containerId),
+    isNativeApp() ? 60000 : isFirebasePhoneTestMode() ? 8000 : 20000,
+    "Verification timed out. Complete the check and tap Send OTP again."
+  );
 }
 
 function setOwnerLoginMessage(message, isError = false) {
@@ -3547,8 +4338,15 @@ function renderDashboard(payload) {
   }
 
   if (dashboardSection) {
-    dashboardSection.hidden = user.role === "customer";
-    if (user.role !== "customer") dashboardSection.scrollIntoView({ behavior: "smooth" });
+    if (user.role === "customer") {
+      dashboardSection.hidden = true;
+      if (document.body.classList.contains("storefront-page") && location.hash === "#dashboard") {
+        openCustomerAccountView({ push: false });
+      }
+    } else {
+      dashboardSection.hidden = false;
+      dashboardSection.scrollIntoView({ behavior: "smooth" });
+    }
   }
 }
 
@@ -3597,7 +4395,16 @@ async function createPhoneSession(role, phone, firebaseToken) {
     localStorage.removeItem("axzenSellerStatus");
   }
   await loadDashboard(result.user.role, result.token);
-  if (result.user.role === "customer") renderCartSummary(true);
+  if (result.user.role === "customer") {
+    renderCartSummary(true);
+    closeLoginArea();
+    if (document.body.classList.contains("storefront-page")) {
+      history.replaceState({ customerRoute: "account", value: "1" }, "", `${location.pathname}${location.search}#dashboard`);
+      showCustomerDashboard();
+    } else if (location.hash === "#dashboard") {
+      showCustomerDashboard();
+    }
+  }
 }
 
 phoneForms.forEach((form) => {
@@ -3622,7 +4429,10 @@ phoneForms.forEach((form) => {
     form.classList.add("is-sending");
 
     try {
-      const confirmationResult = await signInWithPhoneNumber(auth, phone, await getRecaptcha(form));
+      const confirmationResult = await withTimeout(
+        (async () => signInWithPhoneNumber(auth, phone, await getRecaptcha(form)))(),
+        isNativeApp() ? 60000 : isFirebasePhoneTestMode() ? 20000 : 45000
+      );
       confirmationResults.set(role, { confirmationResult, phone });
       form.classList.remove("is-sending");
       form.classList.add("otp-sent");
@@ -3673,7 +4483,7 @@ phoneForms.forEach((form) => {
       setLoginMessage(form, "Phone verified. Opening your dashboard.");
       await createPhoneSession(role, session.phone, firebaseToken);
     } catch (error) {
-      setLoginMessage(form, error.message || "Phone verified, but dashboard login failed.", true);
+      setLoginMessage(form, otpAuthErrorMessage(error) || "Phone verified, but dashboard login failed.", true);
     } finally {
       verifyButton.disabled = false;
       verifyButton.textContent = "Verify and continue";
@@ -3716,6 +4526,57 @@ document.addEventListener("click", async (event) => {
     !event.target.closest("[data-add-cart]")
   ) {
     customerCart.hidden = true;
+  }
+
+  const trackBack = event.target.closest("[data-track-back]");
+  if (trackBack) {
+    event.preventDefault();
+    handleCustomerAppBack();
+    return;
+  }
+
+  const trackCopy = event.target.closest("[data-copy-tracking]");
+  if (trackCopy) {
+    event.preventDefault();
+    const trackingId = trackCopy.dataset.copyTracking || "AXD847291630";
+    navigator.clipboard.writeText(trackingId).then(
+      () => showCustomerToast("Tracking ID copied."),
+      () => showCustomerToast("Unable to copy tracking ID.", true)
+    );
+    return;
+  }
+
+  const trackHelp = event.target.closest("[data-track-help]");
+  if (trackHelp) {
+    event.preventDefault();
+    showCustomerToast("Support for order #AXZ102458 — we can help with this delivery.");
+    return;
+  }
+
+  const trackNav = event.target.closest("[data-track-nav]");
+  if (trackNav) {
+    event.preventDefault();
+    const dest = trackNav.dataset.trackNav;
+    if (dest === "orders") return;
+    closeCustomerTrackOrderView({ clearHash: true });
+    if (dest === "home") {
+      goCustomerHome();
+    } else if (dest === "media") {
+      openMediaFeed();
+      setAppNavActive("media");
+    } else if (dest === "cart") {
+      const cart = document.querySelector("#cart");
+      closeCustomerPopovers("cart");
+      if (cart) {
+        cart.hidden = false;
+        cart.classList.add("is-open");
+        renderCartSummary(false);
+        history.replaceState(history.state, "", `${location.pathname}${location.search}#cart`);
+      }
+    } else if (dest === "account") {
+      openCustomerAccountView();
+    }
+    return;
   }
 
   const addCartButton = event.target.closest("[data-add-cart]");
@@ -3777,13 +4638,98 @@ document.addEventListener("click", async (event) => {
 
   const customerLocationButton = event.target.closest("[data-customer-location]");
   if (customerLocationButton) {
-    const current = localStorage.getItem(CUSTOMER_LOCATION_KEY) || "";
-    const next = window.prompt("Enter delivery location or pincode", current.replace(/^Location set\s*/i, ""));
+    const current = localStorage.getItem(CUSTOMER_LOCATION_KEY) || document.querySelector("[data-deliver-city]")?.textContent || "";
+    const next = window.prompt("Enter delivery city or pincode", current.replace(/^Location set\s*/i, "").replace(/^Deliver to\s*/i, ""));
     if (next !== null) {
-      const label = next.trim() ? `Location set ${next.trim()}` : "Location not set";
+      const label = next.trim() ? `Location set ${next.trim()}` : "Location set Hyderabad";
       localStorage.setItem(CUSTOMER_LOCATION_KEY, label);
-      customerLocationButton.textContent = label;
+      setDeliverCityLabel(label);
       showCustomerToast("Delivery location updated.");
+    }
+    return;
+  }
+
+  const scanButton = event.target.closest("[data-scan-product]");
+  if (scanButton) {
+    event.preventDefault();
+    document.querySelector("[data-customer-search] input[name='search']")?.focus();
+    showCustomerToast("Point your camera at a barcode, or search products.");
+    return;
+  }
+
+  const openBrowse = event.target.closest("[data-open-browse]");
+  if (openBrowse) {
+    event.preventDefault();
+    openCustomerBrowse();
+    return;
+  }
+
+  const appNav = event.target.closest("[data-app-nav]");
+  if (appNav && appNav.closest(".ax-app-nav, .ax-account-overlay")) {
+    event.preventDefault();
+    const dest = appNav.dataset.appNav;
+    if (dest === "home") goCustomerHome();
+    else if (dest === "media") {
+      closeCustomerAccountView();
+      closeCustomerTrackOrderView({ clearHash: true });
+      closeCustomerCartOverlay();
+      openMediaFeed();
+      setAppNavActive("media");
+    } else if (dest === "cart") {
+      closeCustomerAccountView();
+      closeMediaFeed();
+      closeCustomerTrackOrderView({ clearHash: true });
+      const cart = document.querySelector("#cart");
+      closeCustomerPopovers("cart");
+      if (cart) {
+        cart.hidden = false;
+        cart.classList.add("is-open");
+        renderCartSummary(false);
+        history.replaceState(history.state, "", `${location.pathname}${location.search}#cart`);
+      }
+      setAppNavActive("cart");
+    } else if (dest === "orders") {
+      closeCustomerAccountView();
+      closeMediaFeed();
+      openCustomerTrackOrderView();
+      setAppNavActive("orders");
+    } else if (dest === "account") {
+      closeMediaFeed();
+      closeCustomerTrackOrderView({ clearHash: true });
+      closeCustomerCartOverlay();
+      openCustomerAccountView();
+    }
+    return;
+  }
+
+  const accountAction = event.target.closest("[data-account-action]");
+  if (accountAction) {
+    event.preventDefault();
+    const action = accountAction.dataset.accountAction;
+    if (action === "orders" || action === "track") {
+      closeCustomerAccountView({ clearHash: true });
+      openCustomerTrackOrderView();
+    } else if (action === "wishlist") {
+      closeCustomerAccountView({ clearHash: true });
+      openCustomerFollowsView();
+    } else if (action === "logout") {
+      closeCustomerAccountView({ clearHash: true });
+      logoutButton?.click();
+      goCustomerHome();
+    } else if (action === "alerts") {
+      document.querySelector("[data-customer-notification-bell]")?.click();
+    } else if (action === "addresses") {
+      showCustomerToast("Add a delivery address at checkout.");
+    } else if (action === "payments") {
+      showCustomerToast("Cards and UPI are available at checkout.");
+    } else if (action === "language") {
+      showCustomerToast("Language is set to English.");
+    } else if (action === "help") {
+      showCustomerToast("Need help? Use order tracking or seller support.");
+    } else if (action === "about") {
+      showCustomerToast("Axzen — from startups to yours.");
+    } else {
+      showCustomerToast("Profile details stay on this device.");
     }
     return;
   }
@@ -3814,16 +4760,15 @@ document.addEventListener("click", async (event) => {
 
   const customerProfileLink = event.target.closest("[data-customer-profile-link]");
   if (customerProfileLink) {
+    event.preventDefault();
+    if (customerProfilePopover) customerProfilePopover.hidden = true;
     if (!(localStorage.getItem("axzenToken") && localStorage.getItem("axzenRole") === "customer")) {
+      history.replaceState(null, "", `${location.pathname}${location.search}#login`);
       openLoginArea();
-      if (customerProfilePopover) customerProfilePopover.hidden = true;
       return;
     }
-    if (dashboardSection) {
-      dashboardSection.hidden = false;
-      dashboardSection.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-    if (customerProfilePopover) customerProfilePopover.hidden = true;
+    history.replaceState(null, "", `${location.pathname}${location.search}#dashboard`);
+    showCustomerDashboard();
     return;
   }
 
@@ -3846,7 +4791,7 @@ document.addEventListener("click", async (event) => {
   const customerOrdersLink = event.target.closest("a[href='#orders']");
   if (customerOrdersLink && document.body.classList.contains("storefront-page")) {
     event.preventDefault();
-    await openCustomerOrdersView();
+    openCustomerTrackOrderView();
     return;
   }
 
@@ -3980,6 +4925,7 @@ document.addEventListener("click", async (event) => {
   const shareSellerButton = event.target.closest("[data-share-seller]");
   if (shareSellerButton) {
     const url = new URL(window.location.href);
+    url.hash = "";
     url.searchParams.set("seller", shareSellerButton.dataset.shareSeller);
     try {
       if (navigator.share) await navigator.share({ title: "Axzen seller store", url: url.toString() });
@@ -3995,6 +4941,11 @@ document.addEventListener("click", async (event) => {
 
   const followSellerButton = event.target.closest("[data-follow-seller]");
   if (followSellerButton) {
+    if (!(localStorage.getItem("axzenToken") && localStorage.getItem("axzenRole") === "customer")) {
+      showCustomerToast("Login with phone OTP to follow this store.", true);
+      openLoginArea();
+      return;
+    }
     const seller = getStorefrontSellers().find((entry) => String(entry.id) === String(followSellerButton.dataset.followSeller));
     if (seller) {
       const alreadyFollowing = getFollowedSellers().some((item) => String(item.id) === String(seller.id));
@@ -4018,7 +4969,7 @@ document.addEventListener("click", async (event) => {
         }).catch(() => {});
         }
       }
-      openCustomerSellerPage(seller.id, { push: false });
+      openCustomerSellerPage(seller.id, { push: false, tab: followSellerButton.closest(".ax-vstore")?.dataset.storeTab || "home" });
     }
     return;
   }
@@ -4038,30 +4989,70 @@ document.addEventListener("click", async (event) => {
 
   const sellerStoreTab = event.target.closest("[data-seller-store-tab]");
   if (sellerStoreTab) {
-    const page = sellerStoreTab.closest(".customer-seller-storefront");
-    const tab = sellerStoreTab.dataset.sellerStoreTab;
-    page?.querySelectorAll(".seller-store-tabs [data-seller-store-tab]").forEach((button) => {
-      button.classList.toggle("active", button.dataset.sellerStoreTab === tab);
-    });
-    page?.querySelectorAll("[data-store-panel]").forEach((panel) => {
-      panel.hidden = panel.dataset.storePanel !== tab;
-    });
-    if (page?.querySelector("[data-store-panel]")) {
-      window.scrollTo({ top: 0, behavior: "instant" });
+    const page = sellerStoreTab.closest(".ax-vstore") || sellerStoreTab.closest(".customer-seller-storefront");
+    activateSellerStoreTab(page, sellerStoreTab.dataset.sellerStoreTab);
+    return;
+  }
+
+  const storeChip = event.target.closest("[data-store-chip]");
+  if (storeChip) {
+    const page = storeChip.closest(".ax-vstore");
+    const name = storeChip.dataset.storeChip || "all";
+    if (page?.dataset.storeTab === "categories" && name !== "all") {
+      activateSellerStoreTab(page, "all");
+      selectStoreChip(page, name);
       return;
     }
-    const targetMap = {
-      home: ".seller-store-hero",
-      all: ".seller-all-products",
-      categories: ".seller-store-card.highlights",
-      reviews: ".seller-store-card.reviews",
-      new: ".seller-all-products",
-      best: ".seller-best-products",
-      offers: ".seller-store-perks",
-    };
-    const section = page?.querySelector(targetMap[tab] || ".seller-store-hero");
-    section?.scrollIntoView({ behavior: "smooth", block: "start" });
-    showCustomerToast(tab === "new" ? "Newest products are shown in All Products." : "Store section opened.");
+    selectStoreChip(page, name);
+    return;
+  }
+
+  const storeOpenCategory = event.target.closest("[data-store-open-category]");
+  if (storeOpenCategory) {
+    const page = storeOpenCategory.closest(".ax-vstore");
+    activateSellerStoreTab(page, "all");
+    selectStoreChip(page, storeOpenCategory.dataset.storeOpenCategory || "all");
+    return;
+  }
+
+  const storeSort = event.target.closest("[data-store-sort]");
+  if (storeSort) {
+    sortVstoreCatalog(storeSort.closest(".ax-vstore"));
+    return;
+  }
+
+  const storeFilter = event.target.closest("[data-store-filter]");
+  if (storeFilter) {
+    storeFilter.closest(".ax-vstore")?.querySelector("[data-store-search]")?.focus();
+    showCustomerToast("Use search and category chips to filter this store.");
+    return;
+  }
+
+  const writeReview = event.target.closest("[data-write-review]");
+  if (writeReview) {
+    showCustomerToast("Login with phone OTP to write a review.", true);
+    return;
+  }
+
+  const reviewFilter = event.target.closest("[data-review-filter]");
+  if (reviewFilter) {
+    const page = reviewFilter.closest(".ax-vstore");
+    page?.querySelectorAll("[data-review-filter]").forEach((button) => {
+      button.classList.toggle("active", button === reviewFilter);
+    });
+    const mode = reviewFilter.dataset.reviewFilter;
+    page?.querySelectorAll("[data-review-card]").forEach((card) => {
+      const hasPhoto = Boolean(card.querySelector(".ax-review-photo"));
+      card.hidden = mode === "photos" && !hasPhoto;
+    });
+    return;
+  }
+
+  const reviewHelpful = event.target.closest("[data-review-helpful]");
+  if (reviewHelpful) {
+    const count = reviewHelpful.querySelector("b");
+    if (count) count.textContent = String(Number(count.textContent || 0) + 1);
+    reviewHelpful.classList.add("active");
     return;
   }
 
@@ -4209,7 +5200,7 @@ document.addEventListener("click", async (event) => {
     sendOwnerOtp.disabled = true;
     sendOwnerOtp.textContent = "Sending OTP...";
     try {
-      const confirmationResult = await signInWithPhoneNumber(auth, phone, await getOwnerRecaptcha());
+      const confirmationResult = await withTimeout(signInWithPhoneNumber(auth, phone, await getOwnerRecaptcha()), 45000);
       confirmationResults.set("owner", { confirmationResult, phone });
       if (phoneInput) phoneInput.readOnly = true;
       if (countrySelect) countrySelect.disabled = true;
@@ -4430,6 +5421,19 @@ document.addEventListener("input", (event) => {
     }
   }
 
+  const storeSearch = event.target.closest("[data-store-search]");
+  if (storeSearch) {
+    filterVstoreCatalog(storeSearch.closest(".ax-vstore"));
+  }
+
+  const categorySearch = event.target.closest("[data-store-category-search]");
+  if (categorySearch) {
+    const term = categorySearch.value.trim().toLowerCase();
+    categorySearch.closest(".ax-vstore")?.querySelectorAll(".ax-vstore-cat-tile").forEach((tile) => {
+      tile.hidden = Boolean(term) && !String(tile.textContent || "").toLowerCase().includes(term);
+    });
+  }
+
   const checkoutForm = event.target.closest("[data-checkout-form]");
   if (checkoutForm) {
     const formData = new FormData(checkoutForm);
@@ -4625,7 +5629,7 @@ document.addEventListener("submit", async (event) => {
   }
 
   if (message) {
-    message.textContent = "Uploading product images...";
+    message.textContent = "Grok AI is removing the background, then uploading...";
     message.classList.remove("error");
   }
   if (submitButton) {
@@ -4667,6 +5671,7 @@ document.addEventListener("submit", async (event) => {
 
 window.addEventListener("hashchange", () => {
   setSellerSection(getSellerSectionFromHash());
+  syncStorefrontAuthHash();
 });
 
 if (logoutButton) {
@@ -4690,6 +5695,8 @@ if (logoutButton) {
       protectedContent.hidden = true;
     }
 
+    closeCustomerAccountView({ clearHash: true });
+    closeMediaFeed({ clearHash: true });
     if (loginSection?.classList.contains("customer-login-section")) closeLoginArea();
     else openLoginArea();
     updateLoginNavigation(false);
@@ -4704,9 +5711,30 @@ const pageRole = document.querySelector(".firebase-phone-form")?.dataset.role;
 
 initCustomerLocation();
 loadStorefrontCatalog();
+if (document.body.classList.contains("storefront-page") && location.hash === "#orders") {
+  openCustomerTrackOrderView({ push: false });
+}
 
 window.addEventListener("popstate", () => {
   if (!document.body.classList.contains("storefront-page")) return;
+  if (location.hash === "#media" || history.state?.customerRoute === "media") {
+    closeCustomerAccountView();
+    closeCustomerTrackOrderView();
+    openMediaFeed({ push: false });
+    setAppNavActive("media");
+    return;
+  }
+  closeMediaFeed();
+  if (location.hash === "#dashboard" || history.state?.customerRoute === "account") {
+    openCustomerAccountView({ push: false });
+    return;
+  }
+  closeCustomerAccountView();
+  if (location.hash === "#orders" || history.state?.customerRoute === "track") {
+    openCustomerTrackOrderView({ push: false });
+    return;
+  }
+  closeCustomerTrackOrderView();
   const params = new URLSearchParams(window.location.search);
   if (params.get("seller")) openCustomerSellerPage(params.get("seller"), { push: false });
   else if (params.get("category")) openCustomerCategoryPage(params.get("category"), { push: false });
@@ -4714,18 +5742,24 @@ window.addEventListener("popstate", () => {
   else {
     resetCustomerMain();
     renderStorefrontProducts(storefrontProductsCache);
+    setAppNavActive(location.hash === "#cart" ? "cart" : "home");
   }
 });
 
 if (savedToken && savedRole && savedRole === pageRole) {
-  loadDashboard(savedRole, savedToken).catch(() => {
-    stopSellerOrderPolling();
-    disconnectSellerRealtime();
-    localStorage.removeItem("axzenToken");
-    localStorage.removeItem("axzenRole");
-    localStorage.removeItem("axzenPhone");
-    localStorage.removeItem("axzenSellerStatus");
-    updateLoginNavigation(false);
-    updateSellerHeader(null);
-  });
+  loadDashboard(savedRole, savedToken)
+    .then(() => syncStorefrontAuthHash())
+    .catch(() => {
+      stopSellerOrderPolling();
+      disconnectSellerRealtime();
+      localStorage.removeItem("axzenToken");
+      localStorage.removeItem("axzenRole");
+      localStorage.removeItem("axzenPhone");
+      localStorage.removeItem("axzenSellerStatus");
+      updateLoginNavigation(false);
+      updateSellerHeader(null);
+      syncStorefrontAuthHash();
+    });
+} else {
+  syncStorefrontAuthHash();
 }
