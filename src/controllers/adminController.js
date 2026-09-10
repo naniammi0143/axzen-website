@@ -723,7 +723,7 @@ const getCustomerAppConfig = asyncHandler(async (req, res) => {
 });
 
 const updateCustomerAppConfig = asyncHandler(async (req, res) => {
-  const allowed = ["saleTitle", "saleSubtitle", "saleCta", "offerImageUrl", "offerImages", "festivalOffers", "spotlightTitle", "categoryOrder"];
+  const allowed = ["saleTitle", "saleSubtitle", "saleCta", "offerImageUrl", "offerImages", "spotlightTitle", "categoryOrder"];
   const update = {};
   allowed.forEach((key) => {
     if (req.body[key] !== undefined) update[key] = req.body[key];
@@ -741,17 +741,6 @@ const updateCustomerAppConfig = asyncHandler(async (req, res) => {
       .split(/\n|,/)
       .map((item) => item.trim())
       .filter(Boolean);
-  }
-  if (update.festivalOffers !== undefined) {
-    let raw = update.festivalOffers;
-    if (typeof raw === "string") {
-      try {
-        raw = JSON.parse(raw || "[]");
-      } catch {
-        raw = [];
-      }
-    }
-    update.festivalOffers = (Array.isArray(raw) ? raw : []).map((item, index) => normalizeFestivalOffer(item, index));
   }
   if (typeof update.categoryOrder === "string") {
     update.categoryOrder = update.categoryOrder
@@ -774,6 +763,19 @@ const updateCustomerAppConfig = asyncHandler(async (req, res) => {
 function collectOfferImageUrls(body = {}) {
   const listed = Array.isArray(body.imageUrls) ? body.imageUrls : [body.imageUrl, body.imageUrl1, body.imageUrl2, body.imageUrl3, body.imageUrl4];
   return [...new Set(listed.map((item) => String(item || "").trim()).filter(Boolean))].slice(0, 4);
+}
+
+function festivalOfferValidationError(offer = {}) {
+  if (!offer.title) return "Offer title is required.";
+  if (offer.imageUrls.length < 3 || offer.imageUrls.length > 4) return "Add 3 to 4 unique offer images.";
+  const invalidImage = offer.imageUrls.find((value) => {
+    try {
+      return !["http:", "https:"].includes(new URL(value).protocol);
+    } catch {
+      return true;
+    }
+  });
+  return invalidImage ? "Offer images must use valid http or https URLs." : "";
 }
 
 function normalizeFestivalOffer(item = {}, index = 0) {
@@ -801,9 +803,14 @@ function normalizeFestivalOffer(item = {}, index = 0) {
 
 const createFestivalOffer = asyncHandler(async (req, res) => {
   const offer = normalizeFestivalOffer(req.body);
+  const validationError = festivalOfferValidationError(offer);
+  if (validationError) {
+    res.status(400).json({ ok: false, message: validationError });
+    return;
+  }
   const config = await CustomerAppConfig.findOneAndUpdate(
     { key: "default" },
-    { $push: { festivalOffers: offer }, $set: { updatedBy: req.user?.id || null } },
+    { $push: { festivalOffers: { $each: [offer], $position: 0 } }, $set: { updatedBy: req.user?.id || null } },
     { new: true, upsert: true, setDefaultsOnInsert: true }
   );
   await audit(req, "customerapp.offer.create", "customerapp", config._id, { id: offer.id });
@@ -823,12 +830,18 @@ const updateFestivalOffer = asyncHandler(async (req, res) => {
     return;
   }
   const current = offers[index].toObject ? offers[index].toObject() : offers[index];
-  offers[index] = normalizeFestivalOffer({
+  const updatedOffer = normalizeFestivalOffer({
     ...current,
     ...req.body,
     id: current.id,
     sellerEntries: current.sellerEntries,
   });
+  const validationError = festivalOfferValidationError(updatedOffer);
+  if (validationError) {
+    res.status(400).json({ ok: false, message: validationError });
+    return;
+  }
+  offers[index] = updatedOffer;
   config.markModified("festivalOffers");
   await config.save();
   await audit(req, "customerapp.offer.update", "customerapp", config._id, { id: req.params.id });
@@ -837,10 +850,14 @@ const updateFestivalOffer = asyncHandler(async (req, res) => {
 
 const deleteFestivalOffer = asyncHandler(async (req, res) => {
   const config = await CustomerAppConfig.findOneAndUpdate(
-    { key: "default" },
+    { key: "default", "festivalOffers.id": req.params.id },
     { $pull: { festivalOffers: { id: req.params.id } } },
     { new: true }
   );
+  if (!config) {
+    res.status(404).json({ ok: false, message: "Offer not found." });
+    return;
+  }
   await audit(req, "customerapp.offer.delete", "customerapp", config?._id, { id: req.params.id });
   success(res, { config });
 });

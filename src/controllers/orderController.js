@@ -1,4 +1,5 @@
 const Cart = require("../models/Cart");
+const CustomerAppConfig = require("../models/CustomerAppConfig");
 const Delivery = require("../models/Delivery");
 const Order = require("../models/Order");
 const Payment = require("../models/Payment");
@@ -346,8 +347,31 @@ async function buildOrderFinanceFromRequest(req) {
     return { error: "Cart contains invalid products." };
   }
 
-  const products = await Product.find({ _id: { $in: productIds }, status: { $in: ["active", "approved"] } }).lean();
+  const [products, appConfig] = await Promise.all([
+    Product.find({ _id: { $in: productIds }, status: { $in: ["active", "approved"] } }).lean(),
+    CustomerAppConfig.findOne({ key: "default" }).select("festivalOffers").lean(),
+  ]);
   const productMap = new Map(products.map((product) => [String(product._id), product]));
+  const festivalDiscounts = new Map();
+  (appConfig?.festivalOffers || []).forEach((offer) => {
+    const entries = [
+      ...(offer.sellerEntries || []).flatMap((entry) =>
+        (entry.productIds || []).map((productId) => ({
+          productId,
+          discountPercent: entry.discountPercent,
+        }))
+      ),
+      ...(offer.productIds || []).map((productId) => ({
+        productId,
+        discountPercent: offer.discountPercent,
+      })),
+    ];
+    entries.forEach((entry) => {
+      const productId = String(entry.productId || "");
+      const discount = Math.max(0, Math.min(90, Number(entry.discountPercent) || 0));
+      if (discount > (festivalDiscounts.get(productId) || 0)) festivalDiscounts.set(productId, discount);
+    });
+  });
   const items = [];
 
   for (const requested of requestedItems) {
@@ -360,12 +384,15 @@ async function buildOrderFinanceFromRequest(req) {
     if ((Number(product.stock) || 0) < quantity) {
       return { error: `${product.title} has only ${Number(product.stock) || 0} item(s) available.` };
     }
+    const basePricePaise = Math.max(0, Number(product.pricePaise) || 0);
+    const festivalDiscount = festivalDiscounts.get(productId) || 0;
+    const pricePaise = festivalDiscount ? Math.round((basePricePaise * (100 - festivalDiscount)) / 100) : basePricePaise;
     items.push({
       productId: product._id,
       sellerId: product.sellerId,
       sku: product.sku,
       title: product.title,
-      pricePaise: product.pricePaise,
+      pricePaise,
       quantity,
     });
   }

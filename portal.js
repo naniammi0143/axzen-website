@@ -12,7 +12,7 @@ import {
   const liveOrigin = "https://www.axzen.in";
   const native =
     document.documentElement.classList.contains("ax-native-app") || Boolean(window.Capacitor?.isNativePlatform?.());
-  if (!native) return;
+  if (!native || window.__axzenNativeBridge) return;
   const originalFetch = window.fetch.bind(window);
   window.fetch = (input, init) => {
     if (typeof input === "string" && input.startsWith("/api/")) {
@@ -622,10 +622,26 @@ function categoryIcon(name = "All") {
 }
 
 function productDiscountPercent(product = {}) {
-  const mrp = Number(product.mrpPaise) || 0;
-  const price = Number(product.pricePaise) || 0;
+  const mrp = productReferencePricePaise(product);
+  const price = effectivePricePaise(product);
   if (mrp > price && price > 0) return Math.round(((mrp - price) / mrp) * 100);
   return 0;
+}
+
+function festivalDiscountPercent(product = {}) {
+  return Math.max(0, Math.min(90, Number(festivalMetaForProduct(product)?.discount) || 0));
+}
+
+function effectivePricePaise(product = {}) {
+  const basePrice = Math.max(0, Number(product.pricePaise) || 0);
+  const discount = festivalDiscountPercent(product);
+  return discount ? Math.round((basePrice * (100 - discount)) / 100) : basePrice;
+}
+
+function productReferencePricePaise(product = {}) {
+  const basePrice = Math.max(0, Number(product.pricePaise) || 0);
+  const mrp = Math.max(0, Number(product.mrpPaise) || 0);
+  return Math.max(mrp, festivalDiscountPercent(product) ? basePrice : 0, effectivePricePaise(product));
 }
 
 function productSoldMeta(product = {}) {
@@ -1054,8 +1070,8 @@ function addProductToCart(productId) {
       sku: product.sku,
       title: product.title,
       image: product.image || product.images?.[0] || "",
-      mrpPaise: product.mrpPaise || product.pricePaise,
-      pricePaise: product.pricePaise,
+      mrpPaise: productReferencePricePaise(product),
+      pricePaise: effectivePricePaise(product),
       unitLabel: product.unitLabel || "1 pc",
       codEnabled: product.codEnabled !== false,
       onlinePaymentEnabled: product.onlinePaymentEnabled !== false,
@@ -1231,7 +1247,9 @@ function renderStorefrontProduct(product) {
   const sellerLogo = sellerDetails.profileImageUrl || "";
   const category = product.category || "Product";
   const discount = productDiscountPercent(product);
-  const mrp = discount ? rupeesMark(product.mrpPaise) : "";
+  const pricePaise = effectivePricePaise(product);
+  const mrpPaise = productReferencePricePaise(product);
+  const mrp = mrpPaise > pricePaise ? rupeesMark(mrpPaise) : "";
   const rating = Number(product.ratingAverage || 4.8).toFixed(1);
   const reviews = Number(product.ratingCount) || 0;
   const stock = Number(product.stock) || 0;
@@ -1258,7 +1276,7 @@ function renderStorefrontProduct(product) {
         <small>${storeLineIcon("starFill")} ${rating} (${reviews ? compactCount(reviews) : "New"})</small>
         <div class="ax-card-foot">
           <div class="customer-price-row">
-            <strong>${rupeesMark(product.pricePaise)}</strong>
+            <strong>${rupeesMark(pricePaise)}</strong>
             ${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}
           </div>
           <button type="button" data-add-cart="${escapeHtml(product.id)}" ${stock > 0 ? "" : "disabled"} aria-label="Add to cart">${storeLineIcon("cart")}</button>
@@ -1272,8 +1290,8 @@ function renderStoreAppProductCard(product, variant = "featured") {
   const image = productImage(product);
   const title = product.title || product.name || "Product";
   const spec = product.unitLabel || product.category || "1 pc";
-  const pricePaise = Number(product.pricePaise) || 0;
-  const mrpPaise = Number(product.mrpPaise) || pricePaise;
+  const pricePaise = effectivePricePaise(product);
+  const mrpPaise = productReferencePricePaise(product);
   const off = mrpPaise > pricePaise ? Math.round(((mrpPaise - pricePaise) / mrpPaise) * 100) : 0;
   const stock = Number(product.stock) || 0;
   const rating = Number(product.ratingAverage || 4.8);
@@ -1536,7 +1554,9 @@ function renderSellerStoreProductCard(product) {
   const rating = Number(product.ratingAverage || 0);
   const stock = Number(product.stock) || 0;
   const discount = productDiscountPercent(product);
-  const mrp = discount ? product.mrp || rupees(product.mrpPaise) : "";
+  const pricePaise = effectivePricePaise(product);
+  const mrpPaise = productReferencePricePaise(product);
+  const mrp = mrpPaise > pricePaise ? rupees(mrpPaise) : "";
   const sold = productSoldMeta(product);
   return `
     <article class="seller-store-product-card digitaz-deal-card" data-product-card="${escapeHtml(product.id)}">
@@ -1552,8 +1572,9 @@ function renderSellerStoreProductCard(product) {
       <div class="seller-store-product-body">
         <p>${escapeHtml(category)}</p>
         <h4>${escapeHtml(title)}</h4>
+        ${festivalOfferLabel(product) ? `<p class="ax-festival-tag">${escapeHtml(festivalOfferLabel(product))}</p>` : ""}
         <div class="customer-price-row">
-          <strong>${escapeHtml(product.price || "Rs. 0")}</strong>
+          <strong>${rupees(pricePaise)}</strong>
           ${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}
         </div>
         <small>${starRatingMarkup(rating)} ${rating.toFixed(1)}</small>
@@ -1890,6 +1911,7 @@ function setAppNavActive(name = "home") {
 }
 
 function goCustomerHome() {
+  closeCustomerProductModal();
   closeCustomerAccountView();
   closeCustomerStoresView();
   closeMediaFeed({ clearHash: true });
@@ -2032,36 +2054,55 @@ function storeExploreRating(seller) {
   return { avg: Number(avg || 4.8), reviews };
 }
 
+function storeSixDigitId(seller = {}) {
+  const configured = String(seller.storeCode || "").replace(/\D/g, "");
+  if (configured.length === 6) return configured;
+  const source = String(seller.id || seller.email || seller.name || "axzen-store");
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return String(100000 + ((hash >>> 0) % 900000));
+}
+
 function renderStoreExploreCard(seller) {
   const products = seller.products || [];
   const rating = storeExploreRating(seller);
-  const thumbs = products.slice(0, 3).map((product) => productImage(product)).filter(Boolean);
-  const one = thumbs.length === 1;
-  return `<article class="ax-store-explore-card" data-store-row data-open-seller="${escapeHtml(seller.id)}" data-store-name="${escapeHtml((seller.name || "").toLowerCase())}" data-store-category="${escapeHtml((seller.category || "").toLowerCase())}">
-    <div class="ax-store-explore-top">
-      <div>
+  const joined = String(seller.memberSinceLabel || seller.city || "Axzen").replace(/^Joined\s+/i, "");
+  return `<article class="ax-store-explore-card ax-store-profile-card" data-store-row data-store-name="${escapeHtml((seller.name || "").toLowerCase())}" data-store-category="${escapeHtml((seller.category || "").toLowerCase())}">
+    <div class="ax-store-card-profile">
+      <div class="ax-store-card-logo-wrap">
         ${sellerAvatarMarkup(seller.name, seller.profileImageUrl, "ax-store-explore-logo")}
-        <div>
-          <h3>${escapeHtml(seller.name)}</h3>
-          <p>${escapeHtml(seller.category || "Store")} · ${products.length} product${products.length === 1 ? "" : "s"}</p>
-        </div>
+        <small>${storeSixDigitId(seller)}</small>
       </div>
-      <span>Top selling</span>
+      <div class="ax-store-card-identity">
+        <h3>${escapeHtml(seller.name)} ${sellerVerifiedIcon()}</h3>
+        <div class="ax-store-card-rating">${starRatingMarkup(rating.avg)} <strong>${rating.avg.toFixed(1)}</strong> <small>(${compactCount(rating.reviews) || 0})</small></div>
+      </div>
     </div>
-    <div class="ax-store-explore-meta">
-      <span>${storeLineIcon("users")} ${compactCount(seller.followerCount)} Followers</span>
-      <span>${starRatingMarkup(rating.avg)} ${rating.avg.toFixed(1)} (${compactCount(rating.reviews) || 0} reviews)</span>
+    <div class="ax-store-card-stats">
+      <span>${storeLineIcon("users")}<b>${compactCount(seller.followerCount) || 0}</b><small>Followers</small></span>
+      <span>${storeLineIcon("package")}<b>${products.length}</b><small>Products</small></span>
+      <span>${storeLineIcon("calendar")}<b>${escapeHtml(joined)}</b><small>Joined</small></span>
     </div>
-    <div class="ax-store-explore-thumbs ${one ? "is-one" : ""}">
+    <div class="ax-store-card-products">
       ${
-        thumbs.length
-          ? thumbs
-              .map((image, index) => `<figure><img src="${escapeHtml(image)}" alt="${escapeHtml(products[index]?.title || seller.name)}"></figure>`)
+        products.length
+          ? products
+              .slice(0, 3)
+              .map((product) => {
+                const image = productImage(product);
+                return `<span>${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(product.title || "Product")}">` : `<i>${escapeHtml(String(product.title || "P").charAt(0))}</i>`}<small>${escapeHtml(product.title || "Product")}</small></span>`;
+              })
               .join("")
-          : `<p>No products yet.</p>`
+          : `<p>Products will appear here.</p>`
       }
     </div>
-    <button type="button" data-open-seller="${escapeHtml(seller.id)}">Open store ${storeLineIcon("chevron")}</button>
+    <div class="ax-store-card-actions">
+      <button type="button" class="ax-store-card-share" data-share-seller="${escapeHtml(seller.id)}">${storeLineIcon("share")} Share Store</button>
+      <button type="button" class="ax-store-card-open" data-open-seller="${escapeHtml(seller.id)}">Open Store ${storeLineIcon("chevron")}</button>
+    </div>
   </article>`;
 }
 
@@ -2387,7 +2428,7 @@ function festivalOffers() {
 }
 
 function offerImageList(offer = {}) {
-  return [...new Set([...(offer.imageUrls || []), offer.imageUrl].filter(Boolean))];
+  return [...new Set([...(offer.imageUrls || []), offer.imageUrl].filter(Boolean))].slice(0, 4);
 }
 
 function offerProductEntries(offer = {}) {
@@ -2395,16 +2436,25 @@ function offerProductEntries(offer = {}) {
     (entry.productIds || []).map((id) => ({ id: String(id), sellerId: String(entry.sellerId || ""), discount: Number(entry.discountPercent) || 0 }))
   );
   const legacy = (offer.productIds || []).map((id) => ({ id: String(id), sellerId: String(offer.sellerId || ""), discount: Number(offer.discountPercent) || 0 }));
-  return [...fromSellers, ...legacy];
+  const unique = new Map();
+  [...legacy, ...fromSellers].forEach((entry) => {
+    const current = unique.get(entry.id);
+    if (!current || entry.discount >= current.discount) unique.set(entry.id, entry);
+  });
+  return [...unique.values()];
 }
 
 function festivalMetaForProduct(product) {
   const id = String(product?.id || product?._id || "");
+  let best = null;
   for (const offer of festivalOffers()) {
     const entry = offerProductEntries(offer).find((item) => item.id === id);
-    if (entry) return { title: offer.title || "Festival Offer", discount: entry.discount || offer.discountPercent || 0 };
+    if (entry) {
+      const candidate = { title: offer.title || "Festival Offer", discount: entry.discount || offer.discountPercent || 0 };
+      if (!best || candidate.discount > best.discount) best = candidate;
+    }
   }
-  return product?.festivalOffer ? { title: "Festival Offer", discount: Number(product.festivalDiscount) || 0 } : null;
+  return best || (product?.festivalOffer ? { title: "Festival Offer", discount: Number(product.festivalDiscount) || 0 } : null);
 }
 
 function isFestivalOfferProduct(product) {
@@ -2548,7 +2598,7 @@ function renderCustomerSaleBanner() {
         <div class="ax-offer-track" data-offer-track>
           ${adSlides
             .map(
-              (slide, index) => `<article class="ax-offer-slide" data-offer-slide data-open-offer="${escapeHtml(slide.id || "")}" ${slide.linkUrl ? `data-offer-link="${escapeHtml(slide.linkUrl)}"` : ""}>
+              (slide, index) => `<article class="ax-offer-slide" data-offer-slide ${String(slide.id || "").startsWith("legacy-") ? "" : `data-open-offer="${escapeHtml(slide.id || "")}"`} ${slide.linkUrl ? `data-offer-link="${escapeHtml(slide.linkUrl)}"` : ""}>
                 <img src="${escapeHtml(slide.imageUrl)}" alt="${escapeHtml(slide.title || `Shop offer ${index + 1}`)}">
               </article>`
             )
@@ -2845,7 +2895,7 @@ async function openCustomerSellerPage(sellerId, options = {}) {
   const bannerStyle = seller.offerBannerUrl
     ? ` style="background-image: radial-gradient(circle at 86% 18%, rgba(255,255,255,.28), transparent 18%), radial-gradient(circle at 72% 78%, rgba(120,80,255,.42), transparent 32%), linear-gradient(135deg, rgba(47,107,255,.94), rgba(122,98,255,.9)), url('${cssUrl(seller.offerBannerUrl)}')"`
     : "";
-  const featuredProducts = bestProducts.slice(0, 3);
+  const featuredProducts = bestProducts.slice(0, 4);
   const joinedShort = String(seller.memberSinceLabel || "Jan 2023").replace(/^Joined\s+/i, "");
   const chips = storeChipNames(products, store.categories || []);
   const followMarkup = `${isFollowing ? storeLineIcon("heart") : storeLineIcon("plus")} ${isFollowing ? "Following" : "Follow"}`;
@@ -3256,7 +3306,9 @@ function openCustomerProductModal(productId) {
   closeCustomerPopovers();
   document.querySelector("[data-customer-product-modal]")?.remove();
   const images = product.images?.length ? product.images : [product.image].filter(Boolean);
-  const mrp = Number(product.mrpPaise) > Number(product.pricePaise) ? product.mrp || rupees(product.mrpPaise) : "";
+  const pricePaise = effectivePricePaise(product);
+  const mrpPaise = productReferencePricePaise(product);
+  const mrp = mrpPaise > pricePaise ? rupees(mrpPaise) : "";
   const stock = Number(product.stock) || 0;
   const productTitle = product.title || "Product";
   const sellerName = product.sellerName || "Seller";
@@ -3313,7 +3365,7 @@ function openCustomerProductModal(productId) {
           <h2>${escapeHtml(productTitle)}</h2>
           ${festivalOfferLabel(product) ? `<p class="ax-festival-tag">${escapeHtml(festivalOfferLabel(product))}</p>` : ""}
           <p class="customer-product-subtitle">Seller verified product on Axzen.</p>
-          <div class="customer-price-row">${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}<strong>${escapeHtml(product.price || "Rs. 0")}</strong></div>
+          <div class="customer-price-row">${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}<strong>${rupees(pricePaise)}</strong></div>
           <p class="customer-product-rating">${escapeHtml(product.unitLabel || "1 pc")} | ${Number(product.ratingAverage || 0).toFixed(1)} rating (${Number(product.ratingCount) || 0}) ${storeLineIcon("star")} <span>(0 Reviews)</span></p>
           <p class="${stock > 0 ? "stock-left" : "stock-out"} customer-product-stock">${storeLineIcon("package")} ${stock > 0 ? `${Math.min(stock, 5)} items left` : "Currently not available"}</p>
           <div class="customer-product-trusted">
@@ -3479,11 +3531,13 @@ function applyStorefrontCatalog(products = []) {
 
 function restoreCustomerRoute() {
   const urlParams = new URLSearchParams(window.location.search);
+  const offerId = urlParams.get("offer");
   const productId = urlParams.get("product");
   const sellerId = urlParams.get("seller");
   const category = urlParams.get("category");
   const follows = urlParams.get("follows");
-  if (sellerId) openCustomerSellerPage(sellerId, { push: false });
+  if (offerId) openFestivalOffer(offerId);
+  else if (sellerId) openCustomerSellerPage(sellerId, { push: false });
   else if (category) openCustomerCategoryPage(category, { push: false });
   else if (follows) openCustomerFollowsView({ push: false });
   if (productId) {
@@ -3505,8 +3559,8 @@ async function readJsonSafe(response) {
 }
 
 async function fetchCatalogPayload() {
-  const urls = ["/api/customer/catalog"];
-  if (!/axzen\.in$/i.test(location.hostname)) urls.push("https://www.axzen.in/api/customer/catalog");
+  const urls = ["/api/customer/catalog?limit=500"];
+  if (!/axzen\.in$/i.test(location.hostname)) urls.push("https://www.axzen.in/api/customer/catalog?limit=500");
   for (const url of urls) {
     try {
       const response = await fetch(url);
@@ -3961,7 +4015,7 @@ function renderSellerOfferCards(offers = [], products = []) {
           <div class="seller-offer-join" data-seller-offer-form="${escapeHtml(offer.id)}" hidden>
             ${images.map((url) => `<img src="${escapeHtml(url)}" alt="">`).join("")}
             <form data-join-offer="${escapeHtml(offer.id)}">
-              <label>Discount %<input name="discountPercent" type="number" min="0" max="90" value="${escapeHtml(String(mine.discountPercent || 0))}"></label>
+              <label>Discount %<input name="discountPercent" type="number" min="1" max="90" value="${escapeHtml(String(mine.discountPercent || 1))}" required></label>
               <div class="festival-offer-products">
                 ${
                   products.length
@@ -5310,6 +5364,8 @@ document.addEventListener("click", async (event) => {
   const appNav = event.target.closest("[data-app-nav]");
   if (appNav && appNav.closest(".ax-app-nav, .ax-account-overlay")) {
     event.preventDefault();
+    closeCustomerProductModal();
+    closeLoginArea();
     const dest = appNav.dataset.appNav;
     if (dest === "home") goCustomerHome();
     else if (dest === "media") {

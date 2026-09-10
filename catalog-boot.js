@@ -26,7 +26,11 @@
       "beforeend",
       `<aside class="customer-product-modal ax-product-sheet is-open" data-customer-product-modal>
         <article>
-          <button type="button" data-close-customer-product aria-label="Close">Close</button>
+          <button type="button" data-close-customer-product aria-label="Close">
+            <svg class="ax-line-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18"></path>
+            </svg>
+          </button>
           <div class="customer-product-gallery">${
             image
               ? `<img src="${String(image).replace(/"/g, "&quot;")}" alt="">`
@@ -54,9 +58,9 @@
   const grid = document.querySelector("[data-customer-main] .commerce-products, .commerce-products");
   if (!grid) return;
 
-  const urls = ["/api/customer/catalog"];
+  const urls = ["/api/customer/catalog?limit=500"];
   if (!/axzen\.in$/i.test(location.hostname)) {
-    urls.push("https://www.axzen.in/api/customer/catalog");
+    urls.push("https://www.axzen.in/api/customer/catalog?limit=500");
   }
 
   const escape = (value) =>

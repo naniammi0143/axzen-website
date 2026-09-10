@@ -426,13 +426,35 @@ const listSellerFestivalOffers = asyncHandler(async (req, res) => {
       .sort({ title: 1 })
       .lean(),
   ]);
-  success(res, { offers: config?.festivalOffers || [], products, sellerId: seller._id });
+  const offers = (config?.festivalOffers || []).map((offer) => {
+    const ownEntries = (offer.sellerEntries || []).filter((entry) => String(entry.sellerId) === String(seller._id));
+    if (!ownEntries.length && String(offer.sellerId || "") === String(seller._id) && (offer.productIds || []).length) {
+      ownEntries.push({
+        sellerId: String(seller._id),
+        productIds: offer.productIds,
+        discountPercent: offer.discountPercent || 0,
+      });
+    }
+    return {
+      id: offer.id,
+      title: offer.title,
+      imageUrl: offer.imageUrl,
+      imageUrls: offer.imageUrls || [],
+      linkUrl: offer.linkUrl || "",
+      sellerEntries: ownEntries,
+    };
+  });
+  success(res, { offers, products, sellerId: seller._id });
 });
 
 const joinSellerFestivalOffer = asyncHandler(async (req, res) => {
-  const seller = await Seller.findOne({ userId: req.user.id }).select("_id").lean();
+  const seller = await Seller.findOne({ userId: req.user.id }).select("_id status isActive").lean();
   if (!seller) {
     res.status(404).json({ ok: false, message: "Seller profile not found." });
+    return;
+  }
+  if (seller.status !== "active" || seller.isActive !== true) {
+    res.status(403).json({ ok: false, message: "Only active sellers can join offers." });
     return;
   }
   const config = await CustomerAppConfig.findOne({ key: "default" });
@@ -446,13 +468,38 @@ const joinSellerFestivalOffer = asyncHandler(async (req, res) => {
     res.status(404).json({ ok: false, message: "Offer not found." });
     return;
   }
-  const productIds = (Array.isArray(req.body.productIds) ? req.body.productIds : String(req.body.productIds || "").split(","))
-    .map((id) => String(id || "").trim())
-    .filter(Boolean);
+  const productIds = [
+    ...new Set(
+      (Array.isArray(req.body.productIds) ? req.body.productIds : String(req.body.productIds || "").split(","))
+        .map((id) => String(id || "").trim())
+        .filter(Boolean)
+    ),
+  ];
   const discountPercent = Math.max(0, Math.min(90, Number(req.body.discountPercent) || 0));
+  if (productIds.some((id) => !/^[a-f\d]{24}$/i.test(id))) {
+    res.status(400).json({ ok: false, message: "One or more selected products are invalid." });
+    return;
+  }
+  if (productIds.length && discountPercent < 1) {
+    res.status(400).json({ ok: false, message: "Set a discount between 1% and 90%." });
+    return;
+  }
+  if (productIds.length) {
+    const ownedProducts = await Product.find({
+      _id: { $in: productIds },
+      sellerId: seller._id,
+      status: { $in: ["approved", "active"] },
+    })
+      .select("_id")
+      .lean();
+    if (ownedProducts.length !== productIds.length) {
+      res.status(400).json({ ok: false, message: "Select only your approved products." });
+      return;
+    }
+  }
   const current = offers[index].toObject ? offers[index].toObject() : offers[index];
   const sellerEntries = (current.sellerEntries || []).filter((entry) => String(entry.sellerId) !== String(seller._id));
-  sellerEntries.push({ sellerId: String(seller._id), productIds, discountPercent });
+  if (productIds.length) sellerEntries.push({ sellerId: String(seller._id), productIds, discountPercent });
   offers[index].sellerEntries = sellerEntries;
   config.markModified("festivalOffers");
   await config.save();

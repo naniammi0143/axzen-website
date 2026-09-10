@@ -4,10 +4,19 @@ body.ax-track-open {
   overflow: hidden;
 }
 
-body.ax-track-open .ax-app-nav {
-  display: none !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
+html.ax-native-app body.ax-track-open .ax-app-nav {
+  display: grid !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  z-index: 620;
+}
+
+html.ax-native-app body.ax-track-open .ax-track-overlay {
+  bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+}
+
+html.ax-native-app .ax-track-nav {
+  display: none;
 }
 
 body.ax-track-open .customer-toast,

@@ -59,7 +59,7 @@
   const roleViewAccess = {
     superadmin: ["dashboard", "sellers", "products", "orders", "payments", "customers", "customerapp", "delivery", "helpdesk", "employees", "reports", "audit"],
     admin: ["dashboard", "sellers", "products", "orders", "customers", "customerapp", "delivery", "helpdesk", "employees", "reports"],
-    support: ["dashboard", "orders", "customers", "customerapp", "helpdesk"],
+    support: ["dashboard", "orders", "customers", "helpdesk"],
     finance: ["dashboard", "payments", "reports"],
     delivery_manager: ["dashboard", "orders", "delivery"],
   };
@@ -886,10 +886,10 @@
           <button type="button" data-close-offer-form>Close</button>
         </div>
         <label>Offer title<input name="title" value="${escapeHtml(offer.title || "Festival Offer")}" required></label>
-        <label>Image 1 URL<input name="imageUrl1" value="${escapeHtml(images[0] || "")}" placeholder="https://.../offer-1.png" required></label>
-        <label>Image 2 URL<input name="imageUrl2" value="${escapeHtml(images[1] || "")}" placeholder="https://.../offer-2.png"></label>
-        <label>Image 3 URL<input name="imageUrl3" value="${escapeHtml(images[2] || "")}" placeholder="https://.../offer-3.png"></label>
-        <label>Image 4 URL<input name="imageUrl4" value="${escapeHtml(images[3] || "")}" placeholder="https://.../offer-4.png"></label>
+        <label>Image 1 URL<input name="imageUrl1" type="url" value="${escapeHtml(images[0] || "")}" placeholder="https://.../offer-1.png" required></label>
+        <label>Image 2 URL<input name="imageUrl2" type="url" value="${escapeHtml(images[1] || "")}" placeholder="https://.../offer-2.png" required></label>
+        <label>Image 3 URL<input name="imageUrl3" type="url" value="${escapeHtml(images[2] || "")}" placeholder="https://.../offer-3.png" required></label>
+        <label>Image 4 URL<input name="imageUrl4" type="url" value="${escapeHtml(images[3] || "")}" placeholder="https://.../offer-4.png"></label>
         <p>Add 3 to 4 images. Sellers later add their products and discount to this offer.</p>
         <button type="submit">${offer.id ? "Save offer" : "Create offer"}</button>
       </form>
@@ -1505,6 +1505,45 @@
         return;
       }
 
+      const createOffer = event.target.closest("[data-create-offer]");
+      if (createOffer) {
+        event.preventDefault();
+        const host = document.querySelector("[data-offer-form-host]");
+        if (host) host.innerHTML = festivalOfferForm();
+        return;
+      }
+
+      const editOffer = event.target.closest("[data-edit-offer]");
+      if (editOffer) {
+        event.preventDefault();
+        const offer = (state.adminOffers || []).find((item) => String(item.id) === String(editOffer.dataset.editOffer));
+        const host = document.querySelector("[data-offer-form-host]");
+        if (host) host.innerHTML = festivalOfferForm(offer || {});
+        return;
+      }
+
+      const closeOfferForm = event.target.closest("[data-close-offer-form]");
+      if (closeOfferForm) {
+        event.preventDefault();
+        const host = document.querySelector("[data-offer-form-host]");
+        if (host) host.innerHTML = "";
+        return;
+      }
+
+      const deleteOffer = event.target.closest("[data-delete-offer]");
+      if (deleteOffer) {
+        event.preventDefault();
+        if (!window.confirm("Delete this offer and remove all seller items linked to it?")) return;
+        try {
+          await api(`/api/admin/customer-app/offers/${encodeURIComponent(deleteOffer.dataset.deleteOffer)}`, { method: "DELETE" });
+          toast("Offer deleted.");
+          await loadView("customerapp");
+        } catch (error) {
+          toast(error.message, true);
+        }
+        return;
+      }
+
       const target = event.target.closest("[data-action]");
       if (!target) return;
       const id = target.dataset.id;
@@ -1602,44 +1641,6 @@
         return;
       }
 
-      const createOffer = event.target.closest("[data-create-offer]");
-      if (createOffer) {
-        event.preventDefault();
-        const host = document.querySelector("[data-offer-form-host]");
-        if (host) host.innerHTML = festivalOfferForm();
-        return;
-      }
-
-      const editOffer = event.target.closest("[data-edit-offer]");
-      if (editOffer) {
-        event.preventDefault();
-        const offer = (state.adminOffers || []).find((item) => String(item.id) === String(editOffer.dataset.editOffer));
-        const host = document.querySelector("[data-offer-form-host]");
-        if (host) host.innerHTML = festivalOfferForm(offer || {});
-        return;
-      }
-
-      const closeOfferForm = event.target.closest("[data-close-offer-form]");
-      if (closeOfferForm) {
-        event.preventDefault();
-        const host = document.querySelector("[data-offer-form-host]");
-        if (host) host.innerHTML = "";
-        return;
-      }
-
-      const deleteOffer = event.target.closest("[data-delete-offer]");
-      if (deleteOffer) {
-        event.preventDefault();
-        try {
-          await api(`/api/admin/customer-app/offers/${encodeURIComponent(deleteOffer.dataset.deleteOffer)}`, { method: "DELETE" });
-          toast("Offer deleted.");
-          await loadView("customerapp");
-        } catch (error) {
-          toast(error.message, true);
-        }
-        return;
-      }
-
       const uploadAds = event.target.closest("[data-upload-ads]");
       if (uploadAds) {
         event.preventDefault();
@@ -1681,12 +1682,18 @@
       }
 
       const offerForm = event.target.closest("[data-offer-form]");
-      if (offerForm && event.target.closest("button[type='submit']")) {
+      if (offerForm) {
         event.preventDefault();
         const formData = new FormData(offerForm);
         const payload = {
-          title: formData.get("title"),
-          imageUrls: [formData.get("imageUrl1"), formData.get("imageUrl2"), formData.get("imageUrl3"), formData.get("imageUrl4")].filter(Boolean),
+          title: String(formData.get("title") || "").trim(),
+          imageUrls: [
+            ...new Set(
+              [formData.get("imageUrl1"), formData.get("imageUrl2"), formData.get("imageUrl3"), formData.get("imageUrl4")]
+                .map((value) => String(value || "").trim())
+                .filter(Boolean)
+            ),
+          ],
         };
         if (payload.imageUrls.length < 3) {
           toast("Add at least 3 offer images.", true);
