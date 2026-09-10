@@ -21,6 +21,11 @@ const {
   rejectProduct,
   rejectSeller,
   updateCustomerAppConfig,
+  uploadCustomerAppAds,
+  deleteCustomerAppAd,
+  createFestivalOffer,
+  updateFestivalOffer,
+  deleteFestivalOffer,
   reportCustomers,
   reportCompliance,
   reportPayments,
@@ -42,6 +47,7 @@ const {
   updateSettlement,
 } = require("../controllers/adminController");
 const { authenticate, authorizeAdminAccess } = require("../middleware/auth");
+const { multipartForm } = require("../middleware/multipartUpload");
 
 const router = express.Router();
 
@@ -70,6 +76,11 @@ router.patch("/customers/:id", authorizeAdminAccess("customers"), updateCustomer
 
 router.get("/customer-app", authorizeAdminAccess("customerapp"), getCustomerAppConfig);
 router.patch("/customer-app", authorizeAdminAccess("customerapp"), updateCustomerAppConfig);
+router.post("/customer-app/ads", authorizeAdminAccess("customerapp"), multipartForm({ maxBytes: 40 * 1024 * 1024 }), uploadCustomerAppAds);
+router.delete("/customer-app/ads", authorizeAdminAccess("customerapp"), deleteCustomerAppAd);
+router.post("/customer-app/offers", authorizeAdminAccess("customerapp"), createFestivalOffer);
+router.patch("/customer-app/offers/:id", authorizeAdminAccess("customerapp"), updateFestivalOffer);
+router.delete("/customer-app/offers/:id", authorizeAdminAccess("customerapp"), deleteFestivalOffer);
 
 router.get("/payments", authorizeAdminAccess("finance"), listPayments);
 router.get("/finance/report", authorizeAdminAccess("finance"), paymentCommissionReport);

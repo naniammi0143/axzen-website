@@ -52,6 +52,7 @@
 .ax-app-nav [data-app-nav="home"] .ax-nav-ico { --ax-ico: url("assets/icons/home.svg"); }
 .ax-app-nav [data-app-nav="media"] .ax-nav-ico { --ax-ico: url("assets/icons/media.svg"); }
 .ax-app-nav [data-app-nav="cart"] .ax-nav-ico { --ax-ico: url("assets/icons/cart.svg"); }
+.ax-app-nav [data-app-nav="stores"] .ax-nav-ico { --ax-ico: url("assets/icons/stores.svg"); }
 .ax-app-nav [data-app-nav="orders"] .ax-nav-ico { --ax-ico: url("assets/icons/orders.svg"); }
 .ax-app-nav [data-app-nav="account"] .ax-nav-ico { --ax-ico: url("assets/icons/profile.svg"); }
 
@@ -160,7 +161,7 @@ body.ax-account-open {
 .ax-account-overlay {
   position: fixed;
   inset: 0;
-  z-index: 370;
+  z-index: 70;
   display: flex;
   justify-content: center;
   background: #f7f9fb;
@@ -509,7 +510,7 @@ html.ax-native-app .ax-account-overlay {
   color: #ef4444;
 }
 
-@media (max-width: 900px), (display-mode: standalone) {
+html.ax-native-app {
   .storefront-page.axzen-mall {
     padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
     background: #f7f9fb;
@@ -546,12 +547,12 @@ html.ax-native-app .ax-account-overlay {
   .storefront-page.axzen-mall .commerce-search button[type="submit"] span,
   .storefront-page.axzen-mall .brand-mark,
   .storefront-page.axzen-mall .customer-header-logo,
-  .storefront-page.axzen-mall .ax-wordmark,
+  .storefront-page.axzen-mall .ax-logo-svg,
   .storefront-page.axzen-mall .ax-hero-arrow {
     display: none !important;
   }
 
-  .storefront-page.axzen-mall .ax-logo-svg,
+  .storefront-page.axzen-mall .ax-home-mark,
   .storefront-page.axzen-mall .ax-tagline,
   .storefront-page.axzen-mall .ax-deliver-row,
   .storefront-page.axzen-mall .ax-scan-btn,
@@ -592,9 +593,10 @@ html.ax-native-app .ax-account-overlay {
     text-decoration: none;
   }
 
-  .storefront-page.axzen-mall .ax-logo-svg {
-    width: 118px;
-    height: 26px;
+  .storefront-page.axzen-mall .ax-home-mark {
+    width: 24px;
+    height: 24px;
+    color: #102a43;
   }
 
   .storefront-page.axzen-mall .ax-header-actions,
@@ -1083,6 +1085,7 @@ html.ax-native-app .ax-account-overlay {
     position: relative;
     display: grid;
     place-items: center;
+    overflow: visible;
     min-height: 120px;
     background: #f7f9fb;
     border-radius: 12px;
@@ -1092,7 +1095,9 @@ html.ax-native-app .ax-account-overlay {
   .storefront-page.axzen-mall .commerce-product-image {
     width: 100%;
     height: 120px;
+    padding: 10px;
     object-fit: contain;
+    object-position: center;
     background: transparent;
     border-radius: 12px;
   }
@@ -1114,21 +1119,36 @@ html.ax-native-app .ax-account-overlay {
 
   .storefront-page.axzen-mall .product-wishlist {
     position: absolute;
-    top: 8px;
-    right: 8px;
-    z-index: 1;
+    top: 6px;
+    right: 6px;
+    z-index: 4;
     display: grid;
     place-items: center;
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
+    overflow: visible;
     color: #102a43;
     background: #fff;
     border: 1px solid #e1e7ed;
     border-radius: 50%;
+    box-shadow: 0 4px 10px rgba(16, 42, 67, 0.1);
+  }
+
+  .storefront-page.axzen-mall .product-wishlist .ax-line-icon {
+    width: 16px;
+    height: 16px;
+    overflow: visible;
   }
 
   .storefront-page.axzen-mall .product-wishlist.active {
-    color: #ef4444;
+    color: #e11d2e;
+    border-color: #f8d4d7;
+  }
+
+  .storefront-page.axzen-mall .product-wishlist.active .ax-line-icon,
+  .storefront-page.axzen-mall .product-wishlist.active .ax-line-icon path {
+    fill: currentColor;
+    stroke: currentColor;
   }
 
   .storefront-page.axzen-mall .commerce-product-body {
@@ -1347,12 +1367,21 @@ html.ax-native-app .storefront-page.axzen-mall .ax-header {
 
 body.ax-track-open .ax-ios-statusbar,
 body.ax-account-open .ax-ios-statusbar,
-body.ax-media-open .ax-ios-statusbar,
-body.ax-account-open .ax-app-nav {
+body.ax-media-open .ax-ios-statusbar {
   visibility: hidden;
 }
 
-body.ax-media-open .ax-app-nav {
+html.ax-native-app body.ax-account-open .ax-app-nav,
+html.ax-native-app body.ax-stores-open .ax-app-nav,
+html.ax-native-app body.ax-festival-open .ax-app-nav,
+html.ax-native-app .customer-product-modal ~ .ax-app-nav,
+html.ax-native-app body:has([data-customer-product-modal]) .ax-app-nav {
+  display: grid !important;
+  visibility: visible !important;
+  z-index: 400;
+}
+
+html.ax-native-app body.ax-media-open .ax-app-nav {
   display: grid !important;
   z-index: 390;
 }
@@ -1367,4 +1396,520 @@ body.ax-media-open .ax-app-nav {
     border-right: 1px solid #e1e7ed;
     box-shadow: 0 18px 50px rgba(16, 42, 67, 0.08);
   }
+}
+
+.storefront-page.axzen-mall .customer-login-section.ax-login-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  display: grid;
+  place-items: stretch;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
+  color: #102a43;
+  background: #f7f9fb !important;
+  backdrop-filter: none;
+}
+
+.storefront-page.axzen-mall .customer-login-section.ax-login-sheet .ax-login-card {
+  display: grid;
+  align-content: start;
+  width: min(430px, 100%);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 18px 20px 32px;
+  color: #102a43;
+  background: #fff;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.storefront-page.axzen-mall .ax-login-head {
+  display: grid;
+  grid-template-columns: 72px 1fr 72px;
+  align-items: center;
+  margin-bottom: 28px;
+}
+
+.storefront-page.axzen-mall .ax-login-head p {
+  margin: 0;
+  text-align: center;
+  color: #102a43;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.storefront-page.axzen-mall .customer-login-section .ax-login-back {
+  justify-self: start;
+  min-height: 36px;
+  padding: 0 12px;
+  color: #102a43;
+  background: #f7f9fb;
+  border: 1px solid #e1e7ed;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.storefront-page.axzen-mall .ax-login-intro h2 {
+  margin: 0 0 8px;
+  color: #102a43;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.storefront-page.axzen-mall .ax-login-intro p {
+  margin: 0 0 22px;
+  color: #758394;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.storefront-page.axzen-mall .ax-login-sheet .phone-login-field {
+  display: grid;
+  gap: 8px;
+}
+
+.storefront-page.axzen-mall .ax-login-sheet .phone-login-field span,
+.storefront-page.axzen-mall .ax-login-sheet .otp-field span {
+  color: #102a43;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.storefront-page.axzen-mall .ax-login-sheet .phone-input-row {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.storefront-page.axzen-mall .ax-login-sheet select,
+.storefront-page.axzen-mall .ax-login-sheet input {
+  min-height: 52px;
+  padding: 0 14px;
+  color: #102a43;
+  background: #f7f9fb;
+  border: 1px solid #e1e7ed;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.storefront-page.axzen-mall .ax-login-sheet input[name="otp"] {
+  letter-spacing: 0.35em;
+  text-align: center;
+  font-size: 22px;
+}
+
+.storefront-page.axzen-mall .ax-login-sheet button[data-send-otp],
+.storefront-page.axzen-mall .ax-login-sheet button[data-verify-otp] {
+  min-height: 52px;
+  color: #fff;
+  background: #ff5733;
+  border: 0;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.storefront-page.axzen-mall .ax-login-change {
+  min-height: 40px;
+  color: #102a43;
+  background: transparent;
+  border: 0;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.storefront-page.axzen-mall .ax-login-sheet .login-message {
+  border-radius: 12px;
+}
+
+.storefront-page.axzen-mall .ax-login-sheet .recaptcha-box,
+.storefront-page.axzen-mall .ax-login-sheet .grecaptcha-badge {
+  display: none !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .customer-login-section.ax-login-sheet {
+  padding: 0 !important;
+}
+
+@media (min-width: 760px) {
+  .storefront-page.axzen-mall .customer-login-section.ax-login-sheet {
+    place-items: center;
+    padding: 24px;
+    background:
+      radial-gradient(circle at top left, rgba(255, 87, 51, 0.12), transparent 36%),
+      #f7f9fb !important;
+  }
+
+  .storefront-page.axzen-mall .customer-login-section.ax-login-sheet .ax-login-card {
+    min-height: auto;
+    padding: 28px 28px 32px;
+    border: 1px solid #e1e7ed;
+    border-radius: 24px;
+    box-shadow: 0 18px 50px rgba(16, 42, 67, 0.08);
+  }
+}
+
+html.ax-native-app .ax-account-overlay,
+html.ax-native-app .ax-stores-overlay,
+html.ax-native-app .ax-festival-overlay {
+  padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+}
+
+.ax-account-sheet {
+  position: relative;
+  z-index: 2;
+  margin-bottom: 14px;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid #e1e7ed;
+  border-radius: 18px;
+}
+
+.ax-account-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.ax-account-sheet-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.ax-account-sheet form,
+.ax-account-saved-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ax-account-sheet label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ax-account-sheet input,
+.ax-account-sheet textarea,
+.ax-account-sheet select {
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid #e1e7ed;
+  border-radius: 12px;
+}
+
+.ax-account-sheet button[type="submit"],
+.ax-account-sheet-head button {
+  min-height: 40px;
+  padding: 0 12px;
+  color: #fff;
+  background: #102a43;
+  border: 0;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.ax-account-saved-list article {
+  padding: 10px 12px;
+  background: #f7f9fb;
+  border-radius: 12px;
+}
+
+.ax-stores-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: #f7f9fb;
+  color: #102a43;
+}
+
+.ax-stores-screen {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  height: 100%;
+}
+
+.ax-stores-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 18px 18px 16px;
+  color: #fff;
+  background: #102a43;
+}
+
+.ax-stores-head h1 {
+  margin: 0 0 4px;
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.ax-stores-head p {
+  margin: 0;
+  color: #c5d0db;
+  font-size: 13px;
+}
+
+.ax-stores-head .ax-line-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.ax-stores-search {
+  display: block;
+  margin: -14px 16px 0;
+}
+
+.ax-stores-search input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 16px;
+  background: #fff;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(16, 42, 67, 0.08);
+}
+
+.ax-stores-explore-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 16px 18px 0;
+}
+
+.ax-stores-explore-label h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.ax-stores-explore-label small {
+  color: #7b8794;
+}
+
+.ax-stores-list {
+  overflow: auto;
+  display: grid;
+  gap: 12px;
+  padding: 12px 16px calc(76px + env(safe-area-inset-bottom, 0px));
+}
+
+.ax-store-explore-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 8px 24px rgba(16, 42, 67, 0.06);
+}
+
+.ax-store-explore-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.ax-store-explore-top > div {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ax-store-explore-top h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.ax-store-explore-top p {
+  margin: 2px 0 0;
+  color: #7b8794;
+  font-size: 12px;
+}
+
+.ax-store-explore-top span {
+  flex: 0 0 auto;
+  color: #102a43;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.ax-store-explore-logo {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  color: #fff;
+  background: #102a43;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.ax-store-explore-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ax-store-explore-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  color: #5b6775;
+  font-size: 12px;
+}
+
+.ax-store-explore-thumbs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ax-store-explore-thumbs.is-one {
+  grid-template-columns: 1fr;
+}
+
+.ax-store-explore-thumbs figure {
+  margin: 0;
+  overflow: hidden;
+  background: #f4f6f8;
+  border-radius: 14px;
+}
+
+.ax-store-explore-thumbs img {
+  display: block;
+  width: 100%;
+  height: 86px;
+  object-fit: contain;
+  object-position: center;
+}
+
+.ax-store-explore-thumbs.is-one img {
+  height: 140px;
+}
+
+.ax-store-explore-card > button {
+  min-height: 44px;
+  color: #fff;
+  background: #ff5733;
+  border: 0;
+  border-radius: 999px;
+  font-weight: 800;
+}
+
+.ax-festival-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: #f7f9fb;
+}
+
+.ax-festival-screen {
+  height: 100%;
+  overflow: auto;
+  padding: 16px 16px calc(84px + env(safe-area-inset-bottom, 0px));
+}
+
+.ax-festival-screen header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.ax-festival-screen header button,
+.ax-festival-card {
+  background: #fff;
+  border: 0;
+  border-radius: 14px;
+}
+
+.ax-festival-screen header button {
+  min-height: 40px;
+  padding: 0 12px;
+  color: #fff;
+  background: #102a43;
+  font-weight: 700;
+}
+
+.ax-festival-tag {
+  margin: 0;
+  color: #e11d2e;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ax-festival-card {
+  display: grid;
+  gap: 10px;
+  overflow: hidden;
+  box-shadow: 0 8px 20px rgba(16, 42, 67, 0.06);
+}
+
+.ax-festival-card img {
+  width: 100%;
+  height: 140px;
+  object-fit: contain;
+  background: #eef2f6;
+}
+
+.ax-festival-card h3,
+.ax-festival-card p {
+  margin: 0;
+  padding: 0 12px;
+}
+
+.ax-festival-card p {
+  padding-bottom: 12px;
+  color: #7b8794;
+}
+
+.ax-store-offer-list {
+  display: grid;
+  gap: 12px;
+}
+
+.ax-offer-slide {
+  cursor: pointer;
+}
+
+.ax-offer-box {
+  overflow: hidden;
+}
+
+.ax-offer-viewport {
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  background: #eef2f6;
+}
+
+.ax-offer-track {
+  display: flex;
+  height: 100%;
+  transition: transform 0.55s ease;
+}
+
+.ax-offer-slide {
+  min-width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background: #eef2f6;
+}
+
+.ax-offer-slide img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
 }

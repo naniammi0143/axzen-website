@@ -99,10 +99,9 @@ export async function getPhoneVerifier(auth, containerId) {
   (async () => {
     try {
       clearCachedVerifier(containerId);
-      const visible = isNativeApp();
-      ensureRecaptchaContainer(containerId, visible);
+      ensureRecaptchaContainer(containerId, false);
       const verifier = new RecaptchaVerifier(auth, containerId, {
-        size: visible ? "normal" : "invisible",
+        size: "invisible",
       });
       await verifier.render();
       verifierCache.set(containerId, verifier);
@@ -123,10 +122,9 @@ export async function getPhoneVerifier(auth, containerId) {
       }
 
       try {
-        const visible = isNativeApp();
-        ensureRecaptchaContainer(containerId, visible);
+        ensureRecaptchaContainer(containerId, false);
         const retry = new RecaptchaVerifier(auth, containerId, {
-          size: visible ? "normal" : "invisible",
+          size: "invisible",
         });
         await retry.render();
         verifierCache.set(containerId, retry);

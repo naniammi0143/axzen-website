@@ -94,7 +94,7 @@ body.ax-vstore-open .ax-vstore {
   background-repeat: no-repeat;
   border-radius: 28px;
   transform-origin: top center;
-  transition: padding 0.35s ease, border-radius 0.35s ease, margin 0.35s ease;
+  transition: padding 0.5s cubic-bezier(0.22, 1, 0.36, 1), border-radius 0.5s ease, margin 0.5s ease;
 }
 
 .ax-vstore-hero::after {
@@ -579,12 +579,26 @@ html.ax-native-app .storefront-page.customer-subpage-open .ax-footer {
   margin: 0 0 2px;
 }
 
+.ax-vstore-badge,
+.ax-vstore-tag,
+.ax-vstore-rating-full,
+.ax-vstore-stats,
+.ax-vstore-cta {
+  max-height: 120px;
+  opacity: 1;
+  overflow: hidden;
+  transition: max-height 0.45s ease, opacity 0.35s ease, margin 0.35s ease;
+}
+
 .ax-vstore:not(.ax-vstore-mode-home) .ax-vstore-badge,
 .ax-vstore:not(.ax-vstore-mode-home) .ax-vstore-tag,
 .ax-vstore:not(.ax-vstore-mode-home) .ax-vstore-rating-full,
 .ax-vstore:not(.ax-vstore-mode-home) .ax-vstore-stats,
 .ax-vstore:not(.ax-vstore-mode-home) .ax-vstore-cta {
-  display: none !important;
+  max-height: 0;
+  opacity: 0;
+  margin: 0;
+  pointer-events: none;
 }
 
 .ax-vstore:not(.ax-vstore-mode-home) .ax-vstore-trust {
@@ -614,18 +628,32 @@ html.ax-native-app .storefront-page.customer-subpage-open .ax-footer {
   white-space: nowrap;
 }
 
+.ax-vstore-avatar,
+.ax-vstore-copy h2 {
+  transition: width 0.45s ease, height 0.45s ease, font-size 0.45s ease, margin 0.45s ease;
+}
+
 .ax-vstore-body.ax-vstore-zoom-in {
-  animation: ax-vstore-zoom-in 0.42s ease;
+  animation: ax-vstore-zoom-in 0.58s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .ax-vstore-body.ax-vstore-zoom-out {
-  animation: ax-vstore-zoom-out 0.42s ease;
+  animation: ax-vstore-zoom-out 0.58s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ax-vstore.ax-vstore-enter {
+  animation: ax-vstore-zoom-in 0.52s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ax-vstore.ax-vstore-leave {
+  animation: ax-vstore-leave 0.36s ease forwards;
+  pointer-events: none;
 }
 
 @keyframes ax-vstore-zoom-in {
   from {
     opacity: 0;
-    transform: scale(0.92) translateY(16px);
+    transform: scale(0.88) translateY(28px);
   }
   to {
     opacity: 1;
@@ -636,11 +664,22 @@ html.ax-native-app .storefront-page.customer-subpage-open .ax-footer {
 @keyframes ax-vstore-zoom-out {
   from {
     opacity: 0;
-    transform: scale(1.08);
+    transform: scale(1.12);
   }
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes ax-vstore-leave {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.94) translateY(16px);
   }
 }
 
@@ -767,7 +806,7 @@ html.ax-native-app .storefront-page.customer-subpage-open .ax-footer {
   position: absolute;
   top: 6px;
   right: 6px;
-  z-index: 1;
+  z-index: 4;
   display: grid;
   place-items: center;
   width: 28px;

@@ -1,11 +1,4 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics.js";
-import {
-  getAuth,
-  signInWithPhoneNumber,
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { firebaseConfig } from "./firebase-config.js";
-import { getPhoneVerifier, isFirebasePhoneTestMode, isNativeApp, prepareFirebasePhoneAuth, resetPhoneVerifier, withTimeout } from "./firebase-phone.js";
 import { closeMediaFeed, isMediaOpen, openMediaFeed } from "./media.js";
 import {
   fillCountrySelects,
@@ -29,13 +22,29 @@ import {
   };
 })();
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-prepareFirebasePhoneAuth(auth);
-try {
-  getAnalytics(app);
-} catch (error) {
-  void error;
+function isNativeApp() {
+  return Boolean(window.Capacitor?.isNativePlatform?.() || document.documentElement.classList.contains("ax-native-app"));
+}
+
+let firebaseAuthApi = null;
+async function loadFirebaseAuth() {
+  if (firebaseAuthApi) return firebaseAuthApi;
+  const [{ initializeApp }, { getAuth, signInWithPhoneNumber }, phone] = await Promise.all([
+    import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js"),
+    import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js"),
+    import("./firebase-phone.js"),
+  ]);
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  phone.prepareFirebasePhoneAuth(auth);
+  try {
+    const { getAnalytics } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics.js");
+    getAnalytics(app);
+  } catch {
+    // Analytics is optional.
+  }
+  firebaseAuthApi = { auth, signInWithPhoneNumber, phone };
+  return firebaseAuthApi;
 }
 
 const phoneForms = document.querySelectorAll(".firebase-phone-form");
@@ -77,6 +86,9 @@ const sellerStoreCache = new Map();
 
 const CART_KEY = "axzenCustomerCart";
 const ADDRESS_KEY = "axzenCustomerAddress";
+const ADDRESS_LIST_KEY = "axzenCustomerAddresses";
+const CUSTOMER_PROFILE_KEY = "axzenCustomerProfile";
+const CUSTOMER_PAYMENTS_KEY = "axzenCustomerPayments";
 const CUSTOMER_FOLLOWS_KEY = "axzenCustomerFollows";
 const CUSTOMER_RECENT_KEY = "axzenCustomerRecentProducts";
 const CUSTOMER_LOCATION_KEY = "axzenCustomerLocation";
@@ -135,6 +147,7 @@ const sellerSectionLabels = {
   employees: "Employees",
   profile: "Profile",
   support: "Support",
+  offers: "Offers",
 };
 
 const sellerHashSections = {
@@ -147,6 +160,7 @@ const sellerHashSections = {
   "#sellerEmployees": "employees",
   "#sellerAbout": "profile",
   "#sellerSupport": "support",
+  "#sellerOffers": "offers",
 };
 
 loginNavLinks.forEach((link) => {
@@ -162,6 +176,16 @@ function setLoginMessage(form, message, isError = false) {
   messageElement.style.display = "block";
 }
 
+function setCustomerLoginCopy(step = "phone") {
+  const title = document.querySelector("[data-login-title]");
+  const subtitle = document.querySelector("[data-login-subtitle]");
+  if (title) title.textContent = step === "otp" ? "Enter OTP" : "Enter mobile number";
+  if (subtitle) {
+    subtitle.textContent =
+      step === "otp" ? "SMS lo vachina 6 digits type cheyandi." : "Number confirm ayyaka OTP box open avuthundi.";
+  }
+}
+
 function openLoginArea() {
   if (!loginSection) return;
   closeCustomerPopovers();
@@ -169,12 +193,8 @@ function openLoginArea() {
   loginSection.hidden = false;
   if (loginSection.classList.contains("customer-login-section")) {
     document.body.classList.add("customer-login-open");
+    setCustomerLoginCopy("phone");
     loginSection.querySelector("input[name='phone']")?.focus();
-    if (isNativeApp()) {
-      loginSection.querySelectorAll(".firebase-phone-form").forEach((form) => {
-        getRecaptcha(form).catch(() => {});
-      });
-    }
     return;
   }
   loginSection.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -193,13 +213,19 @@ function resetPhoneLoginForm(form) {
   if (sendButton) {
     sendButton.hidden = false;
     sendButton.disabled = false;
-    sendButton.textContent = "Send OTP";
+    sendButton.textContent = form.closest(".customer-login-section") ? "Get OTP" : "Send OTP";
   }
-  if (verifyButton) verifyButton.hidden = true;
+  if (verifyButton) {
+    verifyButton.hidden = true;
+    verifyButton.disabled = false;
+    verifyButton.textContent = form.closest(".customer-login-section") ? "Login" : "Verify and continue";
+  }
+  form.querySelector("[data-change-number]") && (form.querySelector("[data-change-number]").hidden = true);
   if (phoneInput) phoneInput.readOnly = false;
   if (countrySelect) countrySelect.disabled = false;
   if (otpInput) otpInput.value = "";
   if (otpGroup) otpGroup.hidden = true;
+  if (form.closest(".customer-login-section")) setCustomerLoginCopy("phone");
   if (messageElement) {
     messageElement.textContent = "";
     messageElement.classList.remove("error");
@@ -486,7 +512,8 @@ function storeLineIcon(name = "badge") {
     refresh: `<path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 5v5h-5"/>`,
     percent: `<circle cx="8" cy="8" r="2"/><circle cx="16" cy="16" r="2"/><path d="m18 6-12 12"/>`,
     share: `<circle cx="18" cy="5" r="2.4"/><circle cx="6" cy="12" r="2.4"/><circle cx="18" cy="19" r="2.4"/><path d="m8.2 10.8 7.6-4.2M8.2 13.2l7.6 4.2"/>`,
-    heart: `<path d="M12 20s-7-4.4-7-9.2A3.8 3.8 0 0 1 12 7.6a3.8 3.8 0 0 1 7 3.2C19 15.6 12 20 12 20z"/>`,
+    heart: `<path d="M12 20.2 4.7 13a4.8 4.8 0 0 1 0-6.8 4.7 4.7 0 0 1 6.7 0l.6.6.6-.6a4.7 4.7 0 0 1 6.7 0 4.8 4.8 0 0 1 0 6.8z"/>`,
+    heartFill: `<path d="M12 20.2 4.7 13a4.8 4.8 0 0 1 0-6.8 4.7 4.7 0 0 1 6.7 0l.6.6.6-.6a4.7 4.7 0 0 1 6.7 0 4.8 4.8 0 0 1 0 6.8z" fill="currentColor"/>`,
     chat: `<path d="M5 17.5 3.5 21 8 19.2A9 9 0 1 0 5 17.5z"/>`,
     cart: `<path d="M4 5h2l1.6 9.2h9.7L20 8H7"/><circle cx="9" cy="19" r="1.4"/><circle cx="17" cy="19" r="1.4"/>`,
     search: `<circle cx="11" cy="11" r="6"/><path d="m20 20-3.5-3.5"/>`,
@@ -618,13 +645,15 @@ function productImgTag(src, alt, extra = "") {
 }
 
 function findStorefrontProduct(productId) {
+  const boot = Array.isArray(window.__axzenBootCatalog) ? window.__axzenBootCatalog : [];
   const fromCatalog = storefrontProductsCache.find((item) => String(item.id) === String(productId));
   if (fromCatalog) return fromCatalog;
   for (const store of sellerStoreCache.values()) {
     const match = (store.products || []).find((item) => String(item.id) === String(productId));
     if (match) return match;
   }
-  return null;
+  const fromBoot = boot.find((item) => String(item.id) === String(productId));
+  return fromBoot ? decorateCatalogProduct(fromBoot) : null;
 }
 
 function mergeStorefrontProducts(products = []) {
@@ -841,6 +870,7 @@ function toggleCustomerWishlist(productId) {
   document.querySelectorAll(`[data-wishlist-product="${CSS.escape(String(productId))}"]`).forEach((button) => {
     button.classList.toggle("active", !exists);
     button.setAttribute("aria-pressed", String(!exists));
+    button.innerHTML = storeLineIcon(!exists ? "heartFill" : "heart");
   });
   updateCustomerHeaderCounts();
   showCustomerToast(`${product?.title || "Product"} ${exists ? "removed from wishlist" : "added to wishlist"}.`);
@@ -1214,11 +1244,12 @@ function renderStorefrontProduct(product) {
             ? `<img class="commerce-product-image commerce-product-photo" src="${escapeHtml(image)}" alt="${escapeHtml(title)}" loading="lazy">`
             : `<div class="commerce-product-image">${escapeHtml(category)}</div>`
         }
-        <button class="product-wishlist ${isWishlisted(product.id) ? "active" : ""}" type="button" data-wishlist-product="${escapeHtml(product.id)}" aria-pressed="${isWishlisted(product.id)}" aria-label="Add ${escapeHtml(title)} to wishlist">${storeLineIcon("heart")}</button>
+        <button class="product-wishlist ${isWishlisted(product.id) ? "active" : ""}" type="button" data-wishlist-product="${escapeHtml(product.id)}" aria-pressed="${isWishlisted(product.id)}" aria-label="Add ${escapeHtml(title)} to wishlist">${storeLineIcon(isWishlisted(product.id) ? "heartFill" : "heart")}</button>
       </div>
       <div class="commerce-product-body">
         <p class="commerce-product-category">${escapeHtml(category)}</p>
         <h3>${escapeHtml(title)}</h3>
+        ${festivalOfferLabel(product) ? `<p class="ax-festival-tag">${escapeHtml(festivalOfferLabel(product))}</p>` : ""}
         <p class="commerce-product-seller">
           ${sellerAvatarMarkup(sellerName, sellerLogo)}
           <button class="seller-hash-link" type="button" data-open-seller="${escapeHtml(product.sellerId)}">${escapeHtml(sellerName)}</button>
@@ -1254,13 +1285,14 @@ function renderStoreAppProductCard(product, variant = "featured") {
       ${off ? `<span class="ax-store-off">-${off}%</span>` : ""}
       ${
         grid
-          ? `<button class="product-wishlist ${isWishlisted(product.id) ? "active" : ""}" type="button" data-wishlist-product="${escapeHtml(product.id)}" aria-pressed="${isWishlisted(product.id)}" aria-label="Save ${escapeHtml(title)}">${storeLineIcon("heart")}</button>`
+          ? `<button class="product-wishlist ${isWishlisted(product.id) ? "active" : ""}" type="button" data-wishlist-product="${escapeHtml(product.id)}" aria-pressed="${isWishlisted(product.id)}" aria-label="Save ${escapeHtml(title)}">${storeLineIcon(isWishlisted(product.id) ? "heartFill" : "heart")}</button>`
           : ""
       }
       <div class="ax-store-product-media">
         ${productImgTag(image, title, 'loading="lazy"')}
       </div>
       <h4>${escapeHtml(title)}</h4>
+      ${festivalOfferLabel(product) ? `<p class="ax-festival-tag">${escapeHtml(festivalOfferLabel(product))}</p>` : ""}
       <p>${escapeHtml(spec)}</p>
       ${
         grid
@@ -1323,7 +1355,7 @@ function renderVstoreCategoryTile(category, products = []) {
 }
 
 function storeTabTitle(tab = "home") {
-  return { home: "Seller Store", all: "All Products", categories: "Categories", reviews: "Store Reviews" }[tab] || "Seller Store";
+  return { home: "Seller Store", all: "All Products", categories: "Categories", reviews: "Store Reviews", offers: "Offers" }[tab] || "Seller Store";
 }
 
 function activateSellerStoreTab(page, tab, { animate = true } = {}) {
@@ -1334,7 +1366,7 @@ function activateSellerStoreTab(page, tab, { animate = true } = {}) {
   });
   const title = page.querySelector("[data-store-title]");
   if (title) title.textContent = storeTabTitle(tab);
-  page.classList.remove("ax-vstore-mode-home", "ax-vstore-mode-all", "ax-vstore-mode-categories", "ax-vstore-mode-reviews");
+  page.classList.remove("ax-vstore-mode-home", "ax-vstore-mode-all", "ax-vstore-mode-categories", "ax-vstore-mode-reviews", "ax-vstore-mode-offers");
   page.classList.add(`ax-vstore-mode-${tab}`);
   page.dataset.storeTab = tab;
   page.querySelectorAll("[data-store-panel]").forEach((panel) => {
@@ -1346,7 +1378,7 @@ function activateSellerStoreTab(page, tab, { animate = true } = {}) {
     void stage.offsetWidth;
     stage.classList.add(tab === "home" ? "ax-vstore-zoom-out" : "ax-vstore-zoom-in");
   }
-  window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
 }
 
 function filterVstoreCatalog(page) {
@@ -1508,7 +1540,7 @@ function renderSellerStoreProductCard(product) {
   const sold = productSoldMeta(product);
   return `
     <article class="seller-store-product-card digitaz-deal-card" data-product-card="${escapeHtml(product.id)}">
-      <button class="product-wishlist ${isWishlisted(product.id) ? "active" : ""}" type="button" data-wishlist-product="${escapeHtml(product.id)}" aria-pressed="${isWishlisted(product.id)}" aria-label="Add ${escapeHtml(title)} to wishlist">&hearts;</button>
+      <button class="product-wishlist ${isWishlisted(product.id) ? "active" : ""}" type="button" data-wishlist-product="${escapeHtml(product.id)}" aria-pressed="${isWishlisted(product.id)}" aria-label="Add ${escapeHtml(title)} to wishlist">${storeLineIcon(isWishlisted(product.id) ? "heartFill" : "heart")}</button>
       <div class="seller-store-product-media">
         ${discount ? `<span class="digitaz-off">-${discount}%</span>` : ""}
         ${
@@ -1598,7 +1630,7 @@ function setCustomerSubpageMode(isSubpage) {
 
 function setCustomerHistory(route, value, replace = false) {
   const url = new URL(window.location.href);
-  ["seller", "category", "follows"].forEach((key) => url.searchParams.delete(key));
+  ["seller", "category", "follows", "offer"].forEach((key) => url.searchParams.delete(key));
   if (route && value) url.searchParams.set(route, value);
   const method = replace ? "replaceState" : "pushState";
   history[method]({ customerRoute: route || "home", value: value || "" }, "", `${url.pathname}${url.search}`);
@@ -1842,22 +1874,7 @@ function axAppIcon(paths) {
 }
 
 function axBrandLockup(extraClass = "") {
-  return `
-    <span class="ax-track-wordmark ${extraClass}">
-      <svg class="ax-track-logo-svg ax-account-logo-svg" viewBox="0 0 124 28" aria-hidden="true">
-        <path fill="#102A43" fill-rule="evenodd" d="M14.1 23.4c-4.7 0-7.8-3-7.8-7.4 0-4.6 3.2-7.6 7.9-7.6 4.6 0 7.8 3 7.8 7.6 0 4.4-3.1 7.4-7.9 7.4zm0-2.45c2.75 0 4.4-1.85 4.4-4.95 0-3.15-1.65-5.1-4.4-5.1s-4.4 1.95-4.4 5.1c0 3.1 1.65 4.95 4.4 4.95z"/>
-        <path fill="#102A43" d="M25.2 23.2 28.9 17.4 25.4 11.8h3.35l2.05 3.7 2.05-3.7h3.3L32.6 17.4l3.75 5.8h-3.45l-2.2-3.85-2.2 3.85z"/>
-        <path fill="#102A43" d="M40.6 11.8h11v2.2l-7.55 6.85h7.85v2.35H40.3v-2.2l7.6-6.85H40.6z"/>
-        <path fill="#102A43" d="M55.7 23.4c-4.55 0-7.55-3-7.55-7.4 0-4.7 3.15-7.6 7.65-7.6 3.9 0 6.85 2.05 7.25 5.75h-2.9c-.35-2-1.9-3.25-4.3-3.25-2.75 0-4.5 1.95-4.5 5.15 0 3.05 1.75 4.9 4.6 4.9 2.45 0 4-1.3 4.35-3.4h2.9c-.5 3.7-3.4 5.85-7.3 5.85z"/>
-        <g fill="none" stroke="#102A43" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="75.4" y="10.2" width="15.4" height="13.1" rx="2.1"/>
-          <path d="M79.15 10.35V7.55a2 2 0 0 1 3.85 0v2.8"/>
-          <path d="M83.2 10.35V7.55a2 2 0 0 1 3.85 0v2.8"/>
-          <path d="M75.4 15.35h15.4"/>
-        </g>
-      </svg>
-    </span>
-  `;
+  return `<span class="ax-track-wordmark ${extraClass}" hidden></span>`;
 }
 
 function maskCustomerPhone(phone = "") {
@@ -1874,16 +1891,21 @@ function setAppNavActive(name = "home") {
 
 function goCustomerHome() {
   closeCustomerAccountView();
+  closeCustomerStoresView();
   closeMediaFeed({ clearHash: true });
   closeCustomerTrackOrderView({ clearHash: true });
   closeCustomerCartOverlay();
   closeLoginArea();
+  closeCustomerFestivalOffer();
   document.body.classList.remove("ax-shop-mode");
-  resetCustomerMain();
-  renderStorefrontProducts(storefrontProductsCache);
-  history.replaceState({ customerRoute: "home", value: "" }, "", `${location.pathname}${location.search}`);
-  setAppNavActive("home");
-  window.scrollTo({ top: 0, behavior: "instant" });
+  resetCustomerMain().then(() => {
+    renderStorefrontProducts(storefrontProductsCache);
+    const homeUrl = new URL(window.location.href);
+    homeUrl.searchParams.delete("offer");
+    history.replaceState({ customerRoute: "home", value: "" }, "", `${homeUrl.pathname}${homeUrl.search}`);
+    setAppNavActive("home");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
 }
 
 function openCustomerBrowse() {
@@ -1896,6 +1918,189 @@ function openCustomerBrowse() {
   setAppNavActive("home");
   history.replaceState({ customerRoute: "browse", value: "1" }, "", `${location.pathname}${location.search}#products`);
   window.scrollTo({ top: 0, behavior: "instant" });
+}
+
+function closeCustomerStoresView() {
+  document.querySelector("[data-customer-stores]")?.remove();
+  document.body.classList.remove("ax-stores-open");
+}
+
+function getCustomerAddressList() {
+  const list = readJsonArray(ADDRESS_LIST_KEY);
+  if (list.length) return list;
+  const one = getSavedCustomerAddress();
+  if (one.address || one.fullName) return [{ ...one, id: "default" }];
+  return [];
+}
+
+function getCustomerProfile() {
+  try {
+    return JSON.parse(localStorage.getItem(CUSTOMER_PROFILE_KEY) || "{}") || {};
+  } catch {
+    return {};
+  }
+}
+
+function getCustomerPayments() {
+  return readJsonArray(CUSTOMER_PAYMENTS_KEY);
+}
+
+function renderAccountSheet(kind) {
+  const host = document.querySelector("[data-customer-account] .ax-account-scroll");
+  if (!host) return;
+  host.querySelector("[data-account-sheet]")?.remove();
+  const phone = localStorage.getItem("axzenPhone") || "";
+  const profile = getCustomerProfile();
+  const addresses = getCustomerAddressList();
+  const payments = getCustomerPayments();
+  const title = kind === "addresses" ? "Saved addresses" : kind === "payments" ? "Payment methods" : "Edit profile";
+  host.insertAdjacentHTML(
+    "afterbegin",
+    `<article class="ax-account-sheet" data-account-sheet>
+      <div class="ax-account-sheet-head">
+        <button type="button" data-close-account-sheet>Back</button>
+        <h3>${title}</h3>
+      </div>
+      ${
+        kind === "profile"
+          ? `<form data-save-profile>
+              <label>Name<input name="name" value="${escapeHtml(profile.name || "")}" placeholder="Your name" required></label>
+              <label>Email<input name="email" type="email" value="${escapeHtml(profile.email || "")}" placeholder="you@email.com"></label>
+              <label>Phone<input value="${escapeHtml(phone)}" readonly></label>
+              <button type="submit">Save profile</button>
+            </form>`
+          : kind === "addresses"
+            ? `<div class="ax-account-saved-list">
+                ${
+                  addresses.length
+                    ? addresses
+                        .map(
+                          (item) => `<article>
+                            <strong>${escapeHtml(item.fullName || "Home")}</strong>
+                            <p>${escapeHtml([item.address, item.city, item.state, item.pincode].filter(Boolean).join(", "))}</p>
+                            <button type="button" data-remove-address="${escapeHtml(item.id || "")}">Remove</button>
+                          </article>`
+                        )
+                        .join("")
+                    : `<p>No saved address yet.</p>`
+                }
+              </div>
+              <form data-save-address>
+                <label>Full name<input name="fullName" required></label>
+                <label>Address<textarea name="address" required></textarea></label>
+                <label>City<input name="city" required></label>
+                <label>State<input name="state" required></label>
+                <label>Pincode<input name="pincode" required></label>
+                <button type="submit">Save address</button>
+              </form>`
+            : `<div class="ax-account-saved-list">
+                ${
+                  payments.length
+                    ? payments
+                        .map(
+                          (item) => `<article>
+                            <strong>${escapeHtml(item.type || "UPI")}</strong>
+                            <p>${escapeHtml(item.detail || "")}</p>
+                            <button type="button" data-remove-payment="${escapeHtml(item.id || "")}">Remove</button>
+                          </article>`
+                        )
+                        .join("")
+                    : `<p>No payment methods saved.</p>`
+                }
+              </div>
+              <form data-save-payment>
+                <label>Type
+                  <select name="type">
+                    <option value="UPI">UPI</option>
+                    <option value="Card">Card</option>
+                    <option value="COD">Cash on Delivery</option>
+                  </select>
+                </label>
+                <label>UPI ID or card last 4<input name="detail" placeholder="name@upi or 1234" required></label>
+                <button type="submit">Save method</button>
+              </form>`
+      }
+    </article>`
+  );
+}
+
+function storeExploreRating(seller) {
+  const products = seller.products || [];
+  const reviews = products.reduce((sum, product) => sum + Number(product.ratingCount || 0), 0);
+  const avg =
+    products.reduce((sum, product) => sum + Number(product.ratingAverage || 4.8), 0) / Math.max(products.length, 1);
+  return { avg: Number(avg || 4.8), reviews };
+}
+
+function renderStoreExploreCard(seller) {
+  const products = seller.products || [];
+  const rating = storeExploreRating(seller);
+  const thumbs = products.slice(0, 3).map((product) => productImage(product)).filter(Boolean);
+  const one = thumbs.length === 1;
+  return `<article class="ax-store-explore-card" data-store-row data-open-seller="${escapeHtml(seller.id)}" data-store-name="${escapeHtml((seller.name || "").toLowerCase())}" data-store-category="${escapeHtml((seller.category || "").toLowerCase())}">
+    <div class="ax-store-explore-top">
+      <div>
+        ${sellerAvatarMarkup(seller.name, seller.profileImageUrl, "ax-store-explore-logo")}
+        <div>
+          <h3>${escapeHtml(seller.name)}</h3>
+          <p>${escapeHtml(seller.category || "Store")} · ${products.length} product${products.length === 1 ? "" : "s"}</p>
+        </div>
+      </div>
+      <span>Top selling</span>
+    </div>
+    <div class="ax-store-explore-meta">
+      <span>${storeLineIcon("users")} ${compactCount(seller.followerCount)} Followers</span>
+      <span>${starRatingMarkup(rating.avg)} ${rating.avg.toFixed(1)} (${compactCount(rating.reviews) || 0} reviews)</span>
+    </div>
+    <div class="ax-store-explore-thumbs ${one ? "is-one" : ""}">
+      ${
+        thumbs.length
+          ? thumbs
+              .map((image, index) => `<figure><img src="${escapeHtml(image)}" alt="${escapeHtml(products[index]?.title || seller.name)}"></figure>`)
+              .join("")
+          : `<p>No products yet.</p>`
+      }
+    </div>
+    <button type="button" data-open-seller="${escapeHtml(seller.id)}">Open store ${storeLineIcon("chevron")}</button>
+  </article>`;
+}
+
+function openCustomerStoresView() {
+  closeCustomerAccountView();
+  closeMediaFeed();
+  closeCustomerTrackOrderView({ clearHash: true });
+  closeCustomerCartOverlay();
+  closeLoginArea();
+  closeCustomerFestivalOffer();
+  closeCustomerStoresView();
+  const sellers = getStorefrontSellers().sort((a, b) => Number(b.followerCount || 0) - Number(a.followerCount || 0) || b.products.length - a.products.length);
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    `<section class="ax-stores-overlay" data-customer-stores>
+      <div class="ax-stores-screen">
+        <header class="ax-stores-head">
+          <div>
+            <h1>Stores</h1>
+            <p>Discover stores. Find your favourites.</p>
+          </div>
+          ${storeLineIcon("home")}
+        </header>
+        <label class="ax-stores-search">
+          <input type="search" data-stores-search placeholder="Search stores">
+        </label>
+        <div class="ax-stores-explore-label">
+          <h2>Explore stores</h2>
+          <small>${sellers.length} store${sellers.length === 1 ? "" : "s"}</small>
+        </div>
+        <div class="ax-stores-list" data-stores-list>
+          ${sellers.length ? sellers.map(renderStoreExploreCard).join("") : `<p class="order-invoice-empty">No stores yet.</p>`}
+        </div>
+      </div>
+    </section>`
+  );
+  document.body.classList.add("ax-stores-open");
+  history.replaceState({ customerRoute: "stores", value: "1" }, "", `${location.pathname}${location.search}#stores`);
+  setAppNavActive("stores");
 }
 
 function closeCustomerAccountView(options = {}) {
@@ -1912,6 +2117,7 @@ function closeCustomerAccountView(options = {}) {
 
 function getCustomerAccountMarkup() {
   const phone = localStorage.getItem("axzenPhone") || "";
+  const profile = getCustomerProfile();
   const latest = customerOrdersCache[0];
   const latestItem = latest ? customerOrderPrimaryItem(latest) : null;
   const latestImage = latestItem?.image || latestItem?.images?.[0] || AX_IMG.headphones;
@@ -1944,7 +2150,7 @@ function getCustomerAccountMarkup() {
           <article class="ax-account-card ax-account-profile">
             <span class="ax-account-avatar">${axAppIcon('<circle cx="12" cy="8" r="3.2"/><path d="M5 19.2a7 7 0 0 1 14 0"/>')}</span>
             <div>
-              <h2>Hello, Axzen Member</h2>
+              <h2>Hello, ${escapeHtml(profile.name || "Axzen Member")}</h2>
               <p>${escapeHtml(maskCustomerPhone(phone))}</p>
             </div>
             <button class="ax-account-edit" type="button" data-account-action="profile">
@@ -1959,7 +2165,7 @@ function getCustomerAccountMarkup() {
               ${axAppIcon('<path d="m9 6 6 6-6 6"/>')}
             </button>
             <button class="ax-account-tile" type="button" data-account-action="wishlist">
-              <span class="ax-account-tile-icon wish">${axAppIcon('<path d="M12 20s-7-4.4-7-9.2A3.8 3.8 0 0 1 12 7.6a3.8 3.8 0 0 1 7 3.2C19 15.6 12 20 12 20z"/>')}</span>
+              <span class="ax-account-tile-icon wish">${axAppIcon('<path d="M12 20.2 4.7 13a4.8 4.8 0 0 1 0-6.8 4.7 4.7 0 0 1 6.7 0l.6.6.6-.6a4.7 4.7 0 0 1 6.7 0 4.8 4.8 0 0 1 0 6.8z"/>')}</span>
               <span><strong>Wishlist</strong><small>Your saved finds</small></span>
               ${axAppIcon('<path d="m9 6 6 6-6 6"/>')}
             </button>
@@ -2012,6 +2218,7 @@ async function openCustomerAccountView(options = {}) {
     return;
   }
   closeCustomerPopovers();
+  closeCustomerStoresView();
   closeMediaFeed();
   closeCustomerTrackOrderView({ clearHash: false });
   closeCustomerCartOverlay();
@@ -2041,10 +2248,26 @@ function handleCustomerAppBack() {
     else closeMediaFeed({ clearHash: true });
     return true;
   }
+  if (document.querySelector("[data-account-sheet]")) {
+    document.querySelector("[data-account-sheet]")?.remove();
+    return true;
+  }
   if (document.querySelector("[data-customer-account]")) {
     if (history.state?.customerRoute === "account") history.back();
     else closeCustomerAccountView({ clearHash: true });
     setAppNavActive("home");
+    return true;
+  }
+  if (document.querySelector("[data-festival-offer-page]")) {
+    closeCustomerFestivalOffer();
+    const url = new URL(window.location.href);
+    url.searchParams.delete("offer");
+    history.replaceState({ customerRoute: "home", value: "" }, "", `${url.pathname}${url.search}${url.hash}`);
+    return true;
+  }
+  if (document.querySelector("[data-customer-stores]")) {
+    closeCustomerStoresView();
+    goCustomerHome();
     return true;
   }
   if (document.querySelector("[data-customer-track-order]")) {
@@ -2057,7 +2280,7 @@ function handleCustomerAppBack() {
   }
   const productModal = document.querySelector("[data-customer-product-modal]");
   if (productModal) {
-    productModal.remove();
+    closeCustomerProductModal();
     return true;
   }
   closeCustomerPopovers();
@@ -2075,10 +2298,11 @@ function handleCustomerAppBack() {
       history.back();
       return true;
     }
-    resetCustomerMain();
-    renderStorefrontProducts(storefrontProductsCache);
-    setCustomerHistory("", "", true);
-    window.scrollTo({ top: 0, behavior: "instant" });
+    resetCustomerMain().then(() => {
+      renderStorefrontProducts(storefrontProductsCache);
+      setCustomerHistory("", "", true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
     return true;
   }
   if (location.hash && location.hash !== "#") {
@@ -2094,9 +2318,10 @@ function renderCustomerCategories(products = storefrontProductsCache) {
   const rail = document.querySelector("[data-customer-category-rail]");
   if (!rail) return;
   const baseCategories = ["Electronics", "Fashion", "Home & Living", "Beauty", "Grocery"];
+  const extraCategories = ["Mobiles", "Laptops", "Accessories", "TV & Home", "Audio", "Sports", "Food"];
   const configured = Array.isArray(customerAppConfig.categoryOrder) && customerAppConfig.categoryOrder.length ? customerAppConfig.categoryOrder : baseCategories;
   const detected = [...new Set(products.map((product) => product.category || "General").filter(Boolean))];
-  const categories = ["All", ...new Set([...configured, ...detected])].slice(0, 12);
+  const categories = ["All", ...new Set([...configured, ...extraCategories, ...detected])];
   rail.innerHTML = categories
     .map((category, index) => {
       const sample = products.find((product) => (product.category || "General") === category);
@@ -2126,24 +2351,223 @@ function renderStorefrontProducts(products = storefrontProductsCache) {
 
 function resetCustomerMain() {
   const target = document.querySelector("[data-customer-main]");
-  if (target && !target.querySelector(".section-heading")) target.innerHTML = customerMainDefaultHtml;
-  document.body.classList.remove("ax-shop-mode");
-  document.body.classList.remove("ax-vstore-open");
-  setCustomerSubpageMode(false);
+  const leaving = target?.querySelector(".ax-vstore");
+  const finish = () => {
+    if (target && !target.querySelector(".section-heading")) target.innerHTML = customerMainDefaultHtml;
+    document.body.classList.remove("ax-shop-mode");
+    document.body.classList.remove("ax-vstore-open");
+    setCustomerSubpageMode(false);
+  };
+  if (leaving) {
+    leaving.classList.add("ax-vstore-leave");
+    return new Promise((resolve) => {
+      window.setTimeout(() => {
+        finish();
+        resolve();
+      }, 360);
+    });
+  }
+  finish();
+  return Promise.resolve();
+}
+
+function closeCustomerProductModal() {
+  const modal = document.querySelector("[data-customer-product-modal]");
+  if (!modal || modal.classList.contains("is-closing")) return;
+  modal.classList.add("is-closing");
+  modal.classList.remove("is-open");
+  const url = new URL(window.location.href);
+  url.searchParams.delete("product");
+  history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  window.setTimeout(() => modal.remove(), 320);
+}
+
+function festivalOffers() {
+  return Array.isArray(customerAppConfig.festivalOffers) ? customerAppConfig.festivalOffers : [];
+}
+
+function offerImageList(offer = {}) {
+  return [...new Set([...(offer.imageUrls || []), offer.imageUrl].filter(Boolean))];
+}
+
+function offerProductEntries(offer = {}) {
+  const fromSellers = (offer.sellerEntries || []).flatMap((entry) =>
+    (entry.productIds || []).map((id) => ({ id: String(id), sellerId: String(entry.sellerId || ""), discount: Number(entry.discountPercent) || 0 }))
+  );
+  const legacy = (offer.productIds || []).map((id) => ({ id: String(id), sellerId: String(offer.sellerId || ""), discount: Number(offer.discountPercent) || 0 }));
+  return [...fromSellers, ...legacy];
+}
+
+function festivalMetaForProduct(product) {
+  const id = String(product?.id || product?._id || "");
+  for (const offer of festivalOffers()) {
+    const entry = offerProductEntries(offer).find((item) => item.id === id);
+    if (entry) return { title: offer.title || "Festival Offer", discount: entry.discount || offer.discountPercent || 0 };
+  }
+  return product?.festivalOffer ? { title: "Festival Offer", discount: Number(product.festivalDiscount) || 0 } : null;
+}
+
+function isFestivalOfferProduct(product) {
+  return Boolean(festivalMetaForProduct(product));
+}
+
+function festivalOfferLabel(product) {
+  const meta = festivalMetaForProduct(product);
+  if (!meta) return "";
+  return meta.discount ? `${meta.title} · ${meta.discount}% off` : meta.title;
+}
+
+function offerAdSlides() {
+  const slides = festivalOffers().flatMap((offer) =>
+    offerImageList(offer).map((imageUrl) => ({
+      ...offer,
+      imageUrl,
+    }))
+  );
+  if (slides.length) return slides;
+  return offerAdImages().map((imageUrl, index) => ({
+    id: `legacy-${index}`,
+    imageUrl,
+    title: "Shop offer",
+    linkUrl: "",
+    sellerId: "",
+    productIds: [],
+  }));
+}
+
+function offerAdImages() {
+  return [...new Set([...(customerAppConfig.offerImages || []), customerAppConfig.offerImageUrl].filter(Boolean))];
+}
+
+function closeCustomerFestivalOffer() {
+  document.querySelector("[data-festival-offer-page]")?.remove();
+  document.body.classList.remove("ax-festival-open");
+}
+
+function sellerFestivalOffers(sellerId) {
+  return festivalOffers().filter((offer) => {
+    if (String(offer.sellerId) === String(sellerId)) return true;
+    return (offer.sellerEntries || []).some((entry) => String(entry.sellerId) === String(sellerId));
+  });
+}
+
+function renderFestivalOfferCard(offer) {
+  const count = offerProductEntries(offer).length;
+  const image = offerImageList(offer)[0] || "";
+  const maxOff = Math.max(0, ...offerProductEntries(offer).map((item) => Number(item.discount) || 0), Number(offer.discountPercent) || 0);
+  return `<article class="ax-festival-card" data-open-offer="${escapeHtml(offer.id)}">
+    ${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(offer.title || "Festival Offer")}">` : ""}
+    <div>
+      <h3>${escapeHtml(offer.title || "Festival Offer")}</h3>
+      <p>${maxOff ? `Up to ${maxOff}% off` : "Festival prices"} · ${count} item${count === 1 ? "" : "s"}</p>
+    </div>
+  </article>`;
+}
+
+function openFestivalOffer(offerId) {
+  const offer = festivalOffers().find((item) => String(item.id) === String(offerId));
+  if (!offer) return false;
+  const entries = offerProductEntries(offer);
+  const ids = new Set(entries.map((item) => item.id));
+  const discounts = new Map(entries.map((item) => [item.id, item.discount]));
+  let products = storefrontProductsCache.filter((product) => ids.has(String(product.id)));
+  if (!products.length && offer.linkUrl && /^https?:\/\//i.test(offer.linkUrl) && !ids.size) {
+    window.location.href = offer.linkUrl;
+    return true;
+  }
+  closeCustomerStoresView();
+  closeCustomerAccountView();
+  closeMediaFeed();
+  closeCustomerFestivalOffer();
+  const groups = {};
+  products.forEach((product) => {
+    const key = product.category || "General";
+    groups[key] = groups[key] || [];
+    groups[key].push({ ...product, festivalOffer: true, festivalDiscount: discounts.get(String(product.id)) || 0 });
+  });
+  const categories = Object.keys(groups);
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    `<section class="ax-festival-overlay" data-festival-offer-page>
+      <div class="ax-festival-screen">
+        <header>
+          <button type="button" data-close-festival-offer>Back</button>
+          <div>
+            <h1>${escapeHtml(offer.title || "Festival Offer")}</h1>
+            <p>${products.length} seller items in this offer</p>
+          </div>
+        </header>
+        ${
+          products.length
+            ? categories
+                .map(
+                  (category) => `
+                    <section class="ax-festival-category">
+                      <h2>${escapeHtml(category)}</h2>
+                      <div class="commerce-products ax-festival-grid">
+                        ${groups[category].map((product) => renderStorefrontProduct(product)).join("")}
+                      </div>
+                    </section>
+                  `
+                )
+                .join("")
+            : `<p class="order-invoice-empty">Sellers have not added items to this offer yet.</p>`
+        }
+      </div>
+    </section>`
+  );
+  document.body.classList.add("ax-festival-open");
+  const url = new URL(window.location.href);
+  url.searchParams.set("offer", offer.id);
+  history.replaceState({ customerRoute: "offer", value: offer.id }, "", `${url.pathname}${url.search}${url.hash}`);
+  return true;
+}
+
+let offerSliderTimer = null;
+function startOfferSlider(banner) {
+  window.clearInterval(offerSliderTimer);
+  const track = banner.querySelector("[data-offer-track]");
+  const slides = banner.querySelectorAll("[data-offer-slide]");
+  if (!track || slides.length < 2) return;
+  let index = 0;
+  offerSliderTimer = window.setInterval(() => {
+    index = (index + 1) % slides.length;
+    track.style.transform = `translateX(-${index * 100}%)`;
+  }, 4000);
 }
 
 function renderCustomerSaleBanner() {
   const banner = document.querySelector(".customer-sale-banner");
   if (!banner) return;
+  const ads = offerAdImages();
+  const adSlides = offerAdSlides();
+  if (adSlides.length) {
+    banner.classList.add("ax-hero", "ax-offer-box");
+    banner.innerHTML = `
+      <div class="ax-offer-viewport">
+        <div class="ax-offer-track" data-offer-track>
+          ${adSlides
+            .map(
+              (slide, index) => `<article class="ax-offer-slide" data-offer-slide data-open-offer="${escapeHtml(slide.id || "")}" ${slide.linkUrl ? `data-offer-link="${escapeHtml(slide.linkUrl)}"` : ""}>
+                <img src="${escapeHtml(slide.imageUrl)}" alt="${escapeHtml(slide.title || `Shop offer ${index + 1}`)}">
+              </article>`
+            )
+            .join("")}
+        </div>
+      </div>
+    `;
+    startOfferSlider(banner);
+    return;
+  }
   const featured = storefrontProductsCache[0] || {};
-  const offerImage = customerAppConfig.offerImageUrl || productImage(featured);
+  const offerImage = ads[0] || productImage(featured);
   const slides = [
     {
-      eyebrow: "Hot gadget deals",
-      title: customerAppConfig.saleTitle || "Big tech. Better prices.",
-      subtitle: customerAppConfig.saleSubtitle || "Up to 15% off",
+      eyebrow: isNativeApp() ? "Axzen Gadget Hub" : "Hot gadget deals",
+      title: isNativeApp() ? "Premium electronics at best prices" : customerAppConfig.saleTitle || "Big tech. Better prices.",
+      subtitle: isNativeApp() ? "Latest gadgets, top brands, great deals." : customerAppConfig.saleSubtitle || "Up to 15% off",
       cta: customerAppConfig.saleCta || "Shop now",
-      image: offerImage,
+      image: isNativeApp() ? "assets/images/laptop.png" : offerImage,
     },
     {
       eyebrow: "Featured pick",
@@ -2464,6 +2888,7 @@ async function openCustomerSellerPage(sellerId, options = {}) {
         <button type="button" class="active" data-seller-store-tab="home">${storeLineIcon("home")}<span>Home</span></button>
         <button type="button" data-seller-store-tab="all">${storeLineIcon("package")}<span>Products</span></button>
         <button type="button" data-seller-store-tab="categories">${storeLineIcon("layout")}<span>Categories</span></button>
+        <button type="button" data-seller-store-tab="offers">${storeLineIcon("percent")}<span>Offers</span></button>
         <button type="button" data-seller-store-tab="reviews">${storeLineIcon("star")}<span>Reviews</span></button>
       </nav>
       <div class="ax-vstore-body">
@@ -2517,6 +2942,18 @@ async function openCustomerSellerPage(sellerId, options = {}) {
               </div>
             </section>
           </div>
+          <div data-store-panel="offers" hidden>
+            <section class="ax-vstore-catalog ax-store-offers">
+              <div class="ax-vstore-head"><h3>Festival offers</h3></div>
+              <div class="ax-store-offer-list">
+                ${
+                  sellerFestivalOffers(seller.id).length
+                    ? sellerFestivalOffers(seller.id).map(renderFestivalOfferCard).join("")
+                    : `<p class="order-invoice-empty">No festival offers for this store yet.</p>`
+                }
+              </div>
+            </section>
+          </div>
           <div data-store-panel="reviews" hidden>
             <section class="ax-vstore-reviews">
               <div class="ax-review-summary">
@@ -2549,8 +2986,9 @@ async function openCustomerSellerPage(sellerId, options = {}) {
     </section>
   `;
   const page = target.querySelector(".ax-vstore");
+  page?.classList.add("ax-vstore-enter");
   if (initialTab !== "home") activateSellerStoreTab(page, initialTab, { animate: false });
-  window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
 }
 
 async function openCustomerFollowsView(options = {}) {
@@ -2813,7 +3251,7 @@ function openCustomerOrderDetails(orderId) {
 }
 
 function openCustomerProductModal(productId) {
-  const product = storefrontProductsCache.find((item) => String(item.id) === String(productId));
+  const product = findStorefrontProduct(productId);
   if (!product) return;
   closeCustomerPopovers();
   document.querySelector("[data-customer-product-modal]")?.remove();
@@ -2857,7 +3295,7 @@ function openCustomerProductModal(productId) {
           <div class="customer-product-stage">
             <div class="customer-product-main-image">
               <span class="product-popular-badge">${storeLineIcon("flame")} Popular</span>
-              <button class="product-wishlist ${isWishlisted(product.id) ? "active" : ""}" type="button" data-wishlist-product="${escapeHtml(product.id)}" aria-pressed="${isWishlisted(product.id)}" aria-label="Add ${escapeHtml(productTitle)} to wishlist">${storeLineIcon("heart")}</button>
+              <button class="product-wishlist ${isWishlisted(product.id) ? "active" : ""}" type="button" data-wishlist-product="${escapeHtml(product.id)}" aria-pressed="${isWishlisted(product.id)}" aria-label="Add ${escapeHtml(productTitle)} to wishlist">${storeLineIcon(isWishlisted(product.id) ? "heartFill" : "heart")}</button>
               ${mainImage}
             </div>
             <div class="customer-product-image-trust">
@@ -2873,6 +3311,7 @@ function openCustomerProductModal(productId) {
             ${sellerVerifiedIcon()}
           </p>
           <h2>${escapeHtml(productTitle)}</h2>
+          ${festivalOfferLabel(product) ? `<p class="ax-festival-tag">${escapeHtml(festivalOfferLabel(product))}</p>` : ""}
           <p class="customer-product-subtitle">Seller verified product on Axzen.</p>
           <div class="customer-price-row">${mrp ? `<del>${escapeHtml(mrp)}</del>` : ""}<strong>${escapeHtml(product.price || "Rs. 0")}</strong></div>
           <p class="customer-product-rating">${escapeHtml(product.unitLabel || "1 pc")} | ${Number(product.ratingAverage || 0).toFixed(1)} rating (${Number(product.ratingCount) || 0}) ${storeLineIcon("star")} <span>(0 Reviews)</span></p>
@@ -2898,6 +3337,9 @@ function openCustomerProductModal(productId) {
       </article>
     </aside>`
   );
+  requestAnimationFrame(() => {
+    document.querySelector("[data-customer-product-modal]")?.classList.add("is-open");
+  });
   const url = new URL(window.location.href);
   url.searchParams.set("product", product.id);
   history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
@@ -3016,15 +3458,23 @@ function demoStorefrontCatalog() {
 
 function applyStorefrontCatalog(products = []) {
   storefrontProductsCache = products.map((product, index) => decorateCatalogProduct(product, index));
-  renderCustomerCategories(storefrontProductsCache);
-  renderCustomerSaleBanner();
-  renderStorefrontProducts(storefrontProductsCache);
-  renderHomeSideBanner(storefrontProductsCache);
-  renderHomeCategoryBanners(storefrontProductsCache);
-  renderStoreRail();
-  renderCategorySections(storefrontProductsCache);
-  renderRecentProducts();
-  updateCustomerHeaderCounts();
+  [
+    renderCustomerCategories,
+    renderCustomerSaleBanner,
+    renderStorefrontProducts,
+    renderHomeSideBanner,
+    renderHomeCategoryBanners,
+    renderStoreRail,
+    renderCategorySections,
+    renderRecentProducts,
+    updateCustomerHeaderCounts,
+  ].forEach((render) => {
+    try {
+      render(storefrontProductsCache);
+    } catch (error) {
+      console.warn(render.name || "catalog render", error);
+    }
+  });
 }
 
 function restoreCustomerRoute() {
@@ -3044,21 +3494,64 @@ function restoreCustomerRoute() {
   }
 }
 
+async function readJsonSafe(response) {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
+async function fetchCatalogPayload() {
+  const urls = ["/api/customer/catalog"];
+  if (!/axzen\.in$/i.test(location.hostname)) urls.push("https://www.axzen.in/api/customer/catalog");
+  for (const url of urls) {
+    try {
+      const response = await fetch(url);
+      const result = await readJsonSafe(response);
+      if (response.ok && Array.isArray(result.products) && result.products.length) return result;
+    } catch (error) {
+      console.warn(error.message || "Catalog request failed.");
+    }
+  }
+  return null;
+}
+
+async function fetchAppConfigPayload() {
+  const urls = ["/api/customer/app-config"];
+  if (!/axzen\.in$/i.test(location.hostname)) urls.push("https://www.axzen.in/api/customer/app-config");
+  for (const url of urls) {
+    try {
+      const response = await fetch(url);
+      const result = await readJsonSafe(response);
+      if (response.ok) return result.config || {};
+    } catch {
+      // Try the next origin.
+    }
+  }
+  return {};
+}
+
 async function loadStorefrontCatalog() {
   const grid = document.querySelector(".commerce-products");
   if (!grid) return;
+  const bootCatalog = Array.isArray(window.__axzenBootCatalog) ? window.__axzenBootCatalog : [];
   try {
-    const [configResponse, response] = await Promise.all([fetch("/api/customer/app-config"), fetch("/api/customer/catalog")]);
-    const configResult = await configResponse.json();
-    if (configResponse.ok) customerAppConfig = configResult.config || {};
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.message || "Unable to load products.");
-    applyStorefrontCatalog(result.products || []);
+    const [config, catalog] = await Promise.all([fetchAppConfigPayload(), fetchCatalogPayload()]);
+    customerAppConfig = config || {};
+    if (!catalog?.products?.length) throw new Error("Catalog is empty.");
+    applyStorefrontCatalog(catalog.products);
     restoreCustomerRoute();
   } catch (error) {
     console.warn(error.message || "Customer catalog unavailable.");
-    const nativeApp = document.documentElement.classList.contains("ax-native-app");
-    if (!storefrontProductsCache.length && !nativeApp) applyStorefrontCatalog(demoStorefrontCatalog());
+    try {
+      if (bootCatalog.length) applyStorefrontCatalog(bootCatalog);
+      else if (!storefrontProductsCache.length) applyStorefrontCatalog(demoStorefrontCatalog());
+    } catch (demoError) {
+      console.warn(demoError.message || "Demo catalog failed.");
+    }
     restoreCustomerRoute();
   } finally {
     renderCartSummary(false);
@@ -3261,6 +3754,7 @@ function renderSellerWorkspace(user = {}) {
         .map(([id, title, detail]) => `<article class="dashboard-panel seller-module-card" id="${escapeHtml(id)}" data-seller-section="${escapeHtml(title.toLowerCase())}"><span>${escapeHtml(title)}</span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></article>`)
         .join("")}
     </section>
+    ${renderSellerOffersPanel()}
     ${renderSellerInventory(sellerProductsCache)}
     ${renderSellerSupportPanel(sellerTicketsCache)}
   `;
@@ -3437,6 +3931,73 @@ function renderSellerTickets(tickets = []) {
       `
     )
     .join("");
+}
+
+function renderSellerOffersPanel(offers = [], products = []) {
+  return `
+    <article class="dashboard-panel seller-offers-panel" id="sellerOffers" data-seller-section="offers">
+      <div class="seller-about-heading">
+        <div>
+          <p class="eyebrow">Offers</p>
+          <h3>Festival offers</h3>
+          <p>Open an offer, add your items, and set the discount customers will see.</p>
+        </div>
+      </div>
+      <div data-seller-offers-list>${renderSellerOfferCards(offers, products)}</div>
+    </article>
+  `;
+}
+
+function renderSellerOfferCards(offers = [], products = []) {
+  if (!offers.length) return `<p class="order-invoice-empty">No festival offers from admin yet.</p>`;
+  return offers
+    .map((offer) => {
+      const images = [...new Set([...(offer.imageUrls || []), offer.imageUrl].filter(Boolean))];
+      const mine = (offer.sellerEntries || []).find((entry) => String(entry.sellerId) === String(window.__axzenSellerId || "")) || {};
+      const selected = new Set((mine.productIds || []).map(String));
+      return `
+        <article class="seller-offer-card" data-seller-offer="${escapeHtml(offer.id)}">
+          <button type="button" data-toggle-seller-offer="${escapeHtml(offer.id)}">${escapeHtml(offer.title || "Festival Offer")}</button>
+          <div class="seller-offer-join" data-seller-offer-form="${escapeHtml(offer.id)}" hidden>
+            ${images.map((url) => `<img src="${escapeHtml(url)}" alt="">`).join("")}
+            <form data-join-offer="${escapeHtml(offer.id)}">
+              <label>Discount %<input name="discountPercent" type="number" min="0" max="90" value="${escapeHtml(String(mine.discountPercent || 0))}"></label>
+              <div class="festival-offer-products">
+                ${
+                  products.length
+                    ? products
+                        .map(
+                          (product) => `<label>
+                            <input type="checkbox" name="productIds" value="${escapeHtml(product.id || product._id)}" ${selected.has(String(product.id || product._id)) ? "checked" : ""}>
+                            <span>${escapeHtml(product.title)}</span>
+                          </label>`
+                        )
+                        .join("")
+                    : "<p>Add products first, then join this offer.</p>"
+                }
+              </div>
+              <button type="submit">Save items in this offer</button>
+            </form>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+async function loadSellerOffers() {
+  const host = document.querySelector("[data-seller-offers-list]");
+  if (!host) return;
+  const token = localStorage.getItem("axzenToken");
+  try {
+    const response = await fetch("/api/seller/offers", { headers: { Authorization: `Bearer ${token}` } });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Unable to load offers.");
+    window.__axzenSellerId = result.sellerId || "";
+    host.innerHTML = renderSellerOfferCards(result.offers || [], result.products || []);
+  } catch (error) {
+    host.innerHTML = `<p class="order-invoice-empty">${escapeHtml(error.message || "Unable to load offers.")}</p>`;
+  }
 }
 
 async function loadSellerProducts() {
@@ -4146,11 +4707,12 @@ async function updateSellerOrderAction(orderId, action, reason = "") {
 }
 
 async function getRecaptcha(form) {
+  const { auth, phone } = await loadFirebaseAuth();
   const role = form.dataset.role;
   const containerId = `recaptcha-${role}`;
-  return withTimeout(
-    getPhoneVerifier(auth, containerId),
-    isNativeApp() ? 60000 : isFirebasePhoneTestMode() ? 8000 : 20000,
+  return phone.withTimeout(
+    phone.getPhoneVerifier(auth, containerId),
+    isNativeApp() ? 60000 : phone.isFirebasePhoneTestMode() ? 8000 : 20000,
     "Verification timed out. Complete the check and tap Send OTP again."
   );
 }
@@ -4164,7 +4726,8 @@ function setOwnerLoginMessage(message, isError = false) {
 }
 
 async function getOwnerRecaptcha() {
-  return getPhoneVerifier(auth, "recaptcha-owner");
+  const { auth, phone } = await loadFirebaseAuth();
+  return phone.getPhoneVerifier(auth, "recaptcha-owner");
 }
 
 function openOwnerLoginModal() {
@@ -4328,6 +4891,7 @@ function renderDashboard(payload) {
   if (user.role === "seller") {
     setSellerSection(getSellerSectionFromHash());
     loadSellerProducts();
+    loadSellerOffers();
     loadSellerFollowerSummary();
     loadSellerTickets();
     requestSellerNotificationPermission();
@@ -4409,85 +4973,164 @@ async function createPhoneSession(role, phone, firebaseToken) {
 
 phoneForms.forEach((form) => {
   const role = form.dataset.role;
+  const customerForm = Boolean(form.closest(".customer-login-section"));
   const sendButton = form.querySelector("[data-send-otp]");
   const verifyButton = form.querySelector("[data-verify-otp]");
   const phoneInput = form.querySelector("[name='phone']");
   const countrySelect = form.querySelector("[data-country-select]");
   const otpInput = form.querySelector("[name='otp']");
   const otpGroup = form.querySelector(".otp-field");
+  const changeNumberButton = form.querySelector("[data-change-number]");
+  const sendLabel = customerForm ? "Get OTP" : "Send OTP";
+  const verifyLabel = customerForm ? "Login" : "Verify and continue";
+  let sendingOtp = false;
+  let verifyingOtp = false;
+  let sendPromise = null;
+  let pendingOtp = "";
 
-  sendButton.addEventListener("click", async () => {
+  const showOtpStep = (phone) => {
+    form.classList.add("otp-sent");
+    form.classList.remove("is-sending");
+    if (phoneInput) phoneInput.readOnly = true;
+    if (countrySelect) countrySelect.disabled = true;
+    sendButton.hidden = true;
+    if (otpGroup) otpGroup.hidden = false;
+    verifyButton.hidden = false;
+    if (changeNumberButton) changeNumberButton.hidden = false;
+    if (customerForm) setCustomerLoginCopy("otp");
+    otpInput?.focus();
+    if (phone) setLoginMessage(form, `OTP sent to ${phone}.`);
+  };
+
+  const sendOtp = async () => {
+    if (sendingOtp) return sendPromise;
+    if (confirmationResults.get(role)) {
+      showOtpStep(confirmationResults.get(role).phone);
+      return confirmationResults.get(role);
+    }
     const { iso, e164: phone } = phoneFromRoot(form);
-
     if (!isValidE164(phone, iso)) {
       setLoginMessage(form, "Please enter a valid phone number.", true);
       return;
     }
 
+    sendingOtp = true;
     sendButton.disabled = true;
     sendButton.textContent = "Sending OTP...";
     form.classList.add("is-sending");
+    showOtpStep(phone);
+    setLoginMessage(form, "Sending OTP...");
 
+    sendPromise = (async () => {
+      try {
+        const { auth, signInWithPhoneNumber, phone: phoneAuth } = await loadFirebaseAuth();
+        const confirmationResult = await phoneAuth.withTimeout(
+          (async () => signInWithPhoneNumber(auth, phone, await getRecaptcha(form)))(),
+          isNativeApp() ? 60000 : phoneAuth.isFirebasePhoneTestMode() ? 20000 : 45000
+        );
+        confirmationResults.set(role, { confirmationResult, phone });
+        setLoginMessage(form, `OTP sent to ${phone}.`);
+        return confirmationResult;
+      } catch (error) {
+        confirmationResults.delete(role);
+        form.classList.remove("is-sending", "otp-sent");
+        sendButton.hidden = false;
+        if (otpGroup) otpGroup.hidden = true;
+        verifyButton.hidden = true;
+        if (changeNumberButton) changeNumberButton.hidden = true;
+        if (phoneInput) phoneInput.readOnly = false;
+        if (countrySelect) countrySelect.disabled = false;
+        if (customerForm) setCustomerLoginCopy("phone");
+        const { phone: phoneAuthReset } = await loadFirebaseAuth().catch(() => ({ phone: null }));
+        await phoneAuthReset?.resetPhoneVerifier(`recaptcha-${role}`);
+        setLoginMessage(form, otpAuthErrorMessage(error), true);
+        throw error;
+      } finally {
+        sendingOtp = false;
+        sendButton.disabled = false;
+        sendButton.textContent = sendLabel;
+      }
+    })();
     try {
-      const confirmationResult = await withTimeout(
-        (async () => signInWithPhoneNumber(auth, phone, await getRecaptcha(form)))(),
-        isNativeApp() ? 60000 : isFirebasePhoneTestMode() ? 20000 : 45000
-      );
-      confirmationResults.set(role, { confirmationResult, phone });
-      form.classList.remove("is-sending");
-      form.classList.add("otp-sent");
-      phoneInput && (phoneInput.readOnly = true);
-      if (countrySelect) countrySelect.disabled = true;
-      sendButton.hidden = true;
-      otpGroup.hidden = false;
-      verifyButton.hidden = false;
-      otpInput.focus();
-      setLoginMessage(form, `OTP sent to ${phone}.`);
-    } catch (error) {
-      form.classList.remove("is-sending", "otp-sent");
-      sendButton.hidden = false;
-      phoneInput && (phoneInput.readOnly = false);
-      if (countrySelect) countrySelect.disabled = false;
-      await resetPhoneVerifier(`recaptcha-${role}`);
-      setLoginMessage(form, otpAuthErrorMessage(error), true);
-      sendButton.disabled = false;
-      sendButton.textContent = "Send OTP";
+      await sendPromise;
+      if ((pendingOtp || otpInput?.value || "").replace(/\D/g, "").length >= 4) {
+        await verifyOtp();
+      }
+    } catch {
+      // Send error is already shown on the form.
     }
-  });
+    return sendPromise;
+  };
 
-  verifyButton.addEventListener("click", async () => {
+  const verifyOtp = async () => {
+    const otp = String(otpInput?.value || pendingOtp || "").replace(/\D/g, "");
+    if (otp.length >= 4) pendingOtp = otp;
+    if (sendingOtp && sendPromise) {
+      setLoginMessage(form, "Confirming your OTP...");
+      try {
+        await sendPromise;
+      } catch {
+        return;
+      }
+    }
+    if (verifyingOtp) return;
     const session = confirmationResults.get(role);
-    const otp = otpInput.value.trim();
-
-    if (!session || otp.length < 4) {
+    if (!session) {
+      setLoginMessage(form, "OTP SMS is not ready yet. Check the number and tap Get OTP again.", true);
+      return;
+    }
+    if (otp.length < 4) {
       setLoginMessage(form, "Enter the OTP sent to your phone.", true);
       return;
     }
 
+    verifyingOtp = true;
     verifyButton.disabled = true;
     verifyButton.textContent = "Verifying...";
 
-    let credential;
-
     try {
-      credential = await session.confirmationResult.confirm(otp);
-    } catch (error) {
-      setLoginMessage(form, "OTP is incorrect or expired. Enter the latest SMS OTP.", true);
-      verifyButton.disabled = false;
-      verifyButton.textContent = "Verify and continue";
-      return;
-    }
-
-    try {
+      const credential = await session.confirmationResult.confirm(otp);
       const firebaseToken = await credential.user.getIdToken();
-      setLoginMessage(form, "Phone verified. Opening your dashboard.");
+      setLoginMessage(form, "Phone verified. Opening your account.");
       await createPhoneSession(role, session.phone, firebaseToken);
     } catch (error) {
-      setLoginMessage(form, otpAuthErrorMessage(error) || "Phone verified, but dashboard login failed.", true);
+      if (String(error?.code || "").includes("invalid-verification-code") || /incorrect|expired/i.test(error?.message || "")) {
+        setLoginMessage(form, "OTP is incorrect or expired. Enter the latest SMS OTP.", true);
+      } else {
+        setLoginMessage(form, otpAuthErrorMessage(error) || "Phone verified, but dashboard login failed.", true);
+      }
     } finally {
+      verifyingOtp = false;
       verifyButton.disabled = false;
-      verifyButton.textContent = "Verify and continue";
+      verifyButton.textContent = verifyLabel;
     }
+  };
+
+  sendButton.addEventListener("click", () => {
+    sendOtp();
+  });
+
+  verifyButton.addEventListener("click", () => {
+    verifyOtp();
+  });
+
+  changeNumberButton?.addEventListener("click", () => {
+    confirmationResults.delete(role);
+    pendingOtp = "";
+    sendPromise = null;
+    resetPhoneLoginForm(form);
+    phoneInput?.focus();
+  });
+
+  phoneInput?.addEventListener("input", () => {
+    const digits = String(phoneInput.value || "").replace(/\D/g, "");
+    const iso = countrySelect?.value || "IN";
+    if (iso === "IN" && digits.length === 10) sendOtp();
+  });
+
+  otpInput?.addEventListener("input", () => {
+    otpInput.value = String(otpInput.value || "").replace(/\D/g, "").slice(0, 6);
+    if (otpInput.value.length === 6) verifyOtp();
   });
 });
 
@@ -4671,12 +5314,14 @@ document.addEventListener("click", async (event) => {
     if (dest === "home") goCustomerHome();
     else if (dest === "media") {
       closeCustomerAccountView();
+      closeCustomerStoresView();
       closeCustomerTrackOrderView({ clearHash: true });
       closeCustomerCartOverlay();
       openMediaFeed();
       setAppNavActive("media");
     } else if (dest === "cart") {
       closeCustomerAccountView();
+      closeCustomerStoresView();
       closeMediaFeed();
       closeCustomerTrackOrderView({ clearHash: true });
       const cart = document.querySelector("#cart");
@@ -4688,12 +5333,16 @@ document.addEventListener("click", async (event) => {
         history.replaceState(history.state, "", `${location.pathname}${location.search}#cart`);
       }
       setAppNavActive("cart");
+    } else if (dest === "stores") {
+      openCustomerStoresView();
     } else if (dest === "orders") {
       closeCustomerAccountView();
+      closeCustomerStoresView();
       closeMediaFeed();
       openCustomerTrackOrderView();
       setAppNavActive("orders");
     } else if (dest === "account") {
+      closeCustomerStoresView();
       closeMediaFeed();
       closeCustomerTrackOrderView({ clearHash: true });
       closeCustomerCartOverlay();
@@ -4719,9 +5368,11 @@ document.addEventListener("click", async (event) => {
     } else if (action === "alerts") {
       document.querySelector("[data-customer-notification-bell]")?.click();
     } else if (action === "addresses") {
-      showCustomerToast("Add a delivery address at checkout.");
+      renderAccountSheet("addresses");
     } else if (action === "payments") {
-      showCustomerToast("Cards and UPI are available at checkout.");
+      renderAccountSheet("payments");
+    } else if (action === "profile") {
+      renderAccountSheet("profile");
     } else if (action === "language") {
       showCustomerToast("Language is set to English.");
     } else if (action === "help") {
@@ -4731,6 +5382,29 @@ document.addEventListener("click", async (event) => {
     } else {
       showCustomerToast("Profile details stay on this device.");
     }
+    return;
+  }
+
+  if (event.target.closest("[data-close-account-sheet]")) {
+    document.querySelector("[data-account-sheet]")?.remove();
+    return;
+  }
+
+  const removeAddress = event.target.closest("[data-remove-address]");
+  if (removeAddress) {
+    const next = getCustomerAddressList().filter((item) => String(item.id) !== String(removeAddress.dataset.removeAddress));
+    localStorage.setItem(ADDRESS_LIST_KEY, JSON.stringify(next));
+    document.querySelector("[data-account-sheet]")?.remove();
+    renderAccountSheet("addresses");
+    return;
+  }
+
+  const removePayment = event.target.closest("[data-remove-payment]");
+  if (removePayment) {
+    const next = getCustomerPayments().filter((item) => String(item.id) !== String(removePayment.dataset.removePayment));
+    localStorage.setItem(CUSTOMER_PAYMENTS_KEY, JSON.stringify(next));
+    document.querySelector("[data-account-sheet]")?.remove();
+    renderAccountSheet("payments");
     return;
   }
 
@@ -4835,10 +5509,7 @@ document.addEventListener("click", async (event) => {
   }
 
   if (event.target.closest("[data-close-customer-product]") || event.target === document.querySelector("[data-customer-product-modal]")) {
-    document.querySelector("[data-customer-product-modal]")?.remove();
-    const url = new URL(window.location.href);
-    url.searchParams.delete("product");
-    history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    closeCustomerProductModal();
     return;
   }
 
@@ -4915,9 +5586,28 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const closeFestival = event.target.closest("[data-close-festival-offer]");
+  if (closeFestival) {
+    closeCustomerFestivalOffer();
+    const url = new URL(window.location.href);
+    url.searchParams.delete("offer");
+    history.replaceState({ customerRoute: "home", value: "" }, "", `${url.pathname}${url.search}${url.hash}`);
+    return;
+  }
+
+  const openOffer = event.target.closest("[data-open-offer]");
+  if (openOffer) {
+    event.preventDefault();
+    const opened = openFestivalOffer(openOffer.dataset.openOffer);
+    if (!opened && openOffer.dataset.offerLink) window.location.href = openOffer.dataset.offerLink;
+    return;
+  }
+
   const openSellerButton = event.target.closest("[data-open-seller]");
   if (openSellerButton) {
     document.querySelector("[data-customer-product-modal]")?.remove();
+    closeCustomerStoresView();
+    closeCustomerAccountView({ clearHash: true });
     await openCustomerSellerPage(openSellerButton.dataset.openSeller);
     return;
   }
@@ -5061,9 +5751,10 @@ document.addEventListener("click", async (event) => {
     const category = categoryPill.dataset.customerCategoryPill || "All";
     document.querySelector("[data-dept-menu]")?.setAttribute("hidden", "");
     if (category === "All") {
-      resetCustomerMain();
-      renderStorefrontProducts(storefrontProductsCache);
-      setCustomerHistory("", "", false);
+      resetCustomerMain().then(() => {
+        renderStorefrontProducts(storefrontProductsCache);
+        setCustomerHistory("", "", false);
+      });
     } else {
       openCustomerCategoryPage(category);
     }
@@ -5077,8 +5768,9 @@ document.addEventListener("click", async (event) => {
     if (["Electronics", "Fashion", "Home", "Beauty", "Sports"].includes(tab)) {
       openCustomerCategoryPage(tab);
     } else {
-      resetCustomerMain();
-      renderStorefrontProducts(filterHomeProducts(tab));
+      resetCustomerMain().then(() => {
+        renderStorefrontProducts(filterHomeProducts(tab));
+      });
     }
     return;
   }
@@ -5120,9 +5812,10 @@ document.addEventListener("click", async (event) => {
 
   const resetCustomerHome = event.target.closest("[data-reset-customer-home]");
   if (resetCustomerHome) {
-    resetCustomerMain();
-    renderStorefrontProducts(storefrontProductsCache);
-    setCustomerHistory("", "", false);
+    resetCustomerMain().then(() => {
+      renderStorefrontProducts(storefrontProductsCache);
+      setCustomerHistory("", "", false);
+    });
     return;
   }
 
@@ -5200,7 +5893,8 @@ document.addEventListener("click", async (event) => {
     sendOwnerOtp.disabled = true;
     sendOwnerOtp.textContent = "Sending OTP...";
     try {
-      const confirmationResult = await withTimeout(signInWithPhoneNumber(auth, phone, await getOwnerRecaptcha()), 45000);
+      const { auth, signInWithPhoneNumber, phone: phoneAuth } = await loadFirebaseAuth();
+      const confirmationResult = await phoneAuth.withTimeout(signInWithPhoneNumber(auth, phone, await getOwnerRecaptcha()), 45000);
       confirmationResults.set("owner", { confirmationResult, phone });
       if (phoneInput) phoneInput.readOnly = true;
       if (countrySelect) countrySelect.disabled = true;
@@ -5209,7 +5903,8 @@ document.addEventListener("click", async (event) => {
       if (verifyButton) verifyButton.hidden = false;
       setOwnerLoginMessage(`OTP sent to ${phone}.`);
     } catch (error) {
-      await resetPhoneVerifier("recaptcha-owner");
+      const { phone: phoneAuthReset } = await loadFirebaseAuth().catch(() => ({ phone: null }));
+      await phoneAuthReset?.resetPhoneVerifier("recaptcha-owner");
       if (phoneInput) phoneInput.readOnly = false;
       if (countrySelect) countrySelect.disabled = false;
       setOwnerLoginMessage(otpAuthErrorMessage(error) || "Unable to send owner OTP.", true);
@@ -5324,6 +6019,14 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const toggleSellerOffer = event.target.closest("[data-toggle-seller-offer]");
+  if (toggleSellerOffer) {
+    event.preventDefault();
+    const form = document.querySelector(`[data-seller-offer-form="${CSS.escape(toggleSellerOffer.dataset.toggleSellerOffer)}"]`);
+    if (form) form.hidden = !form.hidden;
+    return;
+  }
+
   const sellerNav = event.target.closest("[data-seller-nav]");
   if (sellerNav) {
     event.preventDefault();
@@ -5385,6 +6088,7 @@ document.addEventListener("click", async (event) => {
     invoiceButton.textContent = originalText;
   }
 });
+window.__axzenPortalReady = true;
 
 document.addEventListener("input", (event) => {
   const productSearch = event.target.closest("[data-seller-product-search]");
@@ -5394,6 +6098,15 @@ document.addEventListener("input", (event) => {
 
   if (event.target.closest("[data-seller-order-search]")) {
     renderSellerOrdersRows();
+  }
+
+  const storesSearch = event.target.closest("[data-stores-search]");
+  if (storesSearch) {
+    const term = storesSearch.value.trim().toLowerCase();
+    document.querySelectorAll("[data-store-row]").forEach((row) => {
+      const hay = `${row.dataset.storeName || ""} ${row.dataset.storeCategory || ""}`;
+      row.hidden = Boolean(term) && !hay.includes(term);
+    });
   }
 
   const cartQty = event.target.closest("[data-cart-qty]");
@@ -5472,6 +6185,43 @@ document.addEventListener("change", (event) => {
 });
 
 document.addEventListener("submit", async (event) => {
+  const profileForm = event.target.closest("[data-save-profile]");
+  if (profileForm) {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(profileForm).entries());
+    localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(data));
+    document.querySelector("[data-account-sheet]")?.remove();
+    const nameNode = document.querySelector(".ax-account-profile h2");
+    if (nameNode && data.name) nameNode.textContent = `Hello, ${data.name}`;
+    showCustomerToast("Profile saved.");
+    return;
+  }
+
+  const addressForm = event.target.closest("[data-save-address]");
+  if (addressForm) {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(addressForm).entries());
+    const next = [{ id: String(Date.now()), ...data }, ...getCustomerAddressList()];
+    localStorage.setItem(ADDRESS_LIST_KEY, JSON.stringify(next));
+    saveCustomerAddress(data);
+    document.querySelector("[data-account-sheet]")?.remove();
+    renderAccountSheet("addresses");
+    showCustomerToast("Address saved.");
+    return;
+  }
+
+  const paymentFormSave = event.target.closest("[data-save-payment]");
+  if (paymentFormSave) {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(paymentFormSave).entries());
+    const next = [{ id: String(Date.now()), ...data }, ...getCustomerPayments()];
+    localStorage.setItem(CUSTOMER_PAYMENTS_KEY, JSON.stringify(next));
+    document.querySelector("[data-account-sheet]")?.remove();
+    renderAccountSheet("payments");
+    showCustomerToast("Payment method saved.");
+    return;
+  }
+
   const customerSearchForm = event.target.closest("[data-customer-search]");
   if (customerSearchForm) {
     event.preventDefault();
@@ -5484,13 +6234,14 @@ document.addEventListener("submit", async (event) => {
       if (seller) openCustomerSellerPage(seller.id);
       return;
     }
-    resetCustomerMain();
+    resetCustomerMain().then(() => {
     const filtered = storefrontProductsCache.filter((product) => {
       const categoryMatch = category === "All" || product.category === category;
       const haystack = [product.title, product.sellerName, product.category, product.sku].join(" ").toLowerCase();
       return categoryMatch && (!term || haystack.includes(term));
     });
     renderStorefrontProducts(filtered);
+    });
     return;
   }
 
@@ -5605,8 +6356,34 @@ document.addEventListener("submit", async (event) => {
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "Unable to update inventory.");
       await loadSellerProducts();
+      await loadSellerOffers();
     } catch (error) {
       alert(error.message || "Unable to update inventory.");
+    }
+    return;
+  }
+
+  const joinOfferForm = event.target.closest("[data-join-offer]");
+  if (joinOfferForm) {
+    event.preventDefault();
+    const formData = new FormData(joinOfferForm);
+    const payload = {
+      discountPercent: formData.get("discountPercent"),
+      productIds: formData.getAll("productIds"),
+    };
+    try {
+      const token = localStorage.getItem("axzenToken");
+      const response = await fetch(`/api/seller/offers/${encodeURIComponent(joinOfferForm.dataset.joinOffer)}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Unable to save offer items.");
+      showCustomerToast("Offer items saved.");
+      await loadSellerOffers();
+    } catch (error) {
+      alert(error.message || "Unable to save offer items.");
     }
     return;
   }
@@ -5656,6 +6433,7 @@ document.addEventListener("submit", async (event) => {
     productForm.reset();
     if (message) message.textContent = "Product submitted for admin approval.";
     await loadSellerProducts();
+    await loadSellerOffers();
   } catch (error) {
     if (message) {
       message.textContent = error.message || "Unable to upload product.";
@@ -5709,10 +6487,15 @@ const savedToken = localStorage.getItem("axzenToken");
 const savedRole = localStorage.getItem("axzenRole");
 const pageRole = document.querySelector(".firebase-phone-form")?.dataset.role;
 
+window.openCustomerProductModal = openCustomerProductModal;
+window.__axzenPortalReady = true;
 initCustomerLocation();
 loadStorefrontCatalog();
 if (document.body.classList.contains("storefront-page") && location.hash === "#orders") {
   openCustomerTrackOrderView({ push: false });
+}
+if (document.body.classList.contains("storefront-page") && location.hash === "#stores") {
+  openCustomerStoresView();
 }
 
 window.addEventListener("popstate", () => {
@@ -5730,19 +6513,26 @@ window.addEventListener("popstate", () => {
     return;
   }
   closeCustomerAccountView();
+  if (location.hash === "#stores" || history.state?.customerRoute === "stores") {
+    openCustomerStoresView();
+    return;
+  }
+  closeCustomerStoresView();
   if (location.hash === "#orders" || history.state?.customerRoute === "track") {
     openCustomerTrackOrderView({ push: false });
     return;
   }
   closeCustomerTrackOrderView();
   const params = new URLSearchParams(window.location.search);
-  if (params.get("seller")) openCustomerSellerPage(params.get("seller"), { push: false });
+  if (params.get("offer")) openFestivalOffer(params.get("offer"));
+  else if (params.get("seller")) openCustomerSellerPage(params.get("seller"), { push: false });
   else if (params.get("category")) openCustomerCategoryPage(params.get("category"), { push: false });
   else if (params.get("follows")) openCustomerFollowsView({ push: false });
   else {
-    resetCustomerMain();
-    renderStorefrontProducts(storefrontProductsCache);
-    setAppNavActive(location.hash === "#cart" ? "cart" : "home");
+    resetCustomerMain().then(() => {
+      renderStorefrontProducts(storefrontProductsCache);
+      setAppNavActive(location.hash === "#cart" ? "cart" : "home");
+    });
   }
 });
 

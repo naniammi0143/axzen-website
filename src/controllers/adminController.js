@@ -14,7 +14,7 @@ const { formatRupees, getPaymentChargePercent } = require("../utils/money");
 const { notifyFollowersForProduct } = require("./notificationController");
 const { hashPassword } = require("../utils/password");
 const { grokConfigured, removeBackgroundFromUrl } = require("../utils/grokBackground");
-const { uploadImageBuffer } = require("../utils/cloudinary");
+const { uploadImageBuffer, uploadProductImages } = require("../utils/cloudinary");
 
 const orderStatuses = ["pending", "confirmed", "packed", "shipped", "out_for_delivery", "delivered", "cancelled", "returned"];
 const productStatuses = ["pending_approval", "approved", "active", "rejected", "blocked", "inactive"];
@@ -710,15 +710,20 @@ const publicCustomerAppConfig = asyncHandler(async (req, res) => {
 });
 
 const getCustomerAppConfig = asyncHandler(async (req, res) => {
-  const [config, sellers] = await Promise.all([
+  const [config, sellers, products] = await Promise.all([
     getCustomerAppConfigDocument(),
     Seller.find().sort({ businessName: 1 }).select("businessName category city status isActive").lean(),
+    Product.find({ status: { $in: ["approved", "active"] } })
+      .select("title sellerId images pricePaise status")
+      .sort({ title: 1 })
+      .limit(500)
+      .lean(),
   ]);
-  success(res, { config, sellers });
+  success(res, { config, sellers, products });
 });
 
 const updateCustomerAppConfig = asyncHandler(async (req, res) => {
-  const allowed = ["saleTitle", "saleSubtitle", "saleCta", "offerImageUrl", "spotlightTitle", "categoryOrder"];
+  const allowed = ["saleTitle", "saleSubtitle", "saleCta", "offerImageUrl", "offerImages", "festivalOffers", "spotlightTitle", "categoryOrder"];
   const update = {};
   allowed.forEach((key) => {
     if (req.body[key] !== undefined) update[key] = req.body[key];
@@ -730,6 +735,23 @@ const updateCustomerAppConfig = asyncHandler(async (req, res) => {
           .split(",")
           .map((item) => item.trim())
           .filter(Boolean);
+  }
+  if (typeof update.offerImages === "string") {
+    update.offerImages = update.offerImages
+      .split(/\n|,/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  if (update.festivalOffers !== undefined) {
+    let raw = update.festivalOffers;
+    if (typeof raw === "string") {
+      try {
+        raw = JSON.parse(raw || "[]");
+      } catch {
+        raw = [];
+      }
+    }
+    update.festivalOffers = (Array.isArray(raw) ? raw : []).map((item, index) => normalizeFestivalOffer(item, index));
   }
   if (typeof update.categoryOrder === "string") {
     update.categoryOrder = update.categoryOrder
@@ -746,6 +768,125 @@ const updateCustomerAppConfig = asyncHandler(async (req, res) => {
     runValidators: true,
   });
   await audit(req, "customerapp.update", "customerapp", config._id, update);
+  success(res, { config });
+});
+
+function collectOfferImageUrls(body = {}) {
+  const listed = Array.isArray(body.imageUrls) ? body.imageUrls : [body.imageUrl, body.imageUrl1, body.imageUrl2, body.imageUrl3, body.imageUrl4];
+  return [...new Set(listed.map((item) => String(item || "").trim()).filter(Boolean))].slice(0, 4);
+}
+
+function normalizeFestivalOffer(item = {}, index = 0) {
+  const imageUrls = collectOfferImageUrls(item);
+  return {
+    id: String(item.id || `offer-${Date.now()}-${index}`),
+    title: String(item.title || "Festival Offer").trim() || "Festival Offer",
+    imageUrl: imageUrls[0] || "",
+    imageUrls,
+    linkUrl: String(item.linkUrl || "").trim(),
+    sellerId: String(item.sellerId || "").trim(),
+    productIds: (Array.isArray(item.productIds) ? item.productIds : String(item.productIds || "").split(","))
+      .map((id) => String(id || "").trim())
+      .filter(Boolean),
+    discountPercent: Math.max(0, Math.min(90, Number(item.discountPercent) || 0)),
+    sellerEntries: Array.isArray(item.sellerEntries)
+      ? item.sellerEntries.map((entry) => ({
+          sellerId: String(entry.sellerId || "").trim(),
+          productIds: (Array.isArray(entry.productIds) ? entry.productIds : []).map((id) => String(id || "").trim()).filter(Boolean),
+          discountPercent: Math.max(0, Math.min(90, Number(entry.discountPercent) || 0)),
+        }))
+      : [],
+  };
+}
+
+const createFestivalOffer = asyncHandler(async (req, res) => {
+  const offer = normalizeFestivalOffer(req.body);
+  const config = await CustomerAppConfig.findOneAndUpdate(
+    { key: "default" },
+    { $push: { festivalOffers: offer }, $set: { updatedBy: req.user?.id || null } },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  );
+  await audit(req, "customerapp.offer.create", "customerapp", config._id, { id: offer.id });
+  success(res, { config, offer });
+});
+
+const updateFestivalOffer = asyncHandler(async (req, res) => {
+  const config = await CustomerAppConfig.findOne({ key: "default" });
+  if (!config) {
+    res.status(404).json({ ok: false, message: "Offers config not found." });
+    return;
+  }
+  const offers = config.festivalOffers || [];
+  const index = offers.findIndex((item) => String(item.id) === String(req.params.id));
+  if (index < 0) {
+    res.status(404).json({ ok: false, message: "Offer not found." });
+    return;
+  }
+  const current = offers[index].toObject ? offers[index].toObject() : offers[index];
+  offers[index] = normalizeFestivalOffer({
+    ...current,
+    ...req.body,
+    id: current.id,
+    sellerEntries: current.sellerEntries,
+  });
+  config.markModified("festivalOffers");
+  await config.save();
+  await audit(req, "customerapp.offer.update", "customerapp", config._id, { id: req.params.id });
+  success(res, { config, offer: offers[index] });
+});
+
+const deleteFestivalOffer = asyncHandler(async (req, res) => {
+  const config = await CustomerAppConfig.findOneAndUpdate(
+    { key: "default" },
+    { $pull: { festivalOffers: { id: req.params.id } } },
+    { new: true }
+  );
+  await audit(req, "customerapp.offer.delete", "customerapp", config?._id, { id: req.params.id });
+  success(res, { config });
+});
+
+function collectAdFiles(files = {}) {
+  return ["ads", "images", "offerImages", "image"]
+    .flatMap((key) => {
+      const value = files[key];
+      if (!value) return [];
+      return Array.isArray(value) ? value : [value];
+    })
+    .filter((file) => file?.buffer);
+}
+
+const uploadCustomerAppAds = asyncHandler(async (req, res) => {
+  const files = collectAdFiles(req.files);
+  if (!files.length) {
+    res.status(400).json({ ok: false, message: "Upload one or more JPG/PNG ad images." });
+    return;
+  }
+  const uploaded = await uploadProductImages(files, {
+    folder: "axzen/customer-app/ads",
+    removeBackground: false,
+  });
+  const urls = uploaded.map((image) => image.url).filter(Boolean);
+  const config = await CustomerAppConfig.findOneAndUpdate(
+    { key: "default" },
+    { $push: { offerImages: { $each: urls } } },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  );
+  await audit(req, "customerapp.ads.upload", "customerapp", config._id, { count: urls.length });
+  success(res, { config, uploaded: urls });
+});
+
+const deleteCustomerAppAd = asyncHandler(async (req, res) => {
+  const url = String(req.body.url || req.query.url || "").trim();
+  if (!url) {
+    res.status(400).json({ ok: false, message: "Ad image URL is required." });
+    return;
+  }
+  const config = await CustomerAppConfig.findOneAndUpdate(
+    { key: "default" },
+    { $pull: { offerImages: url } },
+    { new: true, upsert: true }
+  );
+  await audit(req, "customerapp.ads.delete", "customerapp", config._id, { url });
   success(res, { config });
 });
 
@@ -1346,6 +1487,11 @@ module.exports = {
   sellerDetail,
   updateCustomer,
   updateCustomerAppConfig,
+  uploadCustomerAppAds,
+  deleteCustomerAppAd,
+  createFestivalOffer,
+  updateFestivalOffer,
+  deleteFestivalOffer,
   updateDelivery,
   updateEmployee,
   updateOrder,

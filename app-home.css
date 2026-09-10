@@ -1,0 +1,305 @@
+/* App home only. Matches the compact white gadget-hub layout. */
+
+html.ax-native-app,
+html.ax-native-app body,
+html.ax-native-app .storefront-page.axzen-mall {
+  background: #fff !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-brand-logo {
+  display: block;
+  width: auto;
+  height: 42px;
+  max-width: 168px;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-home-mark {
+  display: none !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .commerce-header,
+html.ax-native-app .storefront-page.axzen-mall .ax-header {
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  grid-template-areas:
+    "logo deliver actions"
+    "search search search" !important;
+  align-items: center !important;
+  gap: 8px 10px !important;
+  padding: 8px 14px 10px !important;
+  background: #fff !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-deliver-row {
+  min-width: 0;
+  justify-self: start;
+  font-size: 12px !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-deliver-row small {
+  font-size: 11px;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-deliver-row strong {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .customer-notification-button {
+  width: 34px;
+  height: 34px;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-search-field {
+  min-height: 40px !important;
+  border-radius: 999px !important;
+  background: #f4f6f8 !important;
+  border-color: #eef1f4 !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .commerce-search input {
+  font-size: 13px !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-scan-btn,
+html.ax-native-app .storefront-page.axzen-mall .commerce-search .ax-scan-btn {
+  width: 40px !important;
+  height: 40px !important;
+  min-width: 40px !important;
+  max-width: 40px !important;
+  border-radius: 12px !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-shop-offers {
+  width: calc(100% - 28px) !important;
+  margin: 4px auto 12px !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-shop-offers > h2 {
+  margin: 0 2px 8px !important;
+  color: #102a43 !important;
+  font-size: 16px !important;
+  font-weight: 800 !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .customer-sale-banner.ax-hero,
+html.ax-native-app .storefront-page.axzen-mall .ax-hero,
+html.ax-native-app .storefront-page.axzen-mall .ax-offer-box {
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: #f4f7fb !important;
+  border-radius: 22px !important;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(16, 42, 67, 0.06);
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-hero-track,
+html.ax-native-app .storefront-page.axzen-mall .ax-hero-slide.active {
+  min-height: 0 !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-hero-slide.active {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 118px;
+  align-items: center !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 16px 16px 18px !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-hero-slide .eyebrow,
+html.ax-native-app .storefront-page.axzen-mall .customer-sale-banner .eyebrow {
+  margin: 0 0 4px !important;
+  color: #7b8794 !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-hero-slide h1,
+html.ax-native-app .storefront-page.axzen-mall .customer-sale-banner h1 {
+  margin: 0 0 6px !important;
+  max-width: 100% !important;
+  color: #102a43 !important;
+  font-size: 18px !important;
+  line-height: 1.2 !important;
+  font-weight: 800 !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-hero-slide p {
+  margin: 0 0 10px !important;
+  color: #758394 !important;
+  font-size: 11px !important;
+  line-height: 1.35 !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-hero-slide .primary-button,
+html.ax-native-app .storefront-page.axzen-mall .customer-sale-banner .primary-button {
+  min-height: 30px !important;
+  padding: 0 12px !important;
+  color: #fff !important;
+  background: #102a43 !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-hero-photo {
+  width: 110px !important;
+  max-height: 88px !important;
+  object-fit: contain !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-hero-arrow,
+html.ax-native-app .storefront-page.axzen-mall .ax-hero-dots {
+  display: none !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-quick-links {
+  width: calc(100% - 28px) !important;
+  margin: 0 auto 14px !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 8px !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-quick-links button {
+  min-height: 62px !important;
+  padding: 10px 10px 10px 8px !important;
+  background: #f7f9fb !important;
+  border: 0 !important;
+  border-radius: 16px !important;
+  box-shadow: none !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-quick-links strong {
+  font-size: 12px !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-quick-links small {
+  font-size: 10px !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-quick-icon {
+  width: 28px !important;
+  height: 28px !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .customer-category-hero {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  width: calc(100% - 28px) !important;
+  margin: 0 auto 8px !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .customer-category-hero .ax-see-all,
+html.ax-native-app .storefront-page.axzen-mall .customer-category-hero .eyebrow {
+  display: none !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .customer-category-hero h2,
+html.ax-native-app .storefront-page.axzen-mall .customer-recent-section h2,
+html.ax-native-app .storefront-page.axzen-mall .ax-featured-heading h2 {
+  font-size: 16px !important;
+  font-weight: 800 !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .customer-category-hero .eyebrow,
+html.ax-native-app .storefront-page.axzen-mall .customer-recent-section .eyebrow,
+html.ax-native-app .storefront-page.axzen-mall .ax-featured-heading .eyebrow {
+  font-size: 10px !important;
+  letter-spacing: 0.08em !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-see-all {
+  font-size: 11px !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .customer-category-rail.ax-category-circles {
+  gap: 10px !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .customer-category-rail.ax-category-circles button {
+  min-width: 58px !important;
+  font-size: 10px !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .category-chip-icon {
+  width: 42px !important;
+  height: 42px !important;
+  font-size: 13px !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .customer-recent-section,
+html.ax-native-app .storefront-page.axzen-mall .ax-featured-row,
+html.ax-native-app .storefront-page.axzen-mall .commerce-layout {
+  width: calc(100% - 28px) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .commerce-product,
+html.ax-native-app .storefront-page.axzen-mall .commerce-product-media,
+html.ax-native-app .storefront-page.axzen-mall .ax-recent-lite .commerce-product-media {
+  overflow: visible !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .commerce-product-photo,
+html.ax-native-app .storefront-page.axzen-mall .commerce-product-image,
+html.ax-native-app .storefront-page.axzen-mall .ax-recent-lite .commerce-product-image {
+  height: 118px !important;
+  min-height: 118px !important;
+  padding: 12px !important;
+  object-fit: contain !important;
+  object-position: center !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .product-wishlist {
+  top: 6px !important;
+  right: 6px !important;
+  z-index: 5 !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-offer-slide img,
+html.ax-native-app .storefront-page.axzen-mall .ax-hero-photo {
+  object-fit: contain !important;
+  object-position: center !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .commerce-product h3 {
+  font-size: 12px !important;
+  line-height: 1.25 !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .commerce-product-category,
+html.ax-native-app .storefront-page.axzen-mall .commerce-product-seller,
+html.ax-native-app .storefront-page.axzen-mall .commerce-product small {
+  font-size: 10px !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .customer-price-row strong {
+  font-size: 12px !important;
+}
+
+html.ax-native-app .storefront-page.axzen-mall .ax-side-banner,
+html.ax-native-app .storefront-page.axzen-mall .customer-category-sections,
+html.ax-native-app .storefront-page.axzen-mall .ax-category-banners,
+html.ax-native-app .storefront-page.axzen-mall .ax-just-arrived,
+html.ax-native-app .storefront-page.axzen-mall #stores,
+html.ax-native-app .storefront-page.axzen-mall .ax-footer,
+html.ax-native-app .storefront-page.axzen-mall .ax-support-chip {
+  display: none !important;
+}
+
+html:not(.ax-native-app) .ax-brand-logo {
+  display: none;
+}

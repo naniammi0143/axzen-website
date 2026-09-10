@@ -1,0 +1,145 @@
+/* Public website chrome. App UI stays on html.ax-native-app only. */
+
+html:not(.ax-native-app) .ax-ios-statusbar,
+html:not(.ax-native-app) .ax-shop-offers > h2,
+html:not(.ax-native-app) .ax-home-title,
+html:not(.ax-native-app) .ax-shop-only {
+  display: none;
+}
+
+html:not(.ax-native-app) .ax-app-nav {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+html:not(.ax-native-app) .commerce-product,
+html:not(.ax-native-app) [data-product-card],
+html:not(.ax-native-app) [data-customer-category-pill],
+html:not(.ax-native-app) [data-home-tab] {
+  cursor: pointer;
+}
+
+html:not(.ax-native-app) .storefront-page.axzen-mall {
+  padding-bottom: 0 !important;
+}
+
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-topbar,
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-dept-bar,
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-footer,
+html:not(.ax-native-app) .storefront-page.axzen-mall #stores,
+html:not(.ax-native-app) .storefront-page.axzen-mall .customer-category-sections,
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-category-banners {
+  display: block;
+}
+
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-dept-bar {
+  display: flex;
+}
+
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-header-actions .ax-icon-link,
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-header-actions .ax-account-btn,
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-cart-link,
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-home-mark,
+html:not(.ax-native-app) .storefront-page.axzen-mall .commerce-search select,
+html:not(.ax-native-app) .storefront-page.axzen-mall .commerce-search button[type="submit"] span {
+  display: initial;
+}
+
+html:not(.ax-native-app) .storefront-page.axzen-mall .commerce-search button[type="submit"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 96px;
+  height: 46px;
+  padding: 0 16px;
+}
+
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-brand-logo {
+  display: none;
+}
+
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-home-mark {
+  display: block;
+  width: 26px;
+  height: 26px;
+}
+
+html:not(.ax-native-app) .storefront-page.axzen-mall .commerce-header,
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-header {
+  display: grid;
+  grid-template-columns: auto minmax(280px, 1fr) auto;
+  align-items: center;
+  gap: 16px 20px;
+  width: min(1280px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 16px 0;
+  background: #fff;
+}
+
+html:not(.ax-native-app) .storefront-page.axzen-mall .commerce-search,
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-search {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  min-height: 46px;
+}
+
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-search-field {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+}
+
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-search-field svg,
+html:not(.ax-native-app) .storefront-page.axzen-mall .commerce-search button .ax-nav-icon,
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-scan-btn svg,
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-header-actions .ax-nav-icon {
+  width: 18px !important;
+  height: 18px !important;
+  flex: none;
+}
+
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-scan-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  min-width: 46px;
+  height: 46px;
+  padding: 0;
+}
+
+html:not(.ax-native-app) .storefront-page.axzen-mall .commerce-products,
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-featured-grid,
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-arrived-grid,
+html:not(.ax-native-app) .storefront-page.axzen-mall .ax-recent-grid,
+html:not(.ax-native-app) .storefront-page.axzen-mall .category-products-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 1100px) {
+  html:not(.ax-native-app) .storefront-page.axzen-mall .commerce-products,
+  html:not(.ax-native-app) .storefront-page.axzen-mall .ax-featured-grid,
+  html:not(.ax-native-app) .storefront-page.axzen-mall .category-products-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  html:not(.ax-native-app) .storefront-page.axzen-mall .commerce-header,
+  html:not(.ax-native-app) .storefront-page.axzen-mall .ax-header {
+    width: calc(100% - 24px);
+    grid-template-columns: 1fr;
+    padding: 12px 0;
+  }
+
+  html:not(.ax-native-app) .storefront-page.axzen-mall .commerce-products,
+  html:not(.ax-native-app) .storefront-page.axzen-mall .ax-featured-grid,
+  html:not(.ax-native-app) .storefront-page.axzen-mall .category-products-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

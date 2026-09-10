@@ -48,17 +48,19 @@
   min-width: 0;
 }
 
-.storefront-page.axzen-mall .customer-header-logo,
-.storefront-page.axzen-mall .brand-logo {
-  height: 36px;
-  width: auto;
-  max-width: 140px;
-  object-fit: contain;
+.storefront-page.axzen-mall .ax-logo-mark,
+.storefront-page.axzen-mall .ax-wordmark,
+.storefront-page.axzen-mall .ax-logo-svg,
+.storefront-page.axzen-mall .brand-mark,
+.storefront-page.axzen-mall .customer-header-logo {
+  display: none !important;
 }
 
-.storefront-page.axzen-mall .brand-logo:not([hidden]) ~ .brand-mark,
-.storefront-page.axzen-mall .brand-logo:not([hidden]) ~ .ax-wordmark {
-  display: none;
+.storefront-page.axzen-mall .ax-home-mark {
+  display: block;
+  width: 26px;
+  height: 26px;
+  color: #102a43;
 }
 
 .storefront-page.axzen-mall .commerce-search,

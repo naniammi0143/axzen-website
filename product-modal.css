@@ -45,7 +45,9 @@
 
 .storefront-page.axzen-mall .ax-product-sheet [data-close-customer-product] {
   top: 16px;
-  right: 16px;
+  left: 16px;
+  right: auto;
+  z-index: 8;
   width: 36px;
   height: 36px;
   color: #172033;

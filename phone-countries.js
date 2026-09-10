@@ -217,6 +217,9 @@ export function otpAuthErrorMessage(error) {
   const code = String(error?.code || "");
   const message = String(error?.message || "");
 
+  if (code.includes("billing-not-enabled") || /billing-not-enabled/i.test(message)) {
+    return "OTP SMS needs Firebase Blaze billing on this project. Turn on Blaze, then try again. Recaptcha is not required.";
+  }
   if (code.includes("operation-not-allowed") || /region enabled/i.test(message)) {
     return "SMS is blocked for this country in Firebase. Enable Phone login and add this country under Authentication → Settings → SMS region policy.";
   }

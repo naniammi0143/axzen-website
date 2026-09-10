@@ -512,11 +512,11 @@ a {
 }
 
 .recaptcha-box.recaptcha-visible {
-  width: min(100%, 304px);
-  height: auto;
-  min-height: 78px;
-  margin: 4px 0 10px;
-  overflow: visible;
+  width: 1px;
+  height: 1px;
+  min-height: 1px;
+  margin: 0;
+  overflow: hidden;
 }
 
 html.ax-native-app .grecaptcha-badge {
@@ -3260,6 +3260,16 @@ h1 {
   padding: 18px;
   background: rgba(15, 23, 42, 0.58);
   backdrop-filter: blur(8px);
+  opacity: 0;
+  transition: opacity 0.32s ease;
+}
+
+.customer-product-modal.is-open {
+  opacity: 1;
+}
+
+.customer-product-modal.is-closing {
+  opacity: 0;
 }
 
 .customer-product-modal > article {
@@ -3275,6 +3285,16 @@ h1 {
   border: 1px solid rgba(11, 47, 87, 0.08);
   border-radius: 24px;
   box-shadow: 0 34px 90px rgba(15, 23, 42, 0.26);
+  transform: scale(0.94) translateY(18px);
+  transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.customer-product-modal.is-open > article {
+  transform: scale(1) translateY(0);
+}
+
+.customer-product-modal.is-closing > article {
+  transform: scale(0.96) translateY(12px);
 }
 
 .customer-product-modal [data-close-customer-product],
@@ -3477,6 +3497,132 @@ h1 {
   padding: 12px;
   background: #f8fafc;
   border-radius: 14px;
+}
+
+.customer-app-ads {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #dbe3ef;
+  border-radius: 18px;
+}
+
+.customer-app-ad-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.customer-app-ad-grid figure {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.customer-app-ad-grid img {
+  width: 100%;
+  height: 88px;
+  object-fit: contain;
+  object-position: center;
+  background: #eef2f6;
+  border-radius: 12px;
+}
+
+.customer-app-ads button[data-upload-ads],
+.customer-app-ads button[data-add-festival-offer],
+.customer-app-ad-grid button {
+  min-height: 36px;
+  padding: 0 10px;
+  color: #fff;
+  background: #102a43;
+  border: 0;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.festival-offer-editor {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #dbe3ef;
+  border-radius: 14px;
+}
+
+.festival-offer-editor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.festival-offer-editor-head button,
+.festival-offer-editor button[data-remove-festival-offer] {
+  min-height: 32px;
+  color: #fff;
+  background: #102a43;
+  border: 0;
+  border-radius: 8px;
+}
+
+.festival-offer-products {
+  display: grid;
+  gap: 6px;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.offer-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.offer-dash-card,
+.seller-offer-card {
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #dbe3ef;
+  border-radius: 16px;
+}
+
+.offer-dash-photos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.offer-dash-photos img,
+.seller-offer-join img {
+  width: 100%;
+  height: 72px;
+  object-fit: contain;
+  background: #eef2f6;
+  border-radius: 10px;
+}
+
+.offer-dash-actions,
+.panel-heading button[data-create-offer] {
+  display: flex;
+  gap: 8px;
+}
+
+.offer-dash-actions button,
+.panel-heading button[data-create-offer],
+.seller-offer-card > button,
+.seller-offer-join button[type="submit"] {
+  min-height: 36px;
+  padding: 0 10px;
+  color: #fff;
+  background: #102a43;
+  border: 0;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.ax-festival-tag {
+  color: #e11d2e !important;
+  font-weight: 800;
 }
 
 .customer-order-history {
@@ -8558,8 +8704,9 @@ h1 {
 .storefront-page .customer-product-modal [data-close-customer-product] {
   position: absolute;
   top: 22px;
-  right: 22px;
-  z-index: 5;
+  left: 22px;
+  right: auto;
+  z-index: 8;
   width: 42px;
   height: 42px;
   padding: 0;
@@ -10367,11 +10514,12 @@ h1 {
 
 .storefront-page.axzen-mall .product-wishlist {
   position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 1;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
   width: 34px;
   height: 34px;
+  overflow: visible;
   color: #8a94a6;
   background: #fff;
   border: 0;
@@ -10775,8 +10923,12 @@ h1 {
 }
 
 @media (max-width: 760px) {
-  .storefront-page.axzen-mall {
+  html.ax-native-app .storefront-page.axzen-mall {
     padding-bottom: 72px;
+  }
+
+  .storefront-page.axzen-mall {
+    padding-bottom: 24px;
   }
 
   .storefront-page.axzen-mall .commerce-header,
@@ -10807,7 +10959,7 @@ h1 {
     min-height: 320px;
   }
 
-  .ax-app-nav {
+  html.ax-native-app .ax-app-nav {
     position: fixed;
     right: 0;
     bottom: 0;
@@ -10821,8 +10973,8 @@ h1 {
     box-shadow: 0 -8px 24px rgba(16, 24, 40, 0.08);
   }
 
-  .ax-app-nav a,
-  .ax-app-nav button {
+  html.ax-native-app .ax-app-nav a,
+  html.ax-native-app .ax-app-nav button {
     display: grid;
     place-items: center;
     color: #172033;
@@ -11205,7 +11357,7 @@ html {
     border-radius: 16px 16px 0 0;
   }
 
-  .ax-app-nav {
+  html.ax-native-app .ax-app-nav {
     height: calc(64px + env(safe-area-inset-bottom, 0px));
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
@@ -12571,6 +12723,12 @@ html {
 .storefront-page.axzen-mall .product-wishlist.active {
   color: #e11d2e;
   background: #fff;
+}
+
+.storefront-page.axzen-mall .product-wishlist.active .ax-line-icon,
+.storefront-page.axzen-mall .product-wishlist.active .ax-line-icon path {
+  fill: currentColor;
+  stroke: currentColor;
 }
 
 .storefront-page.axzen-mall .ax-category-banners {

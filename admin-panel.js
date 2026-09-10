@@ -20,7 +20,7 @@
     orders: "Order Management",
     payments: "Payments and Commission",
     customers: "Customers",
-    customerapp: "Customer App Control",
+    customerapp: "Offers",
     delivery: "Delivery Management",
     helpdesk: "Helpdesk",
     employees: "Employee Roles",
@@ -873,55 +873,82 @@
     );
   }
 
+  function offerImageList(offer = {}) {
+    return [...new Set([...(offer.imageUrls || []), offer.imageUrl].filter(Boolean))].slice(0, 4);
+  }
+
+  function festivalOfferForm(offer = {}) {
+    const images = offerImageList(offer);
+    return `
+      <form class="customer-app-form festival-offer-editor" data-offer-form data-offer-id="${escapeHtml(offer.id || "")}">
+        <div class="festival-offer-editor-head">
+          <strong>${offer.id ? "Edit offer" : "Create offer"}</strong>
+          <button type="button" data-close-offer-form>Close</button>
+        </div>
+        <label>Offer title<input name="title" value="${escapeHtml(offer.title || "Festival Offer")}" required></label>
+        <label>Image 1 URL<input name="imageUrl1" value="${escapeHtml(images[0] || "")}" placeholder="https://.../offer-1.png" required></label>
+        <label>Image 2 URL<input name="imageUrl2" value="${escapeHtml(images[1] || "")}" placeholder="https://.../offer-2.png"></label>
+        <label>Image 3 URL<input name="imageUrl3" value="${escapeHtml(images[2] || "")}" placeholder="https://.../offer-3.png"></label>
+        <label>Image 4 URL<input name="imageUrl4" value="${escapeHtml(images[3] || "")}" placeholder="https://.../offer-4.png"></label>
+        <p>Add 3 to 4 images. Sellers later add their products and discount to this offer.</p>
+        <button type="submit">${offer.id ? "Save offer" : "Create offer"}</button>
+      </form>
+    `;
+  }
+
   function renderCustomerApp(data) {
     const config = data.config || {};
-    const selected = new Set((config.recommendedSellerIds || []).map(String));
+    const offers = config.festivalOffers || [];
     qs('[data-view-panel="customerapp"]').innerHTML = `
       <section class="customer-app-admin">
         <header class="employee-hero">
           <div>
-            <span class="eyebrow">Customer App Control</span>
-            <h2>Offers, banners and recommended sellers</h2>
-            <p>Change customer app content from here without touching the page structure.</p>
+            <span class="eyebrow">Offers</span>
+            <h2>Festival and shop offers</h2>
+            <p>Create offers here. Sellers add their items and discount. Customers see those items after tapping the offer image.</p>
           </div>
           <div class="employee-count-card">
-            <span>Recommended sellers</span>
-            <strong>${escapeHtml(selected.size || 0)}</strong>
+            <span>Active offers</span>
+            <strong>${escapeHtml(offers.length || 0)}</strong>
             <small>Shown on customer home</small>
           </div>
         </header>
         <article class="admin-panel">
           <div class="panel-heading">
-            <h2>Homepage content</h2>
-            <small>Visible on axzen.in</small>
+            <h2>Offers dashboard</h2>
+            <button type="button" data-create-offer>Create Offer</button>
           </div>
-          <form class="customer-app-form" data-customer-app-form>
-            <label>Sale title<input name="saleTitle" value="${escapeHtml(config.saleTitle || "")}" placeholder="Exclusive coupon for you!"></label>
-            <label>Sale subtitle<input name="saleSubtitle" value="${escapeHtml(config.saleSubtitle || "")}" placeholder="Flat 10% Off up to Rs. 100"></label>
-            <label>CTA text<input name="saleCta" value="${escapeHtml(config.saleCta || "")}" placeholder="Shop offers"></label>
-            <label>Offer image URL<input name="offerImageUrl" value="${escapeHtml(config.offerImageUrl || "")}" placeholder="https://.../offer.png"></label>
-            <label>Spotlight title<input name="spotlightTitle" value="${escapeHtml(config.spotlightTitle || "")}" placeholder="Brands in Spotlight"></label>
-            <label>Category order<input name="categoryOrder" value="${escapeHtml((config.categoryOrder || []).join(", "))}" placeholder="For You, Fashion, Mobiles"></label>
-            <fieldset>
-              <legend>Recommended sellers</legend>
-              <div class="customer-app-seller-grid">
-                ${(data.sellers || [])
-                  .map(
-                    (seller) => `
-                      <label>
-                        <input type="checkbox" name="recommendedSellerIds" value="${seller._id}" ${selected.has(String(seller._id)) ? "checked" : ""}>
-                        <span><strong>${escapeHtml(seller.businessName)}</strong><small>${escapeHtml([seller.category, seller.city, seller.status].filter(Boolean).join(" / "))}</small></span>
-                      </label>
-                    `
-                  )
-                  .join("")}
-              </div>
-            </fieldset>
-            <button type="submit">Save customer app</button>
-          </form>
+          <div data-offer-form-host></div>
+          <div class="offer-dashboard-grid">
+            ${
+              offers.length
+                ? offers
+                    .map((offer) => {
+                      const images = offerImageList(offer);
+                      const sellers = (offer.sellerEntries || []).length;
+                      const items = (offer.sellerEntries || []).reduce((sum, entry) => sum + (entry.productIds || []).length, 0);
+                      return `
+                        <article class="offer-dash-card">
+                          <div class="offer-dash-photos">
+                            ${images.map((url) => `<img src="${escapeHtml(url)}" alt="${escapeHtml(offer.title || "Offer")}">`).join("") || "<span>No image</span>"}
+                          </div>
+                          <h3>${escapeHtml(offer.title || "Festival Offer")}</h3>
+                          <p>${sellers} sellers · ${items} items</p>
+                          <div class="offer-dash-actions">
+                            <button type="button" data-edit-offer="${escapeHtml(offer.id)}">Edit</button>
+                            <button type="button" data-delete-offer="${escapeHtml(offer.id)}">Delete</button>
+                          </div>
+                        </article>
+                      `;
+                    })
+                    .join("")
+                : "<p>No offers yet. Click Create Offer.</p>"
+            }
+          </div>
         </article>
       </section>
     `;
+    state.adminOffers = offers;
   }
 
   function renderDelivery(data) {
@@ -1367,6 +1394,15 @@
       state.searchTimer = window.setTimeout(() => loadView(), 350);
     });
     document.addEventListener("change", async (event) => {
+      const offerSeller = event.target.closest("[data-offer-seller]");
+      if (offerSeller) {
+        const row = offerSeller.closest("[data-festival-offer]");
+        const sellerId = offerSeller.value;
+        row?.querySelectorAll("[data-offer-product-seller]").forEach((label) => {
+          label.hidden = Boolean(sellerId) && label.dataset.offerProductSeller !== sellerId;
+        });
+        return;
+      }
       const reportSelect = event.target.closest("[data-report-select]");
       if (!reportSelect) return;
       state.reportType = reportSelect.value;
@@ -1566,19 +1602,101 @@
         return;
       }
 
-      const customerAppForm = event.target.closest("[data-customer-app-form]");
-      if (customerAppForm) {
+      const createOffer = event.target.closest("[data-create-offer]");
+      if (createOffer) {
         event.preventDefault();
-        const formData = new FormData(customerAppForm);
-        const payload = Object.fromEntries(formData.entries());
-        payload.recommendedSellerIds = formData.getAll("recommendedSellerIds");
-        payload.categoryOrder = String(payload.categoryOrder || "")
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean);
+        const host = document.querySelector("[data-offer-form-host]");
+        if (host) host.innerHTML = festivalOfferForm();
+        return;
+      }
+
+      const editOffer = event.target.closest("[data-edit-offer]");
+      if (editOffer) {
+        event.preventDefault();
+        const offer = (state.adminOffers || []).find((item) => String(item.id) === String(editOffer.dataset.editOffer));
+        const host = document.querySelector("[data-offer-form-host]");
+        if (host) host.innerHTML = festivalOfferForm(offer || {});
+        return;
+      }
+
+      const closeOfferForm = event.target.closest("[data-close-offer-form]");
+      if (closeOfferForm) {
+        event.preventDefault();
+        const host = document.querySelector("[data-offer-form-host]");
+        if (host) host.innerHTML = "";
+        return;
+      }
+
+      const deleteOffer = event.target.closest("[data-delete-offer]");
+      if (deleteOffer) {
+        event.preventDefault();
         try {
-          await api("/api/admin/customer-app", { method: "PATCH", body: JSON.stringify(payload) });
-          toast("Customer app content saved.");
+          await api(`/api/admin/customer-app/offers/${encodeURIComponent(deleteOffer.dataset.deleteOffer)}`, { method: "DELETE" });
+          toast("Offer deleted.");
+          await loadView("customerapp");
+        } catch (error) {
+          toast(error.message, true);
+        }
+        return;
+      }
+
+      const uploadAds = event.target.closest("[data-upload-ads]");
+      if (uploadAds) {
+        event.preventDefault();
+        const form = uploadAds.closest("[data-customer-app-form]");
+        const files = form?.querySelector('input[name="ads"]')?.files;
+        if (!files?.length) {
+          toast("Choose one or more ad images first.", true);
+          return;
+        }
+        const body = new FormData();
+        [...files].forEach((file) => body.append("ads", file));
+        try {
+          const response = await fetch("/api/admin/customer-app/ads", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${state.token}` },
+            body,
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.message || "Unable to upload ads.");
+          toast("Ad images uploaded.");
+          await loadView("customerapp");
+        } catch (error) {
+          toast(error.message, true);
+        }
+        return;
+      }
+
+      const removeAd = event.target.closest("[data-remove-ad]");
+      if (removeAd) {
+        event.preventDefault();
+        try {
+          await api("/api/admin/customer-app/ads", { method: "DELETE", body: JSON.stringify({ url: removeAd.dataset.removeAd }) });
+          toast("Ad removed.");
+          await loadView("customerapp");
+        } catch (error) {
+          toast(error.message, true);
+        }
+        return;
+      }
+
+      const offerForm = event.target.closest("[data-offer-form]");
+      if (offerForm && event.target.closest("button[type='submit']")) {
+        event.preventDefault();
+        const formData = new FormData(offerForm);
+        const payload = {
+          title: formData.get("title"),
+          imageUrls: [formData.get("imageUrl1"), formData.get("imageUrl2"), formData.get("imageUrl3"), formData.get("imageUrl4")].filter(Boolean),
+        };
+        if (payload.imageUrls.length < 3) {
+          toast("Add at least 3 offer images.", true);
+          return;
+        }
+        try {
+          const offerId = offerForm.dataset.offerId;
+          if (offerId) await api(`/api/admin/customer-app/offers/${encodeURIComponent(offerId)}`, { method: "PATCH", body: JSON.stringify(payload) });
+          else await api("/api/admin/customer-app/offers", { method: "POST", body: JSON.stringify(payload) });
+          toast(offerId ? "Offer updated." : "Offer created.");
           await loadView("customerapp");
         } catch (error) {
           toast(error.message, true);

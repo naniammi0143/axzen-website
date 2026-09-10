@@ -6,6 +6,7 @@ const User = require("../models/User");
 const Seller = require("../models/Seller");
 const Product = require("../models/Product");
 const Follow = require("../models/Follow");
+const CustomerAppConfig = require("../models/CustomerAppConfig");
 const env = require("../config/env");
 const { verifyFirebaseToken } = require("../config/firebase");
 const asyncHandler = require("../utils/asyncHandler");
@@ -412,6 +413,52 @@ const registerSeller = asyncHandler(async (req, res) => {
   }
 });
 
+const listSellerFestivalOffers = asyncHandler(async (req, res) => {
+  const seller = await Seller.findOne({ userId: req.user.id }).select("_id businessName").lean();
+  if (!seller) {
+    res.status(404).json({ ok: false, message: "Seller profile not found." });
+    return;
+  }
+  const [config, products] = await Promise.all([
+    CustomerAppConfig.findOne({ key: "default" }).lean(),
+    Product.find({ sellerId: seller._id, status: { $in: ["approved", "active"] } })
+      .select("title category images pricePaise")
+      .sort({ title: 1 })
+      .lean(),
+  ]);
+  success(res, { offers: config?.festivalOffers || [], products, sellerId: seller._id });
+});
+
+const joinSellerFestivalOffer = asyncHandler(async (req, res) => {
+  const seller = await Seller.findOne({ userId: req.user.id }).select("_id").lean();
+  if (!seller) {
+    res.status(404).json({ ok: false, message: "Seller profile not found." });
+    return;
+  }
+  const config = await CustomerAppConfig.findOne({ key: "default" });
+  if (!config) {
+    res.status(404).json({ ok: false, message: "No offers yet." });
+    return;
+  }
+  const offers = config.festivalOffers || [];
+  const index = offers.findIndex((item) => String(item.id) === String(req.params.id));
+  if (index < 0) {
+    res.status(404).json({ ok: false, message: "Offer not found." });
+    return;
+  }
+  const productIds = (Array.isArray(req.body.productIds) ? req.body.productIds : String(req.body.productIds || "").split(","))
+    .map((id) => String(id || "").trim())
+    .filter(Boolean);
+  const discountPercent = Math.max(0, Math.min(90, Number(req.body.discountPercent) || 0));
+  const current = offers[index].toObject ? offers[index].toObject() : offers[index];
+  const sellerEntries = (current.sellerEntries || []).filter((entry) => String(entry.sellerId) !== String(seller._id));
+  sellerEntries.push({ sellerId: String(seller._id), productIds, discountPercent });
+  offers[index].sellerEntries = sellerEntries;
+  config.markModified("festivalOffers");
+  await config.save();
+  success(res, { offer: offers[index] });
+});
+
 module.exports = {
   getProfile,
   getPublicSeller,
@@ -420,4 +467,6 @@ module.exports = {
   getPublicSellerReviews,
   registerSeller,
   updateProfile,
+  listSellerFestivalOffers,
+  joinSellerFestivalOffer,
 };
