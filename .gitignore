@@ -7,3 +7,4 @@ uploads/
 .vercel
 .env.local
 .env*.local
+mobile-www/

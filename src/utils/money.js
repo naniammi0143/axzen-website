@@ -61,12 +61,12 @@ function getSellerCommission(seller, defaultCommission = {}) {
   };
 }
 
-function calculateOrderFinance(items, commission = {}, deliveryChargePaise = 4000, sellerDeliveryChargePaise = 0) {
+function calculateOrderFinance(items, commission = {}, deliveryChargePaise = 4000, sellerDeliveryChargePaise = 0, paymentMethod = "online") {
   const productTotalPaise = items.reduce((total, item) => total + item.pricePaise * item.quantity, 0);
   const safeDeliveryChargePaise = Math.max(Number(deliveryChargePaise) || 0, 0);
   const safeSellerDeliveryChargePaise = Math.max(Number(sellerDeliveryChargePaise) || 0, 0);
   const calculated = calculateCommission(productTotalPaise, commission);
-  const paymentChargePercent = getPaymentChargePercent();
+  const paymentChargePercent = paymentMethod === "cod" ? 0 : getPaymentChargePercent();
   const paymentChargePaise = Math.min(Math.round((productTotalPaise * paymentChargePercent) / 100), calculated.sellerPayoutPaise);
   const netSellerPayoutPaise = Math.max(calculated.sellerPayoutPaise - paymentChargePaise - safeSellerDeliveryChargePaise, 0);
   const customerPaidPaise = productTotalPaise + safeDeliveryChargePaise;

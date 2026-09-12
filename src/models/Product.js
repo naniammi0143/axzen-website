@@ -11,7 +11,7 @@ const productSchema = new mongoose.Schema(
     mrpPaise: { type: Number, min: 0, default: 0 },
     pricePaise: { type: Number, min: 0, required: true },
     unitLabel: { type: String, trim: true, default: "1 pc" },
-    ratingAverage: { type: Number, min: 0, max: 5, default: 4.5 },
+    ratingAverage: { type: Number, min: 0, max: 5, default: 0 },
     ratingCount: { type: Number, min: 0, default: 0 },
     currency: { type: String, default: "INR" },
     stock: { type: Number, min: 0, default: 0 },

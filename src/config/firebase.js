@@ -82,7 +82,7 @@ async function verifyFirebaseToken(idToken) {
     throw new Error("Firebase token is required.");
   }
 
-  if (env.nodeEnv !== "production" && idToken.startsWith("local-test")) {
+  if (env.nodeEnv === "test" && process.env.ALLOW_TEST_AUTH === "true" && idToken.startsWith("local-test")) {
     return {
       uid: idToken,
       phone_number: "+919999999999",

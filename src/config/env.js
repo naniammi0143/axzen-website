@@ -44,4 +44,8 @@ function isAllowedOrigin(origin) {
 
 env.isAllowedOrigin = isAllowedOrigin;
 
+if (env.nodeEnv === "production" && (!(process.env.JWT_SECRET || process.env.AUTH_SECRET) || env.jwtSecret.length < 32)) {
+  throw new Error("A JWT_SECRET (or AUTH_SECRET) of at least 32 characters is required in production.");
+}
+
 module.exports = env;

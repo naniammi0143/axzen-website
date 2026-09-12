@@ -1,6 +1,3 @@
-const fs = require("fs/promises");
-const os = require("os");
-const path = require("path");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const Seller = require("../models/Seller");
@@ -14,7 +11,6 @@ const { success } = require("../utils/apiResponse");
 const { formatRupees, toPaise } = require("../utils/money");
 const { hashPassword } = require("../utils/password");
 
-const uploadRoot = process.env.UPLOAD_DIR || path.join(os.tmpdir(), "axzen-uploads", "seller-kyc");
 
 function clean(value = "") {
   return String(value).trim();
@@ -38,7 +34,7 @@ function phonesMatch(submitted, verified) {
   if (!submitted || !verified) return false;
   const a = String(submitted).replace(/\D/g, "");
   const b = String(verified).replace(/\D/g, "");
-  return a === b || b.endsWith(a);
+  return a === b;
 }
 
 function validateRegistration(body, files) {
@@ -81,24 +77,7 @@ function validateRegistration(body, files) {
   return "";
 }
 
-async function saveSellerDocument(file, sellerId, type) {
-  const sellerDir = path.join(uploadRoot, String(sellerId));
-  await fs.mkdir(sellerDir, { recursive: true });
-  const extension = path.extname(file.originalName).toLowerCase();
-  const fileName = `${type}-${Date.now()}${extension}`;
-  const filePath = path.join(sellerDir, fileName);
-  await fs.writeFile(filePath, file.buffer);
-
-  return {
-    type,
-    originalName: file.originalName,
-    fileName,
-    path: filePath,
-    storage: process.env.UPLOAD_DIR ? "local" : "serverless-temp",
-    mimeType: file.mimetype,
-    size: file.size,
-  };
-}
+const {saveDocument:saveSellerDocument} = require('../utils/kycStorage');
 
 function sellerResponse(seller, statusCode = 201) {
   return {
@@ -277,7 +256,7 @@ const getPublicSellerReviews = asyncHandler(async (req, res) => {
     reviews: {
       ratingAverage: Number(weightedRating.toFixed(1)),
       reviewCount: totalReviews,
-      bars: [5, 4, 3, 2, 1].map((rating) => ({ rating, percent: rating === Math.round(weightedRating || 0) ? 85 : 0 })),
+      bars: [], // A rating histogram requires individual review data.
       latestReview: null,
     },
   });
@@ -331,7 +310,7 @@ const registerSeller = asyncHandler(async (req, res) => {
     return;
   }
 
-  if (submitted && !phonesMatch(submitted, phone)) {
+  if (!submitted || !phonesMatch(submitted, phone)) {
     res.status(400).json({ ok: false, message: "Verified OTP mobile does not match registration mobile." });
     return;
   }
@@ -343,6 +322,12 @@ const registerSeller = asyncHandler(async (req, res) => {
   });
 
   if (existingSeller) {
+    if (existingSeller.phone !== phone) {
+      return res.status(409).json({ ok: false, message: "This email is already registered. Sign in with the registered phone to update your store." });
+    }
+    if (existingSeller.approvalStatus === "approved" || existingSeller.status === "blocked") {
+      return res.status(409).json({ ok: false, message: "This store is already registered. Please sign in or contact support." });
+    }
     const userUpdate = {
       name: clean(req.body.fullName),
       email,
@@ -370,7 +355,7 @@ const registerSeller = asyncHandler(async (req, res) => {
     $or: [{ phone }, { email }],
   });
 
-  if (duplicateUser && duplicateUser.role !== "seller") {
+  if (duplicateUser && (duplicateUser.role !== "seller" || duplicateUser.phone !== phone || duplicateUser.status === "blocked")) {
     res.status(409).json({ ok: false, message: "This mobile number or email is already linked to another Axzen account." });
     return;
   }
@@ -506,12 +491,23 @@ const joinSellerFestivalOffer = asyncHandler(async (req, res) => {
   success(res, { offer: offers[index] });
 });
 
+const downloadKycDocument = asyncHandler(async(req,res)=>{
+  const seller=await Seller.findById(req.params.id).select('kycDocuments').lean();
+  const doc=seller?.kycDocuments.find(d=>String(d._id)===req.params.documentId);
+  if(!doc || doc.storage!=='gridfs' || !doc.fileId)return res.status(404).json({ok:false,message:'This document is unavailable. Ask the seller to upload it again.'});
+  res.setHeader('Cache-Control','no-store');res.type(doc.mimeType);
+  res.setHeader('Content-Disposition',`attachment; filename="${String(doc.originalName).replace(/[^a-zA-Z0-9._-]/g,'_')}"`);
+  const stream=require('../utils/kycStorage').bucket().openDownloadStream(new (require('mongoose').Types.ObjectId)(doc.fileId));
+  stream.on('error',()=>{if(!res.headersSent)res.status(404).end();else res.destroy();});stream.pipe(res);
+});
+
 module.exports = {
   getProfile,
   getPublicSeller,
   getPublicSellerCategories,
   getPublicSellerProducts,
   getPublicSellerReviews,
+  downloadKycDocument,
   registerSeller,
   updateProfile,
   listSellerFestivalOffers,

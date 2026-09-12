@@ -6,11 +6,11 @@ function notFound(req, res) {
 }
 
 function errorHandler(error, req, res, next) {
-  const statusCode = error.statusCode || 500;
+  const statusCode = error.statusCode || (["ValidationError", "CastError"].includes(error.name) ? 400 : error.code === 11000 ? 409 : 500);
 
   res.status(statusCode).json({
     ok: false,
-    message: error.message || "Internal server error.",
+    message: statusCode >= 500 ? "The service is temporarily unavailable. Please try again." : error.code === 11000 ? "This record already exists. Refresh and try again." : error.message || "Invalid request.",
   });
 }
 

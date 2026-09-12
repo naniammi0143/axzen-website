@@ -5,7 +5,12 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "node --test tests/*.test.cjs src/utils/money.test.js",
+    "check": "node scripts/check.cjs",
+    "mobile:prepare": "node scripts/prepare-mobile.cjs",
+    "test:unit": "node --test tests/rules.test.cjs tests/customer-ui.test.cjs src/utils/money.test.js",
+    "test:integration": "node --test tests/commerce.test.cjs"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -20,5 +25,10 @@
     "mongodb": "^6.12.0",
     "mongoose": "^9.7.0",
     "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1",
+    "mongodb-memory-server": "^11.2.0",
+    "prettier": "^3.9.6"
   }
 }

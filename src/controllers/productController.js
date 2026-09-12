@@ -1,6 +1,8 @@
 const Product = require("../models/Product");
 const Seller = require("../models/Seller");
 const Follow = require("../models/Follow");
+const CustomerAppConfig = require("../models/CustomerAppConfig");
+const {discounts} = require("../utils/checkoutRules");
 const asyncHandler = require("../utils/asyncHandler");
 const { success } = require("../utils/apiResponse");
 const { uploadProductImages } = require("../utils/cloudinary");
@@ -35,7 +37,12 @@ function validateProductImages(files) {
 }
 
 const listProducts = asyncHandler(async (req, res) => {
-  const products = await Product.find({ status: { $in: ["active", "approved"] } }).sort({ updatedAt: -1 }).limit(500).lean();
+  const demoUsers = await require('../models/User').find({firebaseUid:'local-test-seller'}).select('_id').lean();
+  const active = await Seller.find({userId:{$nin:demoUsers.map(u=>u._id)},isActive:true,status:'active',approvalStatus:'approved',kycStatus:'approved'}).select('_id').lean();
+  const products = await Product.find({sellerId:{$in:active.map(s=>s._id)}, status:{$in:['active','approved']}}).sort({createdAt:-1}).limit(500).lean();
+  const config = await CustomerAppConfig.findOne({key:'default'}).select('festivalOffers').lean();
+  const offers = discounts(config?.festivalOffers);
+
   const sellerIds = [...new Set(products.map((product) => String(product.sellerId)).filter(Boolean))];
   const sellers = sellerIds.length
     ? await Seller.find({ _id: { $in: sellerIds }, isActive: true, status: "active" })
@@ -64,7 +71,10 @@ const listProducts = asyncHandler(async (req, res) => {
         description: product.description || "",
         mrpPaise: product.mrpPaise || product.pricePaise,
         mrp: formatRupees(product.mrpPaise || product.pricePaise),
-        pricePaise: product.pricePaise,
+        basePricePaise: product.pricePaise,
+        pricePaise: Math.round(product.pricePaise*(100-(offers.get(String(product._id)) || 0))/100),
+        createdAt: product.createdAt,
+        verifiedSeller: true,
         price: formatRupees(product.pricePaise),
         unitLabel: product.unitLabel || "1 pc",
         ratingAverage: Number(product.ratingAverage || 0),
@@ -82,7 +92,7 @@ const listProducts = asyncHandler(async (req, res) => {
         sellerFollowerCount: followerCounts.get(String(product.sellerId)) || 0,
         sellerStoreDetails: settings.storeDetails || {},
         codEnabled: settings.codEnabled !== false,
-        onlinePaymentEnabled: settings.onlinePaymentEnabled !== false,
+        onlinePaymentEnabled: settings.onlinePaymentEnabled !== false && require("../utils/razorpay").hasRazorpayCredentials(),
         freeDeliveryEnabled: settings.freeDeliveryEnabled === true,
         freeDeliveryMinOrderPaise: Number(settings.freeDeliveryMinOrderPaise) || 0,
       };
