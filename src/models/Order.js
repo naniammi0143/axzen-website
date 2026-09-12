@@ -3,6 +3,9 @@ const mongoose = require("mongoose");
 const orderSchema = new mongoose.Schema(
   {
     orderId: { type: String, required: true, unique: true },
+    checkoutKey: { type: String, unique: true, sparse: true },
+    razorpayPaymentId: { type: String, unique: true, sparse: true },
+    stockRestored: { type: Boolean, default: false },
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     sellerId: { type: mongoose.Schema.Types.ObjectId, ref: "Seller", required: true },
     sellerName: { type: String, trim: true, required: true },
@@ -39,6 +42,7 @@ const orderSchema = new mongoose.Schema(
       enum: ["created", "ready_to_ship", "waiting_for_pickup", "assigned", "packed", "shipped", "picked", "delivered", "cancelled", "returned"],
       default: "created",
     },
+    providerShipmentId: { type: String, trim: true, default: "" },
     awbNumber: { type: String, trim: true, default: "" },
     courierName: { type: String, trim: true, default: "" },
     trackingUrl: { type: String, trim: true, default: "" },

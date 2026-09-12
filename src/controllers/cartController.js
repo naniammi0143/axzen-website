@@ -1,60 +1,18 @@
-const Cart = require("../models/Cart");
-const Product = require("../models/Product");
-const asyncHandler = require("../utils/asyncHandler");
-const { success } = require("../utils/apiResponse");
-const { calculateOrderFinance, formatRupees } = require("../utils/money");
-
-const getCart = asyncHandler(async (req, res) => {
-  const cart = await Cart.findOne({ customerId: req.user.id });
-  success(res, { cart: cart || { items: [], subtotalPaise: 0 } });
+const Cart=require('../models/Cart');
+const Product=require('../models/Product');
+const Seller=require('../models/Seller');
+const asyncHandler=require('../utils/asyncHandler');
+const {success}=require('../utils/apiResponse');
+const {normalizeItems,invalid}=require('../utils/checkoutRules');
+const getCart=asyncHandler(async(req,res)=>{const cart=await Cart.findOne({customerId:req.user.id}).lean();if(cart)cart.subtotalPaise=cart.items.reduce((n,i)=>n+i.pricePaise*i.quantity,0);success(res,{cart:cart||{items:[],subtotalPaise:0}});});
+const saveCart=asyncHandler(async(req,res)=>{
+ if(!Array.isArray(req.body.items))throw invalid('Cart items must be a list.');
+ const input=req.body.items.length?normalizeItems(req.body.items):[];
+ const products=await Product.find({_id:{$in:input.map(i=>i.productId)},status:{$in:['active','approved']}}).lean();
+ const sellers=await Seller.find({_id:{$in:products.map(p=>p.sellerId)},isActive:true,status:'active',approvalStatus:'approved',kycStatus:'approved'}).select('_id').lean();
+ const active=new Set(sellers.map(s=>String(s._id)));
+ const items=input.map(i=>{const p=products.find(p=>String(p._id)===i.productId);if(!p||!active.has(String(p.sellerId)))throw invalid('A cart item is no longer available. Remove it and try again.',409);return {productId:p._id,sellerId:p.sellerId,sku:p.sku,title:p.title,quantity:i.quantity,pricePaise:p.pricePaise,lineTotalPaise:p.pricePaise*i.quantity};});
+ const cart=await Cart.findOneAndUpdate({customerId:req.user.id},{$set:{items,subtotalPaise:items.reduce((n,i)=>n+i.lineTotalPaise,0),currency:'INR'}},{new:true,upsert:true,runValidators:true});
+ success(res,{cart});
 });
-
-const saveCart = asyncHandler(async (req, res) => {
-  const requestedItems = Array.isArray(req.body.items) ? req.body.items : [];
-  const skus = requestedItems.map((item) => String(item.sku || "").trim()).filter(Boolean);
-  const products = await Product.find({ sku: { $in: skus }, status: "active" });
-  const productMap = new Map(products.map((product) => [product.sku, product]));
-  const items = requestedItems
-    .map((item) => {
-      const product = productMap.get(String(item.sku || "").trim());
-      const quantity = Math.max(1, Number.parseInt(item.quantity, 10) || 1);
-
-      if (!product) {
-        return null;
-      }
-
-      return {
-        productId: product._id,
-        sellerId: product.sellerId,
-        sku: product.sku,
-        title: product.title,
-        quantity,
-        pricePaise: product.pricePaise,
-        lineTotalPaise: product.pricePaise * quantity,
-      };
-    })
-    .filter(Boolean);
-  const finance = calculateOrderFinance(items, 0, 0);
-  const cart = await Cart.findOneAndUpdate(
-    { customerId: req.user.id },
-    {
-      customerId: req.user.id,
-      items,
-      subtotalPaise: finance.subtotalPaise,
-      currency: "INR",
-    },
-    { new: true, upsert: true }
-  );
-
-  success(res, {
-    cart: {
-      ...cart.toObject(),
-      subtotal: formatRupees(cart.subtotalPaise),
-    },
-  });
-});
-
-module.exports = {
-  getCart,
-  saveCart,
-};
+module.exports={getCart,saveCart};

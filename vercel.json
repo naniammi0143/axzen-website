@@ -47,6 +47,38 @@
   ],
   "rewrites": [
     {
+      "source": "/package.json",
+      "destination": "/api/not-found"
+    },
+    {
+      "source": "/package-lock.json",
+      "destination": "/api/not-found"
+    },
+    {
+      "source": "/vercel.json",
+      "destination": "/api/not-found"
+    },
+    {
+      "source": "/src/(.*)",
+      "destination": "/api/not-found"
+    },
+    {
+      "source": "/tests/(.*)",
+      "destination": "/api/not-found"
+    },
+    {
+      "source": "/docs/(.*)",
+      "destination": "/api/not-found"
+    },
+    {
+      "source": "/scripts/(.*)",
+      "destination": "/api/not-found"
+    },
+    {
+      "source": "/server.js",
+      "destination": "/api/not-found"
+    },
+    {
       "source": "/api",
       "destination": "/api/index.js"
     },
@@ -75,5 +107,25 @@
     "api/index.js": {
       "maxDuration": 60
     }
-  }
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    }
+  ]
 }

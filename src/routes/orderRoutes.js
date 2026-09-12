@@ -1,5 +1,6 @@
 const express = require("express");
 const {
+  cancelCustomerOrder,
   acceptSellerOrder,
   createOrder,
   createRazorpayCheckoutOrder,
@@ -17,6 +18,10 @@ const {
 const { authenticate, authorize } = require("../middleware/auth");
 
 const router = express.Router();
+const checkout = require("../controllers/checkoutController");
+router.post("/quote",authenticate,authorize("customer"),checkout.quoteOrder);
+router.get("/payment-reviews",authenticate,authorize("customer"),checkout.listPaymentReviews);
+router.post("/:id/cancel",authenticate,authorize("customer"),cancelCustomerOrder);
 
 router.get("/customer", authenticate, authorize("customer"), listCustomerOrders);
 router.post("/razorpay/order", authenticate, authorize("customer"), createRazorpayCheckoutOrder);

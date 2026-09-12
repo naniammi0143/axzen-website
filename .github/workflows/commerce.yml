@@ -1,0 +1,21 @@
+name: Customer commerce checks
+on:
+  pull_request:
+  push:
+    branches: [fix/customer-commerce-and-mobile]
+permissions:
+  contents: read
+jobs:
+  commerce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run mobile:prepare

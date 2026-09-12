@@ -86,8 +86,20 @@ const phoneLogin = asyncHandler(async (req, res) => {
     return;
   }
 
-  let user = role === "admin" ? await User.findOne({ phone, role: { $in: adminRoles } }) : null;
-  user = await User.findOneAndUpdate(
+  let user;
+  if (adminRoles.includes(role)) {
+    user = await User.findOne({ phone, role: role === "admin" ? { $in: adminRoles } : role });
+    if (!user || user.status !== "active") {
+      return res.status(403).json({ ok: false, message: "An active staff account is required. Contact your administrator." });
+    }
+    user.firebaseUid = decoded.uid;
+    await user.save();
+  } else {
+    const existing = await User.findOne({ phone, role });
+    if (existing?.status === "blocked") {
+      return res.status(403).json({ ok: false, message: "This account is blocked. Contact support." });
+    }
+    user = await User.findOneAndUpdate(
     { phone, role: user?.role || role },
     {
       $set: {
@@ -102,6 +114,7 @@ const phoneLogin = asyncHandler(async (req, res) => {
     },
     { new: true, upsert: true }
   );
+  }
 
   const roleProfile = await ensureRoleProfile(user);
 

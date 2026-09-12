@@ -1,67 +1,86 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <title>Axzen mobile app preview</title>
-  <style>
-    html, body {
-      margin: 0;
-      background: #102a43;
-      font-family: Segoe UI, sans-serif;
-    }
-    body {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
-      padding: 16px 12px 24px;
-      box-sizing: border-box;
-    }
-    .bar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px 16px;
-      align-items: center;
-      justify-content: center;
-      width: min(720px, 100%);
-      margin-bottom: 14px;
-      color: #d7e1ea;
-      font-size: 13px;
-      text-align: center;
-    }
-    .bar a {
-      color: #fff;
-      font-weight: 700;
-    }
-    .phone {
-      width: 390px;
-      height: 844px;
-      overflow: hidden;
-      background: #000;
-      border-radius: 28px;
-      box-shadow: 0 0 0 8px #0b1220;
-    }
-    iframe {
-      display: block;
-      width: 390px;
-      height: 844px;
-      border: 0;
-      background: #f7f9fb;
-    }
-  </style>
-</head>
-<body>
-  <div class="bar">
-    <span>APK ledu — idi mobile app preview. Live catalog (NATUKODI KURA, sample, google) ikkada ostundi.</span>
-    <a href="index.html">Open desktop website</a>
-  </div>
-  <div class="phone">
-    <iframe
-      id="appFrame"
-      src="index.html?app=1&amp;v=store27"
-      title="Axzen app preview"
-    ></iframe>
-  </div>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Axzen mobile app preview</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #102a43;
+        font-family:
+          Segoe UI,
+          sans-serif;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-height: 100vh;
+        padding: 16px 12px 24px;
+        box-sizing: border-box;
+      }
+      .bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 16px;
+        align-items: center;
+        justify-content: center;
+        width: min(720px, 100%);
+        margin-bottom: 14px;
+        color: #d7e1ea;
+        font-size: 13px;
+        text-align: center;
+      }
+      .bar a {
+        color: #fff;
+        font-weight: 700;
+      }
+      .phone {
+        width: 390px;
+        height: 844px;
+        overflow: hidden;
+        background: #000;
+        border-radius: 28px;
+        box-shadow: 0 0 0 8px #0b1220;
+      }
+      iframe {
+        display: block;
+        width: 390px;
+        height: 844px;
+        border: 0;
+        background: #f7f9fb;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <span
+        >Axzen responsive customer preview. Uses the same live catalog and
+        account.</span
+      >
+      <a href="index.html">Open full website</a>
+      <label
+        >Screen width
+        <select id="screen-width">
+          <option value="320">320 px</option>
+          <option value="390" selected>390 px</option>
+          <option value="430">430 px</option>
+          <option value="768">768 px</option>
+        </select></label
+      >
+    </div>
+    <div class="phone">
+      <iframe id="appFrame" src="index.html" title="Axzen app preview"></iframe>
+    </div>
+    <script>
+      document
+        .querySelector("#screen-width")
+        .addEventListener("change", (event) => {
+          for (const node of document.querySelectorAll(".phone, iframe"))
+            node.style.width = event.target.value + "px";
+        });
+    </script>
+  </body>
 </html>

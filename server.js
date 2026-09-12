@@ -7,7 +7,7 @@ const { initializeRealtime } = require("./src/utils/realtime");
 
 async function startServer() {
   await connectDb();
-  await seedDefaults();
+  if (process.env.SEED_DEMO === "true" && process.env.NODE_ENV !== "production") await seedDefaults();
   const server = http.createServer(app);
   initializeRealtime(server);
 

@@ -622,11 +622,13 @@ const updateOrder = asyncHandler(async (req, res) => {
     return;
   }
 
-  if (["cancelled", "returned"].includes(update.status)) {
-    update.paymentStatus = "refunded";
-    update.payoutStatus = "failed";
-    update.payoutDate = null;
+  if (update.status === 'cancelled') {
+    const order = await require('../services/cancelOrder')({_id:req.params.id},'Cancelled by support.');
+    await audit(req,'order.cancel','order',order._id,{});
+    return success(res,{order});
   }
+  if (update.paymentStatus === 'refunded' || update.refundStatus === 'processed') return res.status(400).json({ok:false,message:'Refund status requires confirmation from the payment provider.'});
+  if (update.status === 'returned') { update.refundStatus='scheduled';update.payoutStatus='failed'; }
 
   const order = await Order.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
   if (!order) {
@@ -634,20 +636,7 @@ const updateOrder = asyncHandler(async (req, res) => {
     return;
   }
 
-  if (["cancelled", "returned"].includes(update.status)) {
-    const customerPaid = orderFinanceRow(order.toObject()).customerPaid;
-    await Promise.all([
-      Payment.updateMany({ orderId: order.orderId }, { status: "refunded", refundPaise: customerPaid }),
-      Settlement.updateMany({ orderId: order.orderId }, { status: "failed", payoutPaise: 0, payoutDate: null }),
-    ]);
-    order.finance = {
-      ...order.finance,
-      refundAdjustmentPaise: customerPaid,
-      netCommissionPaise: 0,
-      netSellerPayoutPaise: 0,
-    };
-    await order.save();
-  }
+  if (update.status === 'returned') await Settlement.updateMany({orderId:order.orderId},{$set:{status:'failed',payoutPaise:0,payoutDate:null}});
 
   await audit(req, "order.update", "order", req.params.id, update);
   success(res, { order });
@@ -948,6 +937,7 @@ const paymentCommissionReport = asyncHandler(async (req, res) => {
   );
 
   success(res, {
+    paymentReviews: await require("../models/CheckoutSession").find({state:"needs_review"}).select("providerOrderId paymentId sellerName finance createdAt failureReason").sort({createdAt:1}).limit(100).lean(),
     items: orders.map(orderFinanceRow),
     sellers,
     summary: Object.fromEntries(
@@ -977,6 +967,12 @@ const updateSettlement = asyncHandler(async (req, res) => {
   if (["pending", "processing", "paid", "hold", "failed"].includes(req.body.status)) update.status = req.body.status;
   if (req.body.status === "paid") update.payoutDate = req.body.payoutDate ? new Date(req.body.payoutDate) : new Date();
   if (req.body.status === "failed") update.payoutDate = null;
+  const existing = await Settlement.findById(req.params.id);
+  if (!existing) return res.status(404).json({ok:false,message:"Settlement not found."});
+  if (update.status === "paid") {
+    const order = await Order.findOne({orderId:existing.orderId});
+    if (!order || order.paymentStatus !== "paid" || order.status !== "delivered" || order.refundStatus !== "none") return res.status(409).json({ok:false,message:"Payout requires a delivered, paid order without a pending refund."});
+  }
   const settlement = await Settlement.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
   await audit(req, "settlement.update", "settlement", req.params.id, update);
   success(res, { settlement });
@@ -995,8 +991,8 @@ const updateOrderPayoutStatus = asyncHandler(async (req, res) => {
     return;
   }
 
-  if (order.paymentStatus === "refunded" && payoutStatus === "paid") {
-    res.status(400).json({ ok: false, message: "Refunded orders cannot be marked payout paid." });
+  if (payoutStatus === "paid" && (order.paymentStatus !== "paid" || order.status !== "delivered" || order.refundStatus !== "none")) {
+    res.status(400).json({ ok: false, message: "Payout requires a delivered, paid order without a pending refund." });
     return;
   }
 
@@ -1066,6 +1062,7 @@ const listEmployees = asyncHandler(async (req, res) => {
 });
 
 const createEmployee = asyncHandler(async (req, res) => {
+  if (req.user.role !== "superadmin") return res.status(403).json({ok:false,message:"Only the superadmin can manage staff access."});
   const displayRole = req.body.displayRole || "Support Executive";
   const roleConfig = employeeRoles[displayRole];
   if (!roleConfig) {
@@ -1107,6 +1104,7 @@ const createEmployee = asyncHandler(async (req, res) => {
 });
 
 const updateEmployee = asyncHandler(async (req, res) => {
+  if (req.user.role !== "superadmin") return res.status(403).json({ok:false,message:"Only the superadmin can manage staff access."});
   const update = {};
   let roleConfig = null;
   if (req.body.displayRole) {
