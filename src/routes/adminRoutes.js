@@ -52,6 +52,8 @@ const { multipartForm } = require("../middleware/multipartUpload");
 const router = express.Router();
 
 router.use(authenticate);
+router.get('/reviews',authorizeAdminAccess('customerapp'),require('../controllers/storeController').listModeration);
+router.patch('/reviews/:id',authorizeAdminAccess('customerapp'),require('../controllers/storeController').moderate);
 
 router.get("/overview", authorizeAdminAccess("dashboard"), adminOverview);
 
@@ -69,6 +71,7 @@ router.post("/products/:id/clean-images", authorizeAdminAccess("products"), clea
 router.patch("/products/:id/reject", authorizeAdminAccess("products"), rejectProduct);
 
 router.get("/orders", authorizeAdminAccess("orders"), listOrders);
+router.patch("/orders/:id/shipment",authorizeAdminAccess("delivery"),(req,res,next)=>{req.deliveryOperation=true;next();},updateOrder);
 router.patch("/orders/:id", authorizeAdminAccess("orders"), updateOrder);
 
 router.get("/customers", authorizeAdminAccess("customers"), listCustomers);

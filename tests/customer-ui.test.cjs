@@ -87,6 +87,8 @@ async function setup({ fail = false, signedIn = false } = {}) {
           addresses: body?.addresses || [],
         },
       };
+    else if (url.includes('/api/sellers/public/') && url.includes('/profile')) data={seller:{id:'d'.repeat(24),name:'First Store',category:'Food',city:'Hyderabad',createdAt:'2024-01-01',followerCount:12,productCount:2,ratingAverage:4.7,reviewCount:2,isFollowing:signedIn,storeDetails:{tagline:'Made with care',about:'Our story',instagramUrl:'https://www.instagram.com/axzen/'}},products:[products[0],products[2]],bestSellers:[{...products[0],soldUnits:7}]};
+    else if (url.includes('/customer-reviews')) data={reviews:{ratingAverage:4.7,reviewCount:2,page:1,hasMore:false,bars:[{stars:5,count:1},{stars:4,count:1}],items:[{id:'r1',productId:ids[0],productTitle:'Fresh Rice',authorName:'Customer',rating:5,title:'Great',body:'<img src=x onerror=alert(1)>',createdAt:'2026-09-01',sellerReply:'Thank you'}]}};
     else if (url === "/api/cart") data = { cart: { items: [] } };
     else if (url === "/api/wishlist") data = { wishlist: { products: [] } };
     else if (url === "/api/orders/quote") {
@@ -260,4 +262,46 @@ test("signed-in checkout requests a server quote and shows the delivery form", a
   } finally {
     app.close();
   }
+});
+
+
+test('social store profile loads independently, exposes share/follow tabs and uses delivered best sellers',async()=>{
+  const app=await setup();try{
+    await app.go('#store?id='+ 'd'.repeat(24));
+    const d=app.w.document;
+    assert.equal(d.querySelector('.social-profile h1').textContent,'First Store');
+    assert.ok(d.querySelector('[data-action="share-store"]'));
+    assert.equal(d.querySelectorAll('.store-tabs a').length,4);
+    await app.go('#store?id='+ 'd'.repeat(24)+'&tab=best');
+    assert.equal(d.querySelectorAll('.product-card').length,1);
+    assert.match(d.querySelector('.store-content').textContent,/Ranked by units in delivered orders/);
+  }finally{app.close();}
+});
+test('store reviews render safely with fractional stars and public seller replies',async()=>{
+  const app=await setup();try{
+    await app.go('#store?id='+ 'd'.repeat(24)+'&tab=reviews');
+    const d=app.w.document;
+    assert.equal(d.querySelectorAll('.store-review').length,1);
+    assert.equal(d.querySelectorAll('.store-review img').length,0);
+    assert.match(d.querySelector('.store-review').textContent,/<img src=x/);
+    assert.match(d.querySelector('.store-review blockquote').textContent,/Thank you/);
+    assert.equal(d.querySelector('.rating-summary .stars span').style.width,'94%');
+    assert.equal(d.querySelectorAll('progress').length,2);
+  }finally{app.close();}
+});
+test('store sharing provides a usable link without native share or clipboard',async()=>{
+  const app=await setup();try{
+    await app.go('#store?id='+ 'd'.repeat(24));
+    app.w.document.querySelector('[data-action="share-store"]').click();await tick();
+    assert.equal(app.w.document.querySelector('#dialog input').value,'https://www.axzen.in/?seller='+ 'd'.repeat(24));
+    assert.ok(app.w.document.querySelector('#dialog a[href^="https://wa.me/"]'));
+  }finally{app.close();}
+});
+test('following store state uses authenticated unfollow endpoint',async()=>{
+  const app=await setup({signedIn:true});try{
+    await app.go('#store?id='+ 'd'.repeat(24));
+    const b=app.w.document.querySelector('[data-action="follow"]');
+    assert.equal(b.getAttribute('aria-pressed'),'true');b.click();await tick();
+    assert.ok(app.calls.some(c=>c.url==='/api/customer/follows/'+ 'd'.repeat(24)&&c.method==='DELETE'));
+  }finally{app.close();}
 });

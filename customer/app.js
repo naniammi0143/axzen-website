@@ -68,6 +68,7 @@ const API =
     : "";
 const state = {
   products: [],
+  storeData: null,
   config: {},
   catalog: "loading",
   error: "",
@@ -223,8 +224,16 @@ function promotions() {
   const offers = (state.config.festivalOffers || []).filter(
     (o) => offerProducts(o).length,
   );
-  if (!offers.length) return "";
+  if (state.config.showOffers === false || !offers.length) return "";
   return `<section class="section">${sectionHead("In season. On offer.", "Discover offers from our stores.", "#deals")}<div class="offer-grid">${offers.map((o) => `<a class="offer-card" href="#offer?id=${encodeURIComponent(o.id)}">${safeUrl(o.imageUrl || o.imageUrls?.[0]) ? `<img src="${esc(safeUrl(o.imageUrl || o.imageUrls?.[0]))}" alt="" loading="lazy">` : icon("bag")}<div><h3>${esc(o.title)}</h3><span>Explore ${offerProducts(o).length} products →</span></div></a>`).join("")}</div></section>`;
+}
+function featuredStores() {
+  const order = (state.config.recommendedSellerIds || []).map(String);
+  return stores().sort((a, b) => {
+    const x = order.indexOf(a.id),
+      y = order.indexOf(b.id);
+    return (x < 0 ? 999 : x) - (y < 0 ? 999 : y);
+  });
 }
 function stores() {
   return [...new Set(state.products.map((p) => String(p.sellerId)))].map(
@@ -243,15 +252,88 @@ function stores() {
   );
 }
 function storeCard(s) {
-  return `<a class="store-card" href="#store?id=${esc(s.id)}"><span class="store-avatar">${esc(
-    s.name
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((w) => w[0])
-      .join("")
-      .toUpperCase(),
-  )}</span><span><h3>${esc(s.name)}</h3><small>${esc(s.category)}${s.city ? " · " + esc(s.city) : ""}</small><br><small>${s.products.length} products · ${s.followers} followers</small></span>${icon("arrow")}</a>`;
+  const details = s.products[0]?.sellerStoreDetails || {};
+  return `<article class="store-card-with-share"><a class="store-card" href="#store?id=${esc(s.id)}"><span class="store-avatar">${safeUrl(details.profileImageUrl) ? `<img src="${esc(safeUrl(details.profileImageUrl))}" alt="">` : esc(s.name.slice(0, 2).toUpperCase())}</span><span><h3>${esc(s.name)}</h3><small>${esc(s.category)}${s.city ? " · " + esc(s.city) : ""}</small><br><small>${s.products.length} products · ${s.followers} followers</small></span>${icon("arrow")}</a><button class="text-button" data-action="share-store" data-id="${esc(s.id)}" data-name="${esc(s.name)}">Share store ↗</button></article>`;
 }
+function storeReviewCard(r) {
+  return `<article class="store-review"><div class="review-top"><div><strong>${esc(r.authorName)}</strong><small>Verified purchase · ${esc(new Date(r.createdAt).toLocaleDateString("en-IN"))}</small></div>${rating({ ratingAverage: r.rating, ratingCount: 1 })}</div><h3>${esc(r.title || r.productTitle)}</h3><p>${esc(r.body)}</p><a href="#product?id=${esc(r.productId)}">${esc(r.productTitle)}</a>${r.sellerReply ? `<blockquote><strong>Store reply</strong><p>${esc(r.sellerReply)}</p></blockquote>` : ""}</article>`;
+}
+function storeProfile(data, reviews, params) {
+  const s = data.seller,
+    d = s.storeDetails || {},
+    id = String(s.id);
+  const tab = ["products", "best", "reviews", "about"].includes(
+    params.get("tab"),
+  )
+    ? params.get("tab")
+    : "products";
+  const base = `#store?id=${encodeURIComponent(id)}`;
+  let content = "";
+  if (tab === "about")
+    content = `<div class="store-about"><section class="form-card"><h2>Meet ${esc(s.name)}</h2><p>${esc(d.about || "The seller has not added a store story yet.")}</p>${d.ownerDisplayName ? `<p>By ${esc(d.ownerDisplayName)}</p>` : ""}<p>On Axzen since ${esc(new Date(s.createdAt).toLocaleDateString("en-IN", { month: "long", year: "numeric" }))}</p></section><section class="form-card"><h2>Shopping with this store</h2><h3>Dispatch</h3><p>${esc(d.dispatchNote || "Check your order timeline for dispatch updates.")}</p><h3>Returns</h3><p>${esc(d.returnPolicy || "Contact Axzen support for the return terms that apply to your product.")}</p><a class="text-button" href="/terms.html">Axzen marketplace terms</a><h3>Store support</h3>${d.supportEmail ? `<a href="mailto:${esc(d.supportEmail)}">${esc(d.supportEmail)}</a>` : ""}${d.supportPhone ? `<p><a href="tel:${esc(d.supportPhone.replace(/[^+\d]/g, ""))}">${esc(d.supportPhone)}</a></p>` : ""}<a href="#help">Contact Axzen support →</a></section></div>`;
+  else if (tab === "reviews")
+    content =
+      state.config.showReviews === false
+        ? empty("Reviews are currently unavailable", "Please check back later.")
+        : `<div class="review-layout"><section class="rating-summary form-card"><h2>${reviews.reviewCount ? Number(reviews.ratingAverage).toFixed(1) : "New"}</h2>${rating({ ratingAverage: reviews.ratingAverage, ratingCount: reviews.reviewCount })}<p>${reviews.reviewCount || 0} verified purchase reviews</p>${(reviews.bars || []).map((b) => `<div class="rating-bar"><span>${b.stars} ★</span><progress max="${Math.max(1, reviews.reviewCount)}" value="${b.count}" aria-label="${b.stars} star reviews"></progress><span>${b.count}</span></div>`).join("")}<small>Customers can review products from delivered orders.</small><a href="#orders">Review a purchase →</a></section><div>${reviews.items?.length ? reviews.items.map(storeReviewCard).join("") : empty("Be the first to share your experience", "Reviews appear after a customer receives and reviews a product.")}<div class="store-pagination">${reviews.page > 1 ? `<a class="outline" href="${base}&tab=reviews&page=${reviews.page - 1}">Previous</a>` : ""}${reviews.hasMore ? `<a class="outline" href="${base}&tab=reviews&page=${reviews.page + 1}">More reviews</a>` : ""}</div></div></div>`;
+  else {
+    const source =
+      tab === "best"
+        ? state.config.showBestSellers === false
+          ? []
+          : data.bestSellers
+        : data.products;
+    const rows = filterProducts(source, {
+      search: params.get("q") || "",
+      category: params.get("category") || "",
+      sort: tab === "best" ? "" : params.get("sort") || "newest",
+    });
+    if (tab === "best") rows.sort((a, b) => b.soldUnits - a.soldUnits);
+    content = `<div class="store-catalog-heading"><div><h2>${tab === "best" ? "Customer favourites" : "Shop the collection"}</h2><p class="muted">${tab === "best" ? "Ranked by units in delivered orders." : `${data.products.length} products from ${esc(s.name)}`}</p></div></div><form id="store-filter-form" class="store-search" data-id="${esc(id)}" data-tab="${tab}"><input type="search" name="q" aria-label="Search this store" placeholder="Search this store" value="${esc(params.get("q") || "")}"><select name="category" aria-label="Store category"><option value="">All categories</option>${[...new Set(data.products.map((p) => p.category))].map((c) => `<option ${params.get("category") === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>${
+      tab === "products"
+        ? `<select name="sort" aria-label="Sort store products">${[
+            ["newest", "Newest"],
+            ["price-low", "Price: low to high"],
+            ["price-high", "Price: high to low"],
+            ["rating", "Top rated"],
+          ]
+            .map(
+              ([v, l]) =>
+                `<option value="${v}" ${params.get("sort") === v ? "selected" : ""}>${l}</option>`,
+            )
+            .join("")}</select>`
+        : ""
+    }<button class="outline">Search</button></form>${rows.length ? grid(rows) : empty(tab === "best" ? "Favourites are on their way" : "No matching products", tab === "best" ? "Best sellers appear once products have been delivered." : "Try another search or category.")}`;
+  }
+  return `<a class="store-back" href="#stores">← All stores</a><section class="social-store"><div class="store-cover">${safeUrl(d.offerBannerUrl) ? `<img src="${esc(safeUrl(d.offerBannerUrl))}" alt="${esc(s.name)} store banner">` : "<span>INDEPENDENT STORES. EVERYDAY FINDS.</span>"}</div><div class="social-profile"><div class="social-avatar">${safeUrl(d.profileImageUrl) ? `<img src="${esc(safeUrl(d.profileImageUrl))}" alt="${esc(s.name)} logo">` : `<span>${esc(s.name.slice(0, 2).toUpperCase())}</span>`}</div><div class="social-profile-copy"><div class="store-name-row"><h1>${esc(s.name)}</h1><span class="verified-store">${icon("shield")} Verified seller</span></div><p class="muted">${esc(s.category)}${s.city ? " · " + esc(s.city) : ""}</p><p class="store-bio">${esc(d.tagline || d.about?.slice(0, 180) || "Discover our collection on Axzen.")}</p><div class="store-stats"><div><strong>${s.productCount}</strong><span>Products</span></div><div><strong>${s.followerCount}</strong><span>Followers</span></div><div><strong>${s.reviewCount ? Number(s.ratingAverage).toFixed(1) + " ★" : "New"}</strong><span>${s.reviewCount || 0} reviews</span></div></div></div><div class="store-profile-actions"><button class="primary" data-action="follow" data-id="${esc(id)}" data-following="${s.isFollowing}" aria-pressed="${s.isFollowing}">${s.isFollowing ? "Following ✓" : "Follow store"}</button><button class="outline" data-action="share-store" data-id="${esc(id)}" data-name="${esc(s.name)}">Share store ↗</button>${safeUrl(d.instagramUrl) ? `<a class="text-button" href="${esc(safeUrl(d.instagramUrl))}" target="_blank" rel="noopener noreferrer">Instagram ↗</a>` : ""}</div></div><nav class="store-tabs" aria-label="Store sections">${[["products", "Products"], ...(state.config.showBestSellers === false ? [] : [["best", "Best sellers"]]), ...(state.config.showReviews === false ? [] : [["reviews", "Reviews"]]), ["about", "About"]].map(([key, label]) => `<a class="${key === tab ? "active" : ""}" ${key === tab ? 'aria-current="page"' : ""} href="${base}&tab=${key}">${label}</a>`).join("")}</nav></section><section class="store-content">${content}</section>`;
+}
+async function shareStore(id, name) {
+  const url = `https://www.axzen.in/?seller=${encodeURIComponent(id)}`;
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: name || "Store on Axzen",
+        text: "Explore this store on Axzen",
+        url,
+      });
+      return;
+    } catch (e) {
+      if (e.name === "AbortError") return;
+    }
+  }
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast("Store link copied");
+      return;
+    } catch {}
+  }
+  showDialog(
+    "Share this store",
+    `<p class="dialog-copy">Copy this link to share the store.</p><label class="field">Store link<input readonly value="${esc(url)}" onclick="this.select()"></label><a class="primary" href="https://wa.me/?text=${encodeURIComponent(url)}" target="_blank" rel="noopener noreferrer">Share on WhatsApp</a>`,
+  );
+}
+
 function categoryPhoto(name) {
   const map = {
     electronics: "electronics",
@@ -270,7 +352,7 @@ function home() {
   );
   const deals = filterProducts(state.products, { sale: true }).slice(0, 4);
   const rows = state.products.slice(0, 8);
-  return `<section class="hero"><div class="hero-copy"><div class="eyebrow">THE EVERYDAY EDIT</div><h1>Good finds.<br>Great little<br><em>everyday moments.</em></h1><p>Discover products and independent stores. Find the things that feel like you.</p><a class="primary" href="#shop">Find your favourites ${icon("arrow")}</a></div><div class="hero-art">${featured ? `${photo(featured, 'fetchpriority="high"')}<a class="hero-product-label" href="#product?id=${productKey(featured)}"><small>Explore this find</small><strong>${esc(featured.title)}</strong>${money(featured.pricePaise)} &nbsp; →</a>` : `<div class="hero-abstract"><img src="/assets/axzen-logo.png" alt="Axzen"></div>`}</div></section><div class="benefits"><div>${icon("store")}<span><strong>Independent stores</strong><small>Discover sellers on Axzen</small></span></div><div>${icon("shield")}<span><strong>Clear checkout</strong><small>See your total before paying</small></span></div><div>${icon("box")}<span><strong>Orders in one place</strong><small>Follow every step of your order</small></span></div></div>${
+  return `<section class="hero"><div class="hero-copy"><div class="eyebrow">THE EVERYDAY EDIT</div><h1>${state.config.heroTitle ? esc(state.config.heroTitle) : "Good finds.<br>Great little<br><em>everyday moments.</em>"}</h1><p>${esc(state.config.heroSubtitle || "Discover products and independent stores. Find the things that feel like you.")}</p><a class="primary" href="#shop">${esc(state.config.heroCta || "Find your favourites")} ${icon("arrow")}</a></div><div class="hero-art">${featured ? `${photo(featured, 'fetchpriority="high"')}<a class="hero-product-label" href="#product?id=${productKey(featured)}"><small>Explore this find</small><strong>${esc(featured.title)}</strong>${money(featured.pricePaise)} &nbsp; →</a>` : `<div class="hero-abstract"><img src="/assets/axzen-logo.png" alt="Axzen"></div>`}</div></section><div class="benefits"><div>${icon("store")}<span><strong>Independent stores</strong><small>Discover sellers on Axzen</small></span></div><div>${icon("shield")}<span><strong>Clear checkout</strong><small>See your total before paying</small></span></div><div>${icon("box")}<span><strong>Orders in one place</strong><small>Follow every step of your order</small></span></div></div>${
     state.catalog === "loading"
       ? `<section class="section" aria-label="Loading products"><div class="skeleton-grid">${'<div class="skeleton"></div>'.repeat(4)}</div></section>`
       : state.catalog === "error"
@@ -284,7 +366,7 @@ function home() {
               )
               .join(
                 "",
-              )}</div></section><section class="section">${sectionHead("Fresh on Axzen", "The latest additions from our stores.")}${grid(rows)}</section>${promotions()}${deals.length ? `<section class="section">${sectionHead("Good finds. Better prices.", "Savings on selected products.", "#deals", "Shop the finds")}${grid(deals)}</section>` : ""}<section class="section">${sectionHead("Meet the stores", "There’s a story behind every storefront.", "#stores", "Explore stores")}<div class="store-grid">${stores().slice(0, 3).map(storeCard).join("")}</div></section>`
+              )}</div></section><section class="section">${sectionHead("Fresh on Axzen", "The latest additions from our stores.")}${grid(rows)}</section>${promotions()}${deals.length ? `<section class="section">${sectionHead("Good finds. Better prices.", "Savings on selected products.", "#deals", "Shop the finds")}${grid(deals)}</section>` : ""}<section class="section" ${state.config.showStores === false ? "hidden" : ""}>${sectionHead(state.config.spotlightTitle || "Meet the stores", "There’s a story behind every storefront.", "#stores", "Explore stores")}<div class="store-grid">${featuredStores().slice(0, 3).map(storeCard).join("")}</div></section>`
   }<section class="editorial"><div><h2>Your favourites, all together.</h2><p>Save the things you love. Come back when the time feels right.</p></div><a href="#wishlist" class="primary">Explore your wishlist ${icon("heart")}</a></section>`;
 }
 function catalogError() {
@@ -395,7 +477,7 @@ function orderDetail(o) {
               `<li class="${s.done ? "done" : ""} ${s.current ? "current" : ""}">${s.label}${s.at ? `<small>${new Date(s.at).toLocaleDateString("en-IN")}</small>` : ""}</li>`,
           )
           .join("")}</ol>`
-  }${o.trackingUrl && safeUrl(o.trackingUrl) ? `<a class="outline" href="${esc(safeUrl(o.trackingUrl))}" target="_blank" rel="noopener">Track with ${esc(o.courierName || "courier")} ↗</a>` : `<p class="muted">${o.status === "delivered" ? "Your order has been delivered." : "Courier tracking will appear when your shipment is booked."}</p>`}${o.refundStatus && o.refundStatus !== "none" ? `<p class="error">Refund ${o.refundStatus === "processed" ? "processed" : o.refundStatus === "scheduled" ? "requested · awaiting confirmation" : esc(o.refundStatus)}. Contact support for an update.</p>` : ""}</div><div class="cart-store">${o.items.map((i) => `<div class="cart-item">${photo(i)}<div><h3>${esc(i.title)}</h3><small>Qty ${i.quantity}</small></div><strong>${money(i.quantity * i.pricePaise)}</strong></div>`).join("")}</div><div class="form-card"><h2>Delivery address</h2><p>${esc(o.shippingAddress?.fullName)}</p><p class="muted">${esc([o.shippingAddress?.address, o.shippingAddress?.city, o.shippingAddress?.state, o.shippingAddress?.pincode].filter(Boolean).join(", "))}</p><p class="muted">${esc(o.shippingAddress?.phone)}</p></div><div class="detail-actions"><button class="outline" data-action="invoice" data-id="${esc(o.orderId)}">View invoice</button>${["placed", "pending", "accepted", "confirmed"].includes(o.status) && !o.awbNumber ? `<button class="outline" data-action="cancel-order" data-id="${esc(o.orderId)}">Cancel order</button>` : ""}<a class="outline" href="#help?order=${encodeURIComponent(o.orderId)}">Get help</a></div></div>${financeSummary(o.finance || { productTotalPaise: o.productTotal, deliveryChargePaise: o.deliveryCharge, customerPaidPaise: o.customerPaid })}</div>`;
+  }${o.trackingUrl && safeUrl(o.trackingUrl) ? `<a class="outline" href="${esc(safeUrl(o.trackingUrl))}" target="_blank" rel="noopener">Track with ${esc(o.courierName || "courier")} ↗</a>` : `<p class="muted">${o.status === "delivered" ? "Your order has been delivered." : "Courier tracking will appear when your shipment is booked."}</p>`}${o.refundStatus && o.refundStatus !== "none" ? `<p class="error">Refund ${o.refundStatus === "processed" ? "processed" : o.refundStatus === "scheduled" ? "requested · awaiting confirmation" : esc(o.refundStatus)}. Contact support for an update.</p>` : ""}</div><div class="cart-store">${o.items.map((i) => `<div class="cart-item">${photo(i)}<div><h3>${esc(i.title)}</h3><small>Qty ${i.quantity}</small>${o.status === "delivered" && state.config.showReviews !== false ? `<button class="text-button" data-action="write-review" data-order="${esc(o._id)}" data-id="${esc(i.productId)}" data-title="${esc(i.title)}">Write / update review</button>` : ""}</div><strong>${money(i.quantity * i.pricePaise)}</strong></div>`).join("")}</div><div class="form-card"><h2>Delivery address</h2><p>${esc(o.shippingAddress?.fullName)}</p><p class="muted">${esc([o.shippingAddress?.address, o.shippingAddress?.city, o.shippingAddress?.state, o.shippingAddress?.pincode].filter(Boolean).join(", "))}</p><p class="muted">${esc(o.shippingAddress?.phone)}</p></div><div class="detail-actions"><button class="outline" data-action="invoice" data-id="${esc(o.orderId)}">View invoice</button>${["placed", "pending", "accepted", "confirmed"].includes(o.status) && !o.awbNumber ? `<button class="outline" data-action="cancel-order" data-id="${esc(o.orderId)}">Cancel order</button>` : ""}<a class="outline" href="#help?order=${encodeURIComponent(o.orderId)}">Get help</a></div></div>${financeSummary(o.finance || { productTotalPaise: o.productTotal, deliveryChargePaise: o.deliveryCharge, customerPaidPaise: o.customerPaid })}</div>`;
 }
 function accountMenu(active) {
   return `<nav class="account-menu" aria-label="Account sections">${[
@@ -438,7 +520,7 @@ function addresses() {
   return `${pageTitle("Your addresses", "Saved securely to your account.")}<div class="account-layout">${accountMenu("addresses")}<div>${(state.user.addresses || []).map((a, i) => `<article class="form-card"><h3>${esc(a.fullName)}</h3><p class="muted">${esc(a.address)}, ${esc(a.city)}, ${esc(a.state)} ${esc(a.pincode)}</p><small>${esc(a.phone)}</small><br><button class="text-button" data-action="delete-address" data-index="${i}">Remove address</button></article>`).join("")}<form class="form-card" id="address-form"><h2>Add a new address</h2>${addressFields()}<button class="primary">Save address</button><div class="form-error" role="alert"></div></form></div></div>`;
 }
 function help(params) {
-  return `${pageTitle("A little help, whenever you need it.", "We’re here for your product and order questions.")}<div class="account-grid"><a class="account-tile" href="#orders">${icon("box")}<span><strong>Order & delivery help</strong><small>Open an order to track it or cancel before it ships.</small></span></a><a class="account-tile" href="mailto:axzeninfotech@gmail.com?subject=${encodeURIComponent("Axzen support" + (params.get("order") ? " — " + params.get("order") : ""))}">${icon("help")}<span><strong>Contact Axzen support</strong><small>axzeninfotech@gmail.com<br>Include your order number so we can help.</small></span></a><a class="account-tile" href="/privacy.html">${icon("shield")}<span><strong>Your privacy</strong><small>Learn how your information is handled.</small></span></a><a class="account-tile" href="/data-deletion.html">${icon("user")}<span><strong>Manage your data</strong><small>Account and data deletion instructions.</small></span></a></div>`;
+  return `${pageTitle("A little help, whenever you need it.", "We’re here for your product and order questions.")}<div class="account-grid"><a class="account-tile" href="#orders">${icon("box")}<span><strong>Order & delivery help</strong><small>Open an order to track it or cancel before it ships.</small></span></a><a class="account-tile" href="mailto:${esc(state.config.supportEmail || "axzeninfotech@gmail.com")}?subject=${encodeURIComponent("Axzen support" + (params.get("order") ? " — " + params.get("order") : ""))}">${icon("help")}<span><strong>Contact Axzen support</strong><small>${esc(state.config.supportEmail || "axzeninfotech@gmail.com")}<br>Include your order number so we can help.</small></span></a><a class="account-tile" href="/privacy.html">${icon("shield")}<span><strong>Your privacy</strong><small>Learn how your information is handled.</small></span></a><a class="account-tile" href="/data-deletion.html">${icon("user")}<span><strong>Manage your data</strong><small>Account and data deletion instructions.</small></span></a></div>`;
 }
 function signInPrompt() {
   return `<div class="empty">${icon("user")}<h2>Make yourself at home.</h2><p>Sign in to see your orders, save addresses and keep your favourites together.</p><button class="primary" data-action="login">Sign in with your phone ${icon("arrow")}</button></div>`;
@@ -570,15 +652,36 @@ async function render() {
             ));
       break;
     case "store": {
-      const s = stores().find((s) => s.id === params.get("id"));
-      main.innerHTML = s
-        ? `${pageTitle("Meet the store")}<section class="store-banner"><div class="store-avatar">${esc(s.name.slice(0, 2).toUpperCase())}</div><div><h1>${esc(s.name)}</h1><p>${esc(s.category)}${s.city ? " · " + esc(s.city) : ""} · ${s.followers} followers</p></div><button class="primary" data-action="follow" data-id="${esc(s.id)}">Follow store</button></section><section class="section">${sectionHead("From this store", `${s.products.length} products`)}${grid(s.products)}</section>`
-        : empty(
-            "Store unavailable",
-            "This store is not taking orders right now.",
-            "#stores",
-            "Explore stores",
-          );
+      main.innerHTML = empty(
+        "Opening the store",
+        "Loading products and reviews…",
+      );
+      try {
+        const id = encodeURIComponent(params.get("id") || "");
+        const [data, reviewData] = await Promise.all([
+          api(`/api/sellers/public/${id}/profile`),
+          api(
+            `/api/sellers/public/${id}/customer-reviews?page=${encodeURIComponent(params.get("page") || "1")}`,
+          ),
+        ]);
+        if (v !== viewNumber) return;
+        state.storeData = data;
+        const incoming = new Set(data.products.map(productKey));
+        state.products = [
+          ...state.products.filter((p) => !incoming.has(productKey(p))),
+          ...data.products,
+        ];
+        main.innerHTML = storeProfile(data, reviewData.reviews, params);
+        document.title = data.seller.name + " | Axzen";
+      } catch (error) {
+        if (v !== viewNumber) return;
+        main.innerHTML = empty(
+          "Store unavailable",
+          error.message,
+          "#stores",
+          "Explore stores",
+        );
+      }
       break;
     }
     case "checkout":
@@ -1068,16 +1171,29 @@ document.addEventListener("click", async (e) => {
         toast("Address removed");
         break;
       }
-      case "follow":
+      case "share-store":
+        await shareStore(id, button.dataset.name);
+        break;
+      case "write-review":
+        showDialog(
+          "Review your purchase",
+          `<form id="review-form" data-order="${esc(button.dataset.order)}" data-product="${esc(id)}"><p class="dialog-copy">Share your experience with ${esc(button.dataset.title)}.</p><label class="field">Rating<select name="rating" required><option value="">Choose stars</option>${[5, 4, 3, 2, 1].map((n) => `<option value="${n}">${n} ${n === 1 ? "star" : "stars"}</option>`).join("")}</select></label><label class="field">Title<input name="title" maxlength="100"></label><label class="field">Your review<textarea name="body" required maxlength="1500"></textarea></label><button class="primary">Publish review</button><div class="form-error" role="alert"></div></form>`,
+        );
+        break;
+      case "follow": {
         if (!state.user) {
           login();
           break;
         }
         button.disabled = true;
-        await api("/api/customer/follows/" + id, { method: "POST" });
-        button.textContent = "Following";
-        toast("You’re following this store");
+        const following = button.dataset.following === "true";
+        await api("/api/customer/follows/" + id, {
+          method: following ? "DELETE" : "POST",
+        });
+        toast(following ? "Store unfollowed" : "You’re following this store");
+        await render();
         break;
+      }
       case "invoice": {
         const win = window.open("about:blank", "_blank");
         if (!win) throw new Error("Allow popups to view your invoice.");
@@ -1124,6 +1240,26 @@ document.addEventListener("submit", async (e) => {
   if (submit) submit.disabled = true;
   try {
     switch (form.id) {
+      case "store-filter-form":
+        go("store", { id: form.dataset.id, tab: form.dataset.tab, ...data });
+        break;
+      case "review-form":
+        await api(
+          `/api/orders/${encodeURIComponent(form.dataset.order)}/review`,
+          {
+            method: "PUT",
+            body: {
+              productId: form.dataset.product,
+              rating: Number(data.rating),
+              title: data.title,
+              body: data.body,
+            },
+          },
+        );
+        $("#dialog").close();
+        toast("Your verified purchase review is published");
+        await loadCatalog();
+        break;
       case "search-form":
         state.shown = 24;
         go("shop", { q: data.q.trim() });

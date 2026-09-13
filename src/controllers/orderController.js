@@ -18,14 +18,21 @@ const { createShiprocketShipment } = require("../utils/shiprocket");
 
 const adminRoles = ["admin", "superadmin", "support", "finance", "delivery_manager"];
 
+async function staffOrderAccess(req,areas) {
+  if(req.user.role==='superadmin')return true;
+  const profile=await require('../models/AdminUser').findOne({userId:req.user.id}).select('permissions').lean();
+  if(profile)return profile.permissions.includes('*') || areas.some(a=>profile.permissions.includes(a));
+  return ['admin','support','finance','delivery_manager'].includes(req.user.role);
+}
 async function canAccessOrder(req, order) {
-  if (adminRoles.includes(req.user.role)) return true;
+  if (adminRoles.includes(req.user.role)) return staffOrderAccess(req,['orders','finance']);
+  if(req.user.role==='seller')return canAccessSellerOrder(req,order);
   if (req.user.role === "customer") return String(order.customerId?._id || order.customerId) === String(req.user.id);
   return false;
 }
 
 async function canAccessSellerOrder(req, order) {
-  if (adminRoles.includes(req.user.role)) return true;
+  if (adminRoles.includes(req.user.role)) return staffOrderAccess(req,["orders","delivery"]);
   if (req.user.role !== "seller") return false;
   const seller = await Seller.findOne({ userId: req.user.id }).select("_id");
   return seller && String(order.sellerId?._id || order.sellerId) === String(seller._id);
@@ -76,6 +83,9 @@ function sellerOrderView(order) {
     shippingAddress: order.shippingAddress || null,
     shipmentStatus: order.shipmentStatus || order.deliveryStatus || "created",
     deliveryStatus: order.deliveryStatus || "created",
+    providerShipmentId: order.providerShipmentId || "",
+    shipmentBookingState: order.shipmentBookingState || "none",
+    shipmentBookingError: order.shipmentBookingError || "",
     awbNumber: order.awbNumber || "",
     courierName: order.courierName || "",
     trackingUrl: order.trackingUrl || "",
@@ -109,20 +119,6 @@ async function getSellerForUser(req) {
 
 const listSellerOrders = asyncHandler(async (req, res) => {
   const seller = await getSellerForUser(req);
-  const autoAcceptBefore = new Date(Date.now() - 5 * 60 * 1000);
-  await Order.updateMany(
-    { sellerId: seller._id, status: { $in: ["placed", "pending"] }, createdAt: { $lte: autoAcceptBefore } },
-    {
-      status: "accepted",
-      $push: {
-        timeline: {
-          status: "accepted",
-          note: "Automatically accepted after 5 minutes.",
-          at: new Date(),
-        },
-      },
-    }
-  );
   const orders = await Order.find({ sellerId: seller._id }).populate("customerId", "name phone email").sort({ createdAt: -1 }).lean();
   success(res, { orders: orders.map(sellerOrderView) });
 });
@@ -154,28 +150,10 @@ function pushTimeline(order, status, note) {
   ];
 }
 
-async function updateSellerOrderStatus(req, res, nextStatus, options = {}) {
-  const { order } = await getSellerOrder(req);
-  const allowed = options.allowed || [];
-  if (allowed.length && !allowed.includes(order.status)) {
-    res.status(400).json({ ok: false, message: `Order cannot move from ${order.status} to ${nextStatus}.` });
-    return;
-  }
-
-  order.status = nextStatus;
-  if (options.deliveryStatus) order.deliveryStatus = options.deliveryStatus;
-  if (nextStatus === "cancelled") order.cancelReason = options.note || "Cancelled by seller.";
-  if (nextStatus === "cancelled" && order.paymentStatus === "pending") order.payoutStatus = "failed";
-  pushTimeline(order, nextStatus, options.note || `Seller marked order as ${nextStatus}.`);
-  await order.save();
-  success(res, { order: sellerOrderView(order.toObject()) });
-}
-
 const acceptSellerOrder = asyncHandler(async (req, res) => {
-  await updateSellerOrderStatus(req, res, "accepted", {
-    allowed: ["placed", "pending", "accepted"],
-    note: "Seller accepted order.",
-  });
+  const { seller } = await getSellerOrder(req);
+  const order = await require('../services/orderWorkflow').transition({sellerId:seller._id,$or:[{orderId:req.params.id},...(mongoose.isValidObjectId(req.params.id)?[{_id:req.params.id}]:[])]},'accepted',{actor:req.user,note:'Seller accepted the order.'});
+  success(res,{order:sellerOrderView(order.toObject())});
 });
 
 const rejectSellerOrder = asyncHandler(async (req, res) => {
@@ -189,130 +167,79 @@ const cancelCustomerOrder = asyncHandler(async (req, res) => {
 });
 
 const packSellerOrder = asyncHandler(async (req, res) => {
-  const { seller, order } = await getSellerOrder(req);
-  if (!["accepted", "confirmed", "packed"].includes(order.status)) {
-    res.status(400).json({ ok: false, message: `Order cannot be packed from ${order.status}.` });
-    return;
-  }
-
-  if (order.awbNumber || order.providerShipmentId) return success(res,{order:sellerOrderView(order.toObject())});
-  const shipment = await createShiprocketShipment({
-    order,
-    seller,
-    customerAddress: order.shippingAddress || {},
-  });
-
-  order.status = "packed";
-  order.deliveryStatus = shipment.shipmentStatus;
-  order.shipmentStatus = shipment.shipmentStatus;
-  order.providerShipmentId = shipment.shipmentId;
-  order.awbNumber = shipment.awbNumber || "";
-  order.courierName = shipment.courierName || "";
-  order.trackingUrl = shipment.trackingUrl || "";
-  order.pickupAgentName = shipment.pickupAgentName || "";
-  order.pickupAgentPhone = shipment.pickupAgentPhone || "";
-  pushTimeline(order, "packed", shipment.awbNumber ? "Order packed. Waiting for courier pickup." : "Order packed. Courier assignment pending.");
-  await order.save();
-
-  await Delivery.findOneAndUpdate(
-    { orderId: order.orderId },
-    {
-      orderId: order.orderId,
-      partnerName: shipment.courierName || "Shiprocket",
-      courierName: shipment.courierName || "Shiprocket",
-      trackingNumber: shipment.awbNumber || "",
-      awbNumber: shipment.awbNumber || "",
-      trackingUrl: shipment.trackingUrl || "",
-      status: shipment.shipmentStatus,
-    },
-    { upsert: true, new: true }
-  );
-
-  success(res, { order: sellerOrderView(order.toObject()), shipment });
+  const { order } = await getSellerOrder(req);
+  const updated = await require('../services/orderWorkflow').transition({_id:order._id},'packed',{actor:req.user,note:'Seller checked all items and completed packing.'});
+  success(res,{order:sellerOrderView(updated.toObject())});
 });
 
-const packAndShipSellerOrder = asyncHandler(async (req, res) => {
-  const { seller, order } = await getSellerOrder(req);
-  const isCodOrder = order.paymentMethod === "cod" && order.paymentStatus === "pending";
-  if (order.paymentStatus !== "paid" && !isCodOrder) {
-    res.status(400).json({ ok: false, message: "Packing complete requires paid online payment or seller-enabled Cash on Delivery." });
-    return;
-  }
-
-  if (!["packed", "accepted", "confirmed"].includes(order.status)) {
-    res.status(400).json({ ok: false, message: `Order cannot be shipped from ${order.status}.` });
-    return;
-  }
-
+const packAndShipSellerOrder = asyncHandler(async (req,res) => {
+  const {seller,order} = await getSellerOrder(req);
+  if (order.status !== 'packed') return res.status(409).json({ok:false,message:'Complete packing before requesting a courier.'});
   if (order.awbNumber || order.providerShipmentId) return success(res,{order:sellerOrderView(order.toObject())});
-  const shipment = await createShiprocketShipment({
-    order,
-    seller,
-    customerAddress: order.shippingAddress || {},
-  });
-
-  order.status = "packed";
-  order.deliveryStatus = shipment.shipmentStatus;
-  order.shipmentStatus = shipment.shipmentStatus;
-  order.providerShipmentId = shipment.shipmentId;
-  order.awbNumber = shipment.awbNumber || "";
-  order.courierName = shipment.courierName || "";
-  order.trackingUrl = shipment.trackingUrl || "";
-  pushTimeline(order, "packed", "Shipment registered. Courier assignment and pickup pending.");
-  await order.save();
-
-  await Delivery.findOneAndUpdate(
-    { orderId: order.orderId },
-    {
-      orderId: order.orderId,
-      partnerName: shipment.courierName || "Shiprocket",
-      courierName: shipment.courierName || "Shiprocket",
-      trackingNumber: shipment.awbNumber || "",
-      awbNumber: shipment.awbNumber || "",
-      trackingUrl: shipment.trackingUrl || "",
-      status: shipment.shipmentStatus,
-    },
-    { upsert: true, new: true }
-  );
-
-  success(res, { order: sellerOrderView(order.toObject()), shipment });
+  const packageDetails = {};
+  for (const field of ['length','breadth','height','weight']) {
+    const value = req.body.packageDetails?.[field];
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value > (field === 'weight' ? 100 : 300)) return res.status(400).json({ok:false,message:'Enter actual parcel dimensions (cm) and weight (kg).'});
+    packageDetails[field]=value;
+  }
+  if (!(process.env.SHIPROCKET_TOKEN || (process.env.SHIPROCKET_EMAIL && process.env.SHIPROCKET_PASSWORD))) return res.status(503).json({ok:false,message:'Courier booking is not configured. Packing is saved. Contact delivery support to arrange pickup.'});
+  if(!seller.shippingPickupLocation) return res.status(503).json({ok:false,message:'Delivery support must connect this store’s registered Shiprocket pickup location. Packing is saved.'});
+  const locked=await Order.findOneAndUpdate({_id:order._id,status:'packed',shipmentBookingState:{$nin:['booking','booked','needs_review']},providerShipmentId:'',awbNumber:''},{$set:{shipmentBookingState:'booking',packageDetails}},{new:true});
+  if (!locked) return res.status(409).json({ok:false,message:'Booking already started. Refresh or contact support to reconcile it before retrying.'});
+  try {
+    const shipment=await createShiprocketShipment({order:locked,seller,customerAddress:order.shippingAddress || {}});
+    locked.providerShipmentId=shipment.shipmentId;
+    locked.awbNumber=shipment.awbNumber || '';locked.courierName=shipment.courierName || '';
+    locked.trackingUrl=shipment.trackingUrl || '';locked.shipmentStatus=shipment.shipmentStatus;
+    locked.deliveryStatus=shipment.shipmentStatus;locked.shipmentBookingState='booked';locked.shipmentBookingError='';
+    pushTimeline(locked,'packed',shipment.awbNumber ? 'Courier booking confirmed. Awaiting actual pickup.' : 'Shipment registered. Delivery operations must assign courier and pickup.');
+    await mongoose.connection.transaction(async session=>{
+      await locked.save({session});
+      await Delivery.updateOne({orderId:locked.orderId},{$set:{courierName:locked.courierName,partnerName:locked.courierName,awbNumber:locked.awbNumber,trackingNumber:locked.awbNumber,trackingUrl:locked.trackingUrl,status:locked.deliveryStatus}},{session});
+    });
+    locked.$session(null);
+    success(res,{order:sellerOrderView(locked.toObject())});
+  } catch(error) {
+    await Order.updateOne({_id:order._id,shipmentBookingState:'booking'},{$set:{shipmentBookingState:'needs_review',shipmentBookingError:'Booking could not be confirmed. Support must check the courier account before retrying.'}});
+    throw error;
+  }
 });
 
 function normalizeShipmentStatus(status = "") {
   const normalized = String(status).toLowerCase().replace(/\s+/g, "_");
   if (["picked_up", "pickup_done", "in_transit", "shipped"].includes(normalized)) return { orderStatus: "shipped", deliveryStatus: "shipped" };
+  if (["out_for_delivery"].includes(normalized)) return {orderStatus:"out_for_delivery",deliveryStatus:"out_for_delivery"};
   if (["delivered", "delivery_done"].includes(normalized)) return { orderStatus: "delivered", deliveryStatus: "delivered" };
-  if (["rto", "rto_delivered", "returned", "undelivered", "customer_refused"].includes(normalized)) {
+  if (["rto_delivered", "returned"].includes(normalized)) {
     return { orderStatus: "returned", deliveryStatus: "returned" };
   }
   if (["new", "pickup_scheduled", "waiting_for_pickup"].includes(normalized)) return { orderStatus: "packed", deliveryStatus: "waiting_for_pickup" };
   return null;
 }
 
-async function applyShipmentStatus(order, status, reason = "") {
-  const next = normalizeShipmentStatus(status);
-  if (!next || ["cancelled","returned"].includes(order.status) || (order.status === "delivered" && next.orderStatus !== "returned")) return order;
-  const progression = ["placed", "pending", "accepted", "confirmed", "packed", "shipped", "out_for_delivery", "delivered"];
-  if (next.orderStatus !== "returned" && progression.indexOf(next.orderStatus) < progression.indexOf(order.status)) return order;
-  if (next.orderStatus === order.status && next.deliveryStatus === order.deliveryStatus) return order;
-  order.status = next.orderStatus;
-  order.deliveryStatus = next.deliveryStatus;
-  order.shipmentStatus = next.deliveryStatus;
-  if (next.orderStatus === "delivered" && order.paymentMethod === "cod") {
-    order.paymentStatus = "paid";
-    order.payoutStatus = "pending";
-  }
-  if (next.orderStatus === "returned") {
-    order.returnReason = reason || "Customer did not accept delivery.";
-    order.refundStatus = order.paymentMethod === "cod" ? "none" : "scheduled";
-    order.refundDueDate = null;
-    order.payoutStatus = "failed";
-    await Settlement.updateMany({orderId:order.orderId},{$set:{status:"failed",payoutPaise:0}});
-  }
-  pushTimeline(order, next.deliveryStatus, reason || `Shipment status updated to ${next.deliveryStatus}.`);
-  await order.save();
-  await Delivery.findOneAndUpdate({ orderId: order.orderId }, { status: next.deliveryStatus }, { upsert: false });
-  return order;
+async function applyShipmentStatus(order, status, reason = '') {
+  const next=normalizeShipmentStatus(status);if(!next)return order;
+  let updated;
+  await mongoose.connection.transaction(async session=>{
+    updated=await Order.findById(order._id).session(session);
+    if(!updated)return;
+    const progression=['placed','pending','accepted','confirmed','packed','shipped','out_for_delivery','delivered'];
+    if(['cancelled','returned'].includes(updated.status) || (updated.status==='delivered' && next.orderStatus!=='returned'))return;
+    if(next.orderStatus!=='returned' && progression.indexOf(next.orderStatus)<progression.indexOf(updated.status))return;
+    if(next.orderStatus===updated.status && next.deliveryStatus===updated.deliveryStatus)return;
+    if(!updated.providerShipmentId && !updated.awbNumber)return;
+    updated.status=next.orderStatus;updated.deliveryStatus=next.deliveryStatus;updated.shipmentStatus=next.deliveryStatus;
+    if(next.orderStatus==='returned'){
+      updated.returnReason=reason || 'Courier confirmed return.';
+      if(updated.paymentStatus==='paid')updated.refundStatus='scheduled';
+      updated.refundDueDate=null;updated.payoutStatus='failed';
+      await Settlement.updateMany({orderId:updated.orderId},{$set:{status:'failed',payoutPaise:0}},{session});
+    }
+    pushTimeline(updated,next.deliveryStatus,reason || `Courier status: ${next.deliveryStatus}.`);
+    await updated.save({session});
+    await Delivery.updateOne({orderId:updated.orderId},{$set:{status:next.deliveryStatus}},{session});
+  });
+  updated?.$session(null);return updated || order;
 }
 
 const syncSellerShipmentStatus = asyncHandler(async (req, res) => {

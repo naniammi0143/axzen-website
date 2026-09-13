@@ -56,7 +56,7 @@ function authorizeAdminAccess(area) {
     try {
     const allowed = adminAccess[area] || [];
 
-    if (!req.user) {
+    if (!req.user || !["superadmin","admin","support","finance","delivery_manager"].includes(req.user.role)) {
       res.status(403).json({ ok: false, message: "This admin section is not allowed for your role." });
       return;
     }

@@ -20,7 +20,8 @@
     orders: "Order Management",
     payments: "Payments and Commission",
     customers: "Customers",
-    customerapp: "Offers",
+    customerapp: "Customer storefront",
+    reviews: "Customer reviews",
     delivery: "Delivery Management",
     helpdesk: "Helpdesk",
     employees: "Employee Roles",
@@ -35,6 +36,7 @@
     payments: "/api/admin/payments",
     customers: "/api/admin/customers",
     customerapp: "/api/admin/customer-app",
+    reviews: "/api/admin/reviews",
     delivery: "/api/admin/deliveries",
     helpdesk: "/api/admin/helpdesk",
     employees: "/api/admin/employees",
@@ -49,6 +51,7 @@
     payments: "finance",
     customers: "customers",
     customerapp: "customerapp",
+    reviews: "customerapp",
     delivery: "delivery",
     helpdesk: "customers",
     employees: "employees",
@@ -57,8 +60,8 @@
   };
 
   const roleViewAccess = {
-    superadmin: ["dashboard", "sellers", "products", "orders", "payments", "customers", "customerapp", "delivery", "helpdesk", "employees", "reports", "audit"],
-    admin: ["dashboard", "sellers", "products", "orders", "customers", "customerapp", "delivery", "helpdesk", "employees", "reports"],
+    superadmin: ["dashboard", "sellers", "products", "orders", "payments", "customers", "customerapp", "reviews", "delivery", "helpdesk", "employees", "reports", "audit"],
+    admin: ["dashboard", "sellers", "products", "orders", "customers", "customerapp", "reviews", "delivery", "helpdesk", "employees", "reports"],
     support: ["dashboard", "orders", "customers", "helpdesk"],
     finance: ["dashboard", "payments", "reports"],
     delivery_manager: ["dashboard", "orders", "delivery"],
@@ -729,7 +732,10 @@
         <label>Offer title<input name="offerTitle" value="${escapeHtml(details.offerTitle || "")}" placeholder="Extra 5% Off"></label>
         <label>Offer subtitle<input name="offerSubtitle" value="${escapeHtml(details.offerSubtitle || "")}" placeholder="On prepaid orders or selected products"></label>
         <label>Owner display name<input name="ownerDisplayName" value="${escapeHtml(details.ownerDisplayName || "")}" placeholder="Owner name"></label>
-        <label>Member since label<input name="memberSinceLabel" value="${escapeHtml(details.memberSinceLabel || "")}" placeholder="January 2023"></label>
+        <label>Instagram URL<input type="url" name="instagramUrl" value="${escapeHtml(details.instagramUrl||'')}"></label>
+        <label>Dispatch note<input name="dispatchNote" value="${escapeHtml(details.dispatchNote||'')}"></label>
+        <label>Return information<textarea name="returnPolicy">${escapeHtml(details.returnPolicy||'')}</textarea></label>
+        <label>Registered Shiprocket pickup location<input name="shippingPickupLocation" maxlength="100" value="${escapeHtml(seller.shippingPickupLocation||'')}"><small>Use this store's location name already registered with the courier.</small></label>
         <label>Support email<input name="supportEmail" value="${escapeHtml(details.supportEmail || seller.email || "")}" placeholder="support@example.com"></label>
         <label>Support phone<input name="supportPhone" value="${escapeHtml(details.supportPhone || seller.phone || "")}" placeholder="+91..."></label>
         <button type="submit">Save seller page controls</button>
@@ -759,7 +765,7 @@
             { label: "Product", render: (row) => `<strong>${escapeHtml(row.title)}</strong><small>${escapeHtml(row.sellerName)}</small>` },
             { label: "Category", render: (row) => escapeHtml(row.category) },
             { label: "Price", render: (row) => `<strong>${rupees(row.pricePaise)}</strong><small>MRP ${rupees(row.mrpPaise || row.pricePaise)}</small>` },
-            { label: "Rating", render: (row) => `<input class="admin-mini-input" data-product-rating="${row._id}" type="number" min="0" max="5" step="0.1" value="${Number(row.ratingAverage || 0)}"><input class="admin-mini-input" data-product-rating-count="${row._id}" type="number" min="0" step="1" value="${Number(row.ratingCount || 0)}">` },
+            { label: "Rating", render: row => `${Number(row.ratingAverage||0).toFixed(1)} / 5 · ${Number(row.ratingCount||0)} reviews` },
             { label: "Stock", render: (row) => escapeHtml(row.stock) },
             { label: "Status", render: (row) => statusBadge(row.status) },
           ],
@@ -767,7 +773,6 @@
           (row) => `
             <button data-action="product-approve" data-id="${row._id}">Approve</button>
             <button data-action="product-clean-bg" data-id="${row._id}">Clean BG</button>
-            <button data-action="product-rating" data-id="${row._id}">Save rating</button>
             <button data-action="product-reject" data-id="${row._id}">Reject</button>
             <button data-action="product-block" data-id="${row._id}">Block</button>
           `
@@ -776,23 +781,24 @@
   }
 
   function renderOrders(data) {
+    state.orderRows=data.items || [];
     qs('[data-view-panel="orders"]').innerHTML = panel(
       "Order lifecycle",
-      filterBar("orders", [{ key: "status", label: "Order status", options: ["pending", "confirmed", "packed", "shipped", "out_for_delivery", "delivered", "cancelled", "returned"] }]) +
+      filterBar("orders", [{ key: "status", label: "Order status", options: ["placed", "pending", "accepted", "confirmed", "packed", "shipped", "out_for_delivery", "delivered", "cancelled", "returned"] }]) +
         table(
           [
             { label: "Order", render: (row) => escapeHtml(row.orderId) },
             { label: "Seller", render: (row) => escapeHtml(row.sellerName) },
             { label: "Order status", render: (row) => statusBadge(row.status) },
             { label: "Payment", render: (row) => statusBadge(row.paymentStatus) },
-            { label: "Tracking", render: (row) => escapeHtml(row.trackingId || "-") },
+            { label: "Tracking", render: (row) => escapeHtml(row.awbNumber || "-") },
             { label: "Invoice", render: (row) => escapeHtml(row.invoiceNumber || `INV-${row.orderId}`) },
             { label: "Amount", render: (row) => rupees(row.customerPaid || row.finance?.totalPaise) },
           ],
           data.items,
           (row) => `
-            <button data-action="order-next" data-id="${row._id}" data-status="${nextOrderStatus(row.status)}">Next</button>
-            <button data-action="order-cancel" data-id="${row._id}">Cancel</button>
+            ${["placed","pending","accepted","confirmed"].includes(row.status)?`<button data-action="order-next" data-id="${row._id}" data-status="${nextOrderStatus(row.status)}">${nextOrderStatus(row.status)==="accepted"?"Accept":"Confirm packed"}</button>`:""}${canManageDelivery()&&["packed","shipped","out_for_delivery","delivered"].includes(row.status)?`<button data-open-shipment="${row._id}">Courier update</button>`:""}
+            ${["placed","pending","accepted","confirmed"].includes(row.status)?`<button data-action="order-cancel" data-id="${row._id}">Cancel</button>`:""}
             <button data-action="order-invoice" data-id="${row._id}" data-order="${escapeHtml(row.orderId)}">Invoice</button>
             <button data-action="order-label" data-id="${row._id}" data-order="${escapeHtml(row.orderId)}">Label</button>
           `
@@ -800,11 +806,7 @@
     );
   }
 
-  function nextOrderStatus(status) {
-    const flow = ["pending", "confirmed", "packed", "shipped", "out_for_delivery", "delivered"];
-    const normalized = status === "placed" ? "pending" : status === "accepted" ? "confirmed" : status;
-    return flow[Math.min(flow.indexOf(normalized) + 1, flow.length - 1)] || "confirmed";
-  }
+  function nextOrderStatus(status) {return ['placed','pending'].includes(status)?'accepted':'packed';}
 
   function renderPayments(data) {
     const summary = data.summary || {};
@@ -895,11 +897,31 @@
     `;
   }
 
+  function customerControls(data) {
+    const c=data.config||{};
+    const fields=[['heroTitle','Homepage headline',140],['heroSubtitle','Homepage introduction',300],['heroCta','Shop button text',50],['spotlightTitle','Featured stores heading',100],['supportEmail','Support email',160]];
+    return `<article class="admin-panel"><header class="workspace-heading"><div><p class="eyebrow">Storefront control centre</p><h2>Customer website & mobile storefront</h2><p>Saved changes appear on the next page refresh. Brand colours stay navy and orange.</p></div><a href="https://www.axzen.in" target="_blank" rel="noopener">Open customer site ↗</a></header><form class="workspace-form" data-customer-controls>${fields.map(([name,label,max])=>`<label>${label}<input name="${name}" maxlength="${max}" value="${escapeHtml(c[name]||'')}" required></label>`).join('')}<label>Category order<input name="categoryOrder" value="${escapeHtml((c.categoryOrder||[]).join(', '))}" placeholder="Grocery, Fashion, Home"><small>Comma-separated names; other categories follow automatically.</small></label><fieldset class="wide"><legend>Visible sections</legend>${[['showStores','Featured stores on home'],['showOffers','Festival offers on home'],['showBestSellers','Best sellers in store profiles'],['showReviews','Customer reviews in store profiles']].map(([name,label])=>`<label class="workspace-check"><input type="checkbox" name="${name}" ${c[name]!==false?'checked':''}>${label}</label>`).join('')}</fieldset><fieldset class="wide"><legend>Featured stores · select up to 12</legend><div class="featured-store-options">${(data.sellers||[]).filter(s=>s.isActive&&s.status==='active').map(s=>`<label class="workspace-check"><input type="checkbox" name="recommendedSellerIds" value="${escapeHtml(s._id)}" ${(c.recommendedSellerIds||[]).map(String).includes(String(s._id))?'checked':''}>${escapeHtml(s.businessName)}</label>`).join('')||'<p>No active stores yet.</p>'}</div></fieldset><button type="submit">Save customer storefront</button><p data-controls-message role="status"></p></form></article>`;
+  }
+  function renderReviews(data) {
+    qs('[data-view-panel="reviews"]').innerHTML=panel('Verified purchase reviews',`<p>Moderate abusive or inappropriate content with a recorded reason. Ratings are calculated from published customer reviews.</p>${filterBar('reviews',[{key:'status',label:'Visibility',options:['published','hidden']}])}${table([{label:'Store / product',render:r=>`${escapeHtml(r.sellerId?.businessName||'Store')}<small>${escapeHtml(r.productTitle)}</small>`},{label:'Review',render:r=>`<strong>${escapeHtml(r.authorName)} · ${r.rating} ★</strong><p>${escapeHtml(r.body)}</p>${r.sellerReply?`<small>Store reply: ${escapeHtml(r.sellerReply)}</small>`:''}`},{label:'Status',render:r=>`${statusBadge(r.status)}<small>${escapeHtml(r.moderationReason)}</small>`}],data.items,r=>`<button data-review-moderate="${r._id}" data-status="${r.status==='hidden'?'published':'hidden'}">${r.status==='hidden'?'Restore':'Hide'}</button>`)}<div class="workspace-actions">${data.page>1?`<button data-review-page="${data.page-1}">Previous</button>`:''}<span>Page ${data.page} · ${data.total} reviews</span>${data.page*30<data.total?`<button data-review-page="${data.page+1}">Next</button>`:''}</div>`);
+  }
+  function canManageDelivery() {
+    const p=state.user?.admin?.permissions;
+    return state.user?.role==='superadmin' || (p?p.includes('*')||p.includes('delivery'):['admin','delivery_manager'].includes(state.user?.role));
+  }
+  function deliveryEditor(orderId,status,recordId='',awb='',courier='',url='') {
+    const drawer=ensureReportDrawer('shipment','Courier progress');
+    const next={packed:['shipped'],shipped:['out_for_delivery','delivered','returned'],out_for_delivery:['delivered','returned'],delivered:['returned']}[status]||[];
+    qs('.report-drawer-body',drawer).innerHTML=`<h3>${escapeHtml(orderId)}</h3><p>Record only updates confirmed by the courier. A delivery update does not confirm COD payment collection.</p><form class="workspace-form" data-shipment-form="${escapeHtml(recordId)}" data-order="${escapeHtml(orderId)}"><label>Current / next step<select name="status">${[status,...next].map(s=>`<option value="${s}">${escapeHtml(s.replaceAll('_',' '))}</option>`).join('')}</select></label><label>Courier name<input name="courierName" maxlength="100" required value="${escapeHtml(courier)}"></label><label>Actual AWB / tracking number<input name="awbNumber" maxlength="100" required value="${escapeHtml(awb)}"></label><label>HTTPS tracking URL<input name="trackingUrl" type="url" value="${escapeHtml(url)}"></label><label class="wide">Evidence / update reason<textarea name="note" required maxlength="500" placeholder="Courier confirmation or delivery reference"></textarea></label><button type="submit">Save confirmed courier update</button><p data-controls-message role="status"></p></form>`;
+    openReportDrawer(drawer);
+  }
+
   function renderCustomerApp(data) {
     const config = data.config || {};
     const offers = config.festivalOffers || [];
     qs('[data-view-panel="customerapp"]').innerHTML = `
       <section class="customer-app-admin">
+        ${customerControls(data)}
         <header class="employee-hero">
           <div>
             <span class="eyebrow">Offers</span>
@@ -951,21 +973,8 @@
   }
 
   function renderDelivery(data) {
-    qs('[data-view-panel="delivery"]').innerHTML = panel(
-      "Delivery tracking",
-      table(
-        [
-          { label: "Order", render: (row) => escapeHtml(row.orderId) },
-          { label: "Partner", render: (row) => escapeHtml(row.partnerName || "-") },
-          { label: "Tracking", render: (row) => escapeHtml(row.trackingNumber || "-") },
-          { label: "Pincode", render: (row) => escapeHtml(row.deliveryPincode || "-") },
-          { label: "Same day", render: (row) => (row.sameDayEligible ? "Yes" : "No") },
-          { label: "Status", render: (row) => statusBadge(row.status) },
-        ],
-        data.items,
-        (row) => `<button data-action="delivery-next" data-id="${row.orderId}">Move status</button><button data-action="delivery-failed" data-id="${row.orderId}">Failed</button>`
-      )
-    );
+    state.deliveryRows=data.items||[];
+    qs('[data-view-panel="delivery"]').innerHTML=panel('Courier operations',`<p>Use Orders to add courier details after packing. Track pickup, transit, delivery and returns here.</p>${table([{label:'Order',render:r=>escapeHtml(r.orderId)},{label:'Courier',render:r=>escapeHtml(r.courierName||'Not assigned')},{label:'Tracking',render:r=>escapeHtml(r.awbNumber||'Awaiting booking')},{label:'Status',render:r=>statusBadge(r.status)}],data.items,r=>['packed','shipped','out_for_delivery','delivered','ready_to_ship','waiting_for_pickup'].includes(r.status)?`<button data-edit-delivery="${escapeHtml(r.orderId)}">Confirmed courier update</button>`:'')}`);
   }
 
   function renderHelpdesk(data) {
@@ -1365,7 +1374,7 @@
         return renderReports(await api(`/api/admin/reports/${state.reportType}${query}`));
       }
       const data = await listView(view, state.filterQuery || "");
-      const renderers = { sellers: renderSellers, products: renderProducts, orders: renderOrders, customers: renderCustomers, customerapp: renderCustomerApp, delivery: renderDelivery, helpdesk: renderHelpdesk, employees: renderEmployees, audit: renderAudit };
+      const renderers = { sellers: renderSellers, products: renderProducts, orders: renderOrders, customers: renderCustomers, customerapp: renderCustomerApp, reviews: renderReviews, delivery: renderDelivery, helpdesk: renderHelpdesk, employees: renderEmployees, audit: renderAudit };
       renderers[view]?.(data);
     } catch (error) {
       qs(`[data-view-panel="${view}"]`).innerHTML = panel(titles[view], emptyState(error.message));
@@ -1418,6 +1427,13 @@
       }
     });
     document.addEventListener("click", async (event) => {
+      const reviewPage=event.target.closest('[data-review-page]');if(reviewPage){const q=new URLSearchParams(state.filterQuery||'');q.set('page',reviewPage.dataset.reviewPage);state.filterQuery=q.toString();await loadView('reviews');return;}
+      const moderate=event.target.closest('[data-review-moderate]');
+      if(moderate){const reason=window.prompt('Reason for this moderation action:');if(!reason?.trim())return;try{await patch(`/api/admin/reviews/${moderate.dataset.reviewModerate}`,{status:moderate.dataset.status,reason});}catch(e){toast(e.message,true);}return;}
+      const shipment=event.target.closest('[data-open-shipment]');
+      if(shipment){const o=state.orderRows.find(o=>o._id===shipment.dataset.openShipment);if(o)deliveryEditor(o.orderId,o.status,o._id,o.awbNumber,o.courierName,o.trackingUrl);return;}
+      const delivery=event.target.closest('[data-edit-delivery]');
+      if(delivery){const d=state.deliveryRows.find(d=>d.orderId===delivery.dataset.editDelivery);if(d)deliveryEditor(d.orderId,['ready_to_ship','waiting_for_pickup'].includes(d.status)?'packed':d.status,'',d.awbNumber,d.courierName,d.trackingUrl);return;}
       const invoicePrint = event.target.closest("[data-print-current-invoice]");
       if (invoicePrint) {
         const frame = qs("#reportDrawer-invoice .invoice-frame");
@@ -1574,16 +1590,12 @@
         }
         return;
       }
-      if (action === "product-rating") {
-        return patch(`/api/admin/products/${id}`, {
-          ratingAverage: Number(qs(`[data-product-rating="${id}"]`)?.value || 0),
-          ratingCount: Number(qs(`[data-product-rating-count="${id}"]`)?.value || 0),
-        });
-      }
       if (action === "product-reject") return patch(`/api/admin/products/${id}/reject`, { rejectionReason: "Rejected by admin" });
       if (action === "product-block") return patch(`/api/admin/products/${id}`, { status: "blocked" });
-      if (action === "order-next") return patch(`/api/admin/orders/${id}`, { status: target.dataset.status });
-      if (action === "order-cancel") return patch(`/api/admin/orders/${id}`, { status: "cancelled" });
+      if (action === 'order-next' || action === 'order-cancel') {
+        const note=window.prompt('Reason for this order update:');if(!note?.trim())return;
+        try{await patch(`/api/admin/orders/${id}`,{status:action==='order-cancel'?'cancelled':target.dataset.status,note});}catch(e){toast(e.message,true);}return;
+      }
       if (action === "order-invoice") return openInvoice(id || target.dataset.order);
       if (action === "order-label") return openDeliveryLabel(id || target.dataset.order);
       if (action === "customer-view") return openCustomerDetail(id);
@@ -1592,8 +1604,6 @@
       if (action === "customer-toggle") return patch(`/api/admin/customers/${id}`, { status: target.dataset.status });
       if (action === "settlement-paid") return patch(`/api/admin/settlements/${id}`, { status: "paid" });
       if (action === "settlement-hold") return patch(`/api/admin/settlements/${id}`, { status: "hold" });
-      if (action === "delivery-next") return patch(`/api/admin/deliveries/${id}`, { status: "out_for_delivery" });
-      if (action === "delivery-failed") return patch(`/api/admin/deliveries/${id}`, { status: "failed", failedReason: "Marked failed by admin" });
       if (action === "helpdesk-update") {
         const status = qs(`[data-helpdesk-status="${id}"]`)?.value || "open";
         const departmentNote = qs(`[data-helpdesk-note="${id}"]`)?.value || "";
@@ -1609,6 +1619,17 @@
     });
 
     document.addEventListener("submit", async (event) => {
+      const controls=event.target.closest('[data-customer-controls],[data-shipment-form]');
+      if(controls){event.preventDefault();const f=new FormData(controls),body=Object.fromEntries(f),button=controls.querySelector('button[type="submit"]'),msg=controls.querySelector('[data-controls-message]');button.disabled=true;try{
+        if(controls.hasAttribute('data-customer-controls')){
+          for(const k of ['showStores','showOffers','showBestSellers','showReviews'])body[k]=f.has(k);
+          body.recommendedSellerIds=f.getAll('recommendedSellerIds');
+          await api('/api/admin/customer-app',{method:'PATCH',body:JSON.stringify(body)});msg.textContent='Customer storefront saved.';
+        }else{
+          const path=controls.dataset.shipmentForm?`/api/admin/orders/${controls.dataset.shipmentForm}/shipment`:`/api/admin/deliveries/${encodeURIComponent(controls.dataset.order)}`;
+          await api(path,{method:'PATCH',body:JSON.stringify(body)});closeTopReportDrawer();await loadView();toast('Courier update saved.');
+        }
+      }catch(e){msg.textContent=e.message;}finally{button.disabled=false;}return;}
       const employeeForm = event.target.closest("[data-employee-create]");
       if (employeeForm) {
         event.preventDefault();
@@ -1713,7 +1734,9 @@
       const sellerStoreControls = event.target.closest("[data-seller-store-controls]");
       if (sellerStoreControls) {
         event.preventDefault();
-        const payload = { storeDetails: Object.fromEntries(new FormData(sellerStoreControls).entries()) };
+        const fields=Object.fromEntries(new FormData(sellerStoreControls).entries());
+        const {shippingPickupLocation,...storeDetails}=fields;
+        const payload={storeDetails,shippingPickupLocation};
         try {
           await api(`/api/admin/sellers/${sellerStoreControls.dataset.sellerStoreControls}`, { method: "PATCH", body: JSON.stringify(payload) });
           toast("Seller storefront controls saved.");
@@ -1754,25 +1777,17 @@
       state.token = token;
       state.user = user;
       const permissions = user.admin?.permissions || [];
-      const hasAccess = (view) =>
-        (roleViewAccess[user.role] || []).includes(view) || permissions.includes("*") || permissions.includes(viewPermissions[view]);
-      qs("#adminRoleLabel").textContent = `${(user.admin?.displayRole || user.role).replaceAll("_", " ")} access`;
-      qsa("[data-admin-view]").forEach((button) => {
-        if (permissions.length && !hasAccess(button.dataset.adminView)) {
-          button.setAttribute("hidden", "hidden");
-        }
-      });
-      if (!["superadmin", "finance"].includes(user.role)) {
-        qs('[data-admin-view="payments"]')?.setAttribute("hidden", "hidden");
-      }
+      const hasAccess = view => user.role==='superadmin' || (user.admin ? permissions.includes('*') || permissions.includes(viewPermissions[view]) : (roleViewAccess[user.role]||[]).includes(view));
+      qs('#adminRoleLabel').textContent=`${(user.admin?.displayRole||user.role).replaceAll('_',' ')} access`;
+      qsa('[data-admin-view]').forEach(button=>button.toggleAttribute('hidden',!hasAccess(button.dataset.adminView)));
       if (user.role === "finance") {
         state.reportType = "payments";
       }
       if (!["superadmin", "admin", "finance"].includes(user.role)) {
         qs('[data-admin-view="reports"]')?.setAttribute("hidden", "hidden");
       }
-      bindEvents();
-      loadView("dashboard");
+      if(!state.bound){bindEvents();state.bound=true;}
+      loadView(qsa("[data-admin-view]").find(button=>!button.hidden)?.dataset.adminView || "dashboard");
     },
   };
 document.addEventListener('click',async event=>{

@@ -77,7 +77,7 @@ async function createShiprocketShipment({ order, seller, customerAddress }) {
     body: {
       order_id: order.orderId,
       order_date: order.createdAt || new Date(),
-      pickup_location: process.env.SHIPROCKET_PICKUP_LOCATION || seller.businessName || "Axzen Seller",
+      pickup_location: seller.shippingPickupLocation,
       billing_customer_name: customerAddress?.fullName || "Axzen Customer",
       billing_last_name: "",
       billing_address: customerAddress?.address || "",
@@ -97,10 +97,10 @@ async function createShiprocketShipment({ order, seller, customerAddress }) {
       shipping_charges: ((Number(order.deliveryCharge) || 0) / 100).toFixed(2),
       payment_method: order.paymentMethod === "cod" ? "COD" : "Prepaid",
       sub_total: ((Number(order.productTotal) || 0) / 100).toFixed(2),
-      length: Number(process.env.SHIPROCKET_DEFAULT_LENGTH_CM || 10),
-      breadth: Number(process.env.SHIPROCKET_DEFAULT_BREADTH_CM || 10),
-      height: Number(process.env.SHIPROCKET_DEFAULT_HEIGHT_CM || 10),
-      weight: Number(process.env.SHIPROCKET_DEFAULT_WEIGHT_KG || 0.5),
+      length: order.packageDetails.length,
+      breadth: order.packageDetails.breadth,
+      height: order.packageDetails.height,
+      weight: order.packageDetails.weight,
       pickup_address: pickupAddress,
     },
   });

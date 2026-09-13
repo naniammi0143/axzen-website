@@ -39,10 +39,15 @@ const orderSchema = new mongoose.Schema(
     invoiceDate: { type: Date, default: null },
     deliveryStatus: {
       type: String,
-      enum: ["created", "ready_to_ship", "waiting_for_pickup", "assigned", "packed", "shipped", "picked", "delivered", "cancelled", "returned"],
+      enum: ["created", "ready_to_ship", "waiting_for_pickup", "assigned", "packed", "shipped", "picked", "out_for_delivery", "delivered", "cancelled", "returned"],
       default: "created",
     },
     providerShipmentId: { type: String, trim: true, default: "" },
+    shipmentBookingState: { type: String, enum: ['none','booking','booked','needs_review'], default: 'none' },
+    shipmentBookingError: { type: String, default: '' },
+    packageDetails: {
+      length: Number, breadth: Number, height: Number, weight: Number,
+    },
     awbNumber: { type: String, trim: true, default: "" },
     courierName: { type: String, trim: true, default: "" },
     trackingUrl: { type: String, trim: true, default: "" },
