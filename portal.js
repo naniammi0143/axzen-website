@@ -4347,7 +4347,7 @@ function stopSellerOrderPolling() {
 function startSellerOrderPolling() {
   stopSellerOrderPolling();
   sellerOrderPollTimer = window.setInterval(() => {
-    if (localStorage.getItem("axzenRole") === "seller" && !dashboardSection?.hidden) {
+    if (localStorage.getItem("axzenRole") === "seller" && !dashboardSection?.hidden && getSellerSectionFromHash() !== "payments") {
       loadRoleOrders("seller");
     }
   }, 20000);

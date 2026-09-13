@@ -331,13 +331,24 @@ test("saved addresses persist by customer and never expose another account", asy
   );
 });
 
+async function workflowOrder(orderId, status = 'placed') {
+  const orderItems = [{ productId: String(items[0]._id), title: items[0].title, quantity: 2, pricePaise: 10000 }];
+  return Order.create({
+    orderId, customerId: customer._id, sellerId: seller._id, sellerName: seller.businessName,
+    status, paymentMethod: 'cod', paymentStatus: 'pending', items: orderItems,
+    finance: require('../src/utils/money').calculateOrderFinance(orderItems, {}, 0, 0, 'cod'),
+    shippingAddress, createdAt: new Date(Date.now() - 3600000)
+  });
+}
+
 test('seller fulfilment requires explicit acceptance, preserves packing without courier credentials and prevents skipped steps', async () => {
   const sellerToken=jwt.sign({id:String(seller.userId),role:'seller'},process.env.JWT_SECRET);
-  const o=await Order.create({orderId:'WORKFLOW-1',customerId:customer._id,sellerId:seller._id,sellerName:seller.businessName,status:'placed',paymentMethod:'cod',paymentStatus:'pending',items:[{productId:String(items[0]._id),title:items[0].title,quantity:2,pricePaise:10000}],finance:{},createdAt:new Date(Date.now()-3600000)});
+  const o=await workflowOrder('WORKFLOW-1');
   assert.equal((await request('/api/orders/seller',null,sellerToken)).status,200);
   assert.equal((await Order.findById(o._id)).status,'placed','GET must not auto-accept orders');
   assert.equal((await request(`/api/seller/orders/${o._id}/pack`,{},sellerToken)).status,409);
-  assert.equal((await request(`/api/seller/orders/${o._id}/accept`,{},sellerToken)).status,200);
+  const accepted = await request(`/api/seller/orders/${o._id}/accept`,{},sellerToken);
+  assert.equal(accepted.status,200,JSON.stringify(accepted.body));
   assert.equal((await request(`/api/seller/orders/${o._id}/pack`,{},sellerToken)).status,200);
   assert.equal((await Order.findById(o._id)).status,'packed');
   const b=await request(`/api/seller/orders/${o._id}/pack-and-ship`,{packageDetails:{length:10,breadth:10,height:5,weight:.5}},sellerToken);
@@ -358,7 +369,7 @@ test('courier operations are permission scoped, sequential and cannot mark payme
   await Admin.create({userId:op._id,permissions:['delivery','orders']});
   await Admin.create({userId:support._id,permissions:['orders']});
   const opToken=jwt.sign({id:String(op._id),role:'delivery_manager'},process.env.JWT_SECRET), supportToken=jwt.sign({id:String(support._id),role:'support'},process.env.JWT_SECRET);
-  const o=await Order.findOne({orderId:'WORKFLOW-1'});
+  const o=await workflowOrder('COURIER-1', 'packed');
   const path=`/api/admin/orders/${o._id}/shipment`;
   assert.equal((await request(path,{status:'shipped',note:'Fixture courier evidence',awbNumber:'TRACK-123',courierName:'Fixture courier'},supportToken,'PATCH')).status,403);
   assert.equal((await request(path,{status:'delivered',note:'Skip is invalid',awbNumber:'TRACK-123',courierName:'Fixture courier'},opToken,'PATCH')).status,409);
@@ -372,7 +383,7 @@ test('courier operations are permission scoped, sequential and cannot mark payme
 
 test('store reviews require a delivered purchase, update real ratings, support owner replies and audited moderation',async()=>{
   const Review=require('../src/models/Review');
-  const o=await Order.findOne({orderId:'WORKFLOW-1'});
+  const o=await workflowOrder('REVIEW-1', 'delivered');
   const path=`/api/orders/${o._id}/review`;
   const input={productId:String(items[0]._id),rating:4,title:'Useful product',body:'Delivered in good condition.'};
   const other=await User.create({role:'customer',name:'Another Customer',phone:'+919000001007',status:'active'});
