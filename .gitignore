@@ -8,3 +8,8 @@ uploads/
 .env.local
 .env*.local
 mobile-www/
+android-preview/.gradle/
+android-preview/**/build/
+android-preview/local.properties
+*.jks
+*.keystore
