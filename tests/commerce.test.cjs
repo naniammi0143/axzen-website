@@ -427,3 +427,17 @@ test('store profile edits validate public links and cannot change seller approva
   assert.equal((await request(`/api/sellers/public/${seller._id}/profile`,null,'')).status,404);
   await Seller.updateOne({_id:seller._id},{kycStatus:'approved'});
 });
+test('staff creation uses an OTP phone without passwords and remains superadmin-only', async () => {
+  const root = await User.create({ role: 'superadmin', name: 'Staff Owner', phone: '+919000003001', status: 'active' });
+  const rootToken = jwt.sign({ id: String(root._id), role: 'superadmin' }, process.env.JWT_SECRET);
+  const input = { name: 'Operations', phone: '+91 90000 03002', displayRole: 'Operations Manager' };
+  assert.equal((await request('/api/admin/employees', input, token)).status, 403);
+  assert.equal((await request('/api/admin/employees', { ...input, phone: '9000003002' }, rootToken)).status, 400);
+  const result = await request('/api/admin/employees', input, rootToken);
+  assert.equal(result.status, 201, JSON.stringify(result.body));
+  assert.equal(result.body.employee.phone, '+919000003002');
+  assert.equal(result.body.employee.passwordHash, undefined);
+  assert.equal(result.body.employee.role, 'admin');
+  assert.equal((await User.findById(result.body.employee._id).select('+passwordHash')).passwordHash, '');
+});
+

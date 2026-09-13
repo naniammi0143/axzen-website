@@ -1060,7 +1060,7 @@
           <div>
             <span class="eyebrow">Employee Access Control</span>
             <h2>Employees, roles and activities</h2>
-            <p>Create employees, set passwords, assign marketplace roles, and control what they can access.</p>
+            <p>Create staff accounts with their OTP login phone, assign roles, and control access. No password is needed.</p>
           </div>
           <div class="employee-count-card">
             <span>Total employees</span>
@@ -1079,7 +1079,6 @@
               <label>Name<input name="name" required placeholder="Employee full name"></label>
               <label>Phone<input name="phone" required placeholder="+91 98765 43210"></label>
               <label>Email<input name="email" type="email" placeholder="employee@axzen.in"></label>
-              <label>Password<input name="password" type="password" required minlength="8" placeholder="Minimum 8 characters"></label>
               <label>Role
                 <select name="displayRole" required>
                   ${roleNames.map((role) => `<option value="${escapeHtml(role)}">${escapeHtml(role)}</option>`).join("")}
@@ -1336,7 +1335,6 @@
             ${["active", "blocked"].map((status) => `<option value="${status}" ${status === employee.status ? "selected" : ""}>${status}</option>`).join("")}
           </select>
         </label>
-        <label>New password <input name="password" type="password" minlength="8" placeholder="Leave blank to keep old password"></label>
         <button type="submit">Save employee</button>
       </form>
     `;

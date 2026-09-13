@@ -8,3 +8,9 @@ uploads/
 .env.local
 .env*.local
 mobile-www/
+
+android/
+apk-output/
+*.apk
+*.aab
+google-services.json

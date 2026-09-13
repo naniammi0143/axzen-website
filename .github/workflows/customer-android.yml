@@ -1,0 +1,60 @@
+name: Customer Android APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/customer-android-app]
+permissions:
+  contents: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - name: Prepare bundled Android app
+        env:
+          FIREBASE_ANDROID_JSON: ${{ secrets.AXZEN_ANDROID_FIREBASE_JSON }}
+        run: |
+          if [ -n "$FIREBASE_ANDROID_JSON" ]; then
+            printf '%s' "$FIREBASE_ANDROID_JSON" > "$RUNNER_TEMP/axzen-google-services.json"
+            export AXZEN_ANDROID_FIREBASE_CONFIG="$RUNNER_TEMP/axzen-google-services.json"
+          fi
+          npm run android:prepare
+      - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Build and lint customer APK
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDebug lintDebug
+      - name: Verify APK
+        run: |
+          mkdir -p apk-output
+          cp android/app/build/outputs/apk/debug/app-debug.apk apk-output/axzen-customer-0.2-beta.apk
+          cp android/axzen-build-info.json apk-output/build-info.json
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs apk-output/axzen-customer-0.2-beta.apk > apk-output/signature.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging apk-output/axzen-customer-0.2-beta.apk > apk-output/package.txt
+          cd apk-output
+          sha256sum axzen-customer-0.2-beta.apk > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: axzen-customer-apk
+          path: apk-output/
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: customer-android-lint
+          path: android/app/build/reports/lint-results-debug.*
+          if-no-files-found: ignore
