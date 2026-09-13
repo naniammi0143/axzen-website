@@ -1,94 +1,19 @@
-const crypto = require("crypto");
-const https = require("https");
-
-function razorpayConfig() {
-  return {
-    keyId: process.env.RAZORPAY_KEY_ID || "",
-    keySecret: process.env.RAZORPAY_KEY_SECRET || "",
-  };
+const crypto = require('crypto');
+function razorpayConfig() { return {keyId:process.env.RAZORPAY_KEY_ID || '',keySecret:process.env.RAZORPAY_KEY_SECRET || ''}; }
+function hasRazorpayCredentials() { const c=razorpayConfig();return Boolean(c.keyId && c.keySecret); }
+async function request(path, body) {
+  const c=razorpayConfig();
+  if (!hasRazorpayCredentials()) { const e=new Error('Online payments are currently unavailable. Please choose Cash on Delivery if offered.');e.statusCode=503;throw e; }
+  const response=await fetch('https://api.razorpay.com/v1'+path,{method:body?'POST':'GET',headers:{Authorization:'Basic '+Buffer.from(c.keyId+':'+c.keySecret).toString('base64'),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000)});
+  const result=await response.json();
+  if(!response.ok){const e=new Error(result.error?.description || 'Payment provider unavailable. Please try again.');e.statusCode=502;throw e;}
+  return result;
 }
-
-function hasRazorpayCredentials() {
-  const { keyId, keySecret } = razorpayConfig();
-  return Boolean(keyId && keySecret);
+function createRazorpayOrder({amountPaise,receipt,notes={}}){return request('/orders',{amount:amountPaise,currency:'INR',receipt,notes});}
+function fetchRazorpayPayment(id){ if(!/^pay_[a-zA-Z0-9]+$/.test(id || ''))throw new Error('Invalid payment reference.');return request('/payments/'+id); }
+function verifyRazorpaySignature({razorpayOrderId,razorpayPaymentId,razorpaySignature}) {
+  const {keySecret}=razorpayConfig();if(!keySecret || !/^[a-f\d]{64}$/i.test(String(razorpaySignature || '')))return false;
+  const expected=crypto.createHmac('sha256',keySecret).update(`${razorpayOrderId}|${razorpayPaymentId}`).digest();
+  return crypto.timingSafeEqual(expected,Buffer.from(razorpaySignature,'hex'));
 }
-
-function createMockRazorpayOrder({ amountPaise, receipt, notes = {} }) {
-  return {
-    id: `mock_order_${Date.now()}`,
-    amount: amountPaise,
-    currency: "INR",
-    receipt,
-    notes,
-    status: "created",
-    mock: true,
-  };
-}
-
-function createRazorpayOrder({ amountPaise, receipt, notes = {} }) {
-  const { keyId, keySecret } = razorpayConfig();
-  if (!keyId || !keySecret) {
-    return Promise.resolve(createMockRazorpayOrder({ amountPaise, receipt, notes }));
-  }
-
-  const payload = JSON.stringify({
-    amount: amountPaise,
-    currency: "INR",
-    receipt,
-    notes,
-  });
-
-  return new Promise((resolve, reject) => {
-    const request = https.request(
-      {
-        hostname: "api.razorpay.com",
-        path: "/v1/orders",
-        method: "POST",
-        auth: `${keyId}:${keySecret}`,
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(payload),
-        },
-      },
-      (response) => {
-        let body = "";
-        response.on("data", (chunk) => {
-          body += chunk;
-        });
-        response.on("end", () => {
-          const parsed = body ? JSON.parse(body) : {};
-          if (response.statusCode >= 400) {
-            const error = new Error(parsed.error?.description || "Unable to create Razorpay order.");
-            error.statusCode = response.statusCode;
-            reject(error);
-            return;
-          }
-          resolve(parsed);
-        });
-      }
-    );
-
-    request.on("error", reject);
-    request.write(payload);
-    request.end();
-  });
-}
-
-function verifyRazorpaySignature({ razorpayOrderId, razorpayPaymentId, razorpaySignature }) {
-  const { keySecret } = razorpayConfig();
-  if (!keySecret) return false;
-  const expected = crypto
-    .createHmac("sha256", keySecret)
-    .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-    .digest("hex");
-  const received = String(razorpaySignature || "");
-  if (received.length !== expected.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));
-}
-
-module.exports = {
-  createRazorpayOrder,
-  hasRazorpayCredentials,
-  razorpayConfig,
-  verifyRazorpaySignature,
-};
+module.exports={createRazorpayOrder,hasRazorpayCredentials,razorpayConfig,verifyRazorpaySignature,fetchRazorpayPayment};

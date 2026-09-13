@@ -21,7 +21,9 @@ function requestJson({ hostname, path, method = "GET", token = "", body = null }
           data += chunk;
         });
         response.on("end", () => {
-          const parsed = data ? JSON.parse(data) : {};
+          let parsed;
+          try { parsed = data ? JSON.parse(data) : {}; }
+          catch { reject(new Error("Shipping provider returned an invalid response.")); return; }
           if (response.statusCode >= 400) {
             const error = new Error(parsed.message || parsed.error || "Shiprocket request failed.");
             error.statusCode = response.statusCode;
@@ -33,6 +35,7 @@ function requestJson({ hostname, path, method = "GET", token = "", body = null }
       }
     );
 
+    request.setTimeout(20000, () => request.destroy(new Error("Shipping request timed out. Verify the order in Shiprocket before retrying.")));
     request.on("error", reject);
     if (payload) request.write(payload);
     request.end();
@@ -56,24 +59,15 @@ async function getShiprocketToken() {
   return result.token || "";
 }
 
-function buildMockShipment(order) {
-  const orderId = order.orderId || `AXZ-${Date.now()}`;
-  return {
-    awbNumber: `MOCK${Date.now()}`,
-    courierName: "Shiprocket Test",
-    trackingUrl: `https://shiprocket.co/tracking/${encodeURIComponent(orderId)}`,
-    shipmentStatus: "waiting_for_pickup",
-    pickupAgentName: "Shiprocket pickup agent",
-    pickupAgentPhone: process.env.SHIPROCKET_MOCK_AGENT_PHONE || "9999999999",
-    providerResponse: { mode: "mock" },
-  };
-}
-
 async function createShiprocketShipment({ order, seller, customerAddress }) {
   const token = await getShiprocketToken();
-  if (!token) return buildMockShipment(order);
+  if (!token) {
+    const error = new Error("Shipping is not configured. Contact Axzen support to arrange fulfilment.");
+    error.statusCode = 503;
+    throw error;
+  }
 
-  const firstItem = order.items?.[0] || {};
+  if (!order.items?.length) throw new Error("Order has no items to ship.");
   const pickupAddress = [seller.pickupAddress, seller.city, seller.state, seller.pincode].filter(Boolean).join(", ");
   const result = await requestJson({
     hostname: "apiv2.shiprocket.in",
@@ -91,17 +85,16 @@ async function createShiprocketShipment({ order, seller, customerAddress }) {
       billing_pincode: customerAddress?.pincode || "",
       billing_state: customerAddress?.state || "",
       billing_country: "India",
-      billing_email: customerAddress?.email || "customer@axzen.in",
-      billing_phone: customerAddress?.phone || "9999999999",
+      billing_email: customerAddress?.email || "",
+      billing_phone: customerAddress?.phone || "",
       shipping_is_billing: true,
-      order_items: [
-        {
-          name: firstItem.title || "Axzen product",
-          sku: firstItem.sku || "AXZEN-SKU",
-          units: Number(firstItem.quantity) || 1,
-          selling_price: ((Number(firstItem.pricePaise) || 0) / 100).toFixed(2),
-        },
-      ],
+      order_items: order.items.map(item => ({
+        name: item.title,
+        sku: item.sku || String(item.productId),
+        units: item.quantity,
+        selling_price: (item.pricePaise / 100).toFixed(2),
+      })),
+      shipping_charges: ((Number(order.deliveryCharge) || 0) / 100).toFixed(2),
       payment_method: order.paymentMethod === "cod" ? "COD" : "Prepaid",
       sub_total: ((Number(order.productTotal) || 0) / 100).toFixed(2),
       length: Number(process.env.SHIPROCKET_DEFAULT_LENGTH_CM || 10),
@@ -112,11 +105,13 @@ async function createShiprocketShipment({ order, seller, customerAddress }) {
     },
   });
 
+  if (!result.shipment_id) throw new Error("Shipping provider did not confirm a shipment. Verify the order in Shiprocket before retrying.");
   return {
-    awbNumber: result.awb_code || result.awb || result.shipment_id || `SR${Date.now()}`,
-    courierName: result.courier_name || result.courier_company_id || "Shiprocket",
+    shipmentId: String(result.shipment_id),
+    awbNumber: result.awb_code || result.awb || "",
+    courierName: result.courier_name || "",
     trackingUrl: result.tracking_url || "",
-    shipmentStatus: result.status || "waiting_for_pickup",
+    shipmentStatus: result.awb_code || result.awb ? "waiting_for_pickup" : "ready_to_ship",
     pickupAgentName: result.pickup_agent_name || result.pickup_agent || "",
     pickupAgentPhone: result.pickup_agent_phone || result.pickup_agent_mobile || "",
     providerResponse: result,

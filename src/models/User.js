@@ -3,6 +3,12 @@ const mongoose = require("mongoose");
 const userSchema = new mongoose.Schema(
   {
     name: { type: String, trim: true, default: "" },
+    addresses: [{
+      fullName: { type: String, trim: true }, phone: { type: String, trim: true },
+      address: { type: String, trim: true }, city: { type: String, trim: true },
+      state: { type: String, trim: true }, pincode: { type: String, trim: true },
+      label: { type: String, trim: true, default: "Home" },
+    }],
     email: {
       type: String,
       trim: true,

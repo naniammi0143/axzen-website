@@ -216,17 +216,9 @@
     `;
   }
 
-  function sellerDocumentButtons(documents = []) {
+  function sellerDocumentButtons(documents = [], sellerId) {
     if (!documents.length) return sellerLicenseButton("Uploaded KYC files", "No documents uploaded", "missing");
-    return documents
-      .map((document) =>
-        sellerLicenseButton(
-          `${document.type || "KYC"} document`,
-          document.originalName || document.fileName || "Uploaded file",
-          "available"
-        )
-      )
-      .join("");
+    return documents.map(doc=>`<button class="seller-license-button" type="button" data-kyc-file="${escapeHtml(doc._id)}" data-kyc-seller="${escapeHtml(sellerId)}" ${doc.storage==='gridfs'?'':'disabled'}><span>${escapeHtml(doc.type)} document</span><strong>${escapeHtml(doc.originalName)}</strong><small>${doc.storage==='gridfs'?'Download document':'Re-upload required'}</small></button>`).join('');
   }
 
   function sellerOrderRows(rows = []) {
@@ -397,7 +389,7 @@
             ${licenses
               .map((license) => sellerLicenseButton(license.label, license.value, license.value ? "available" : "missing"))
               .join("")}
-            ${sellerDocumentButtons(seller.kycDocuments)}
+            ${sellerDocumentButtons(seller.kycDocuments, seller._id)}
           </div>
         </article>
 
@@ -825,6 +817,13 @@
         ${card("Payout Paid", summary.sellerPayoutPaid?.formatted || "Rs. 0", "Completed")}
         ${card("Delivery Charges", summary.deliveryCharges?.formatted || "Rs. 0", "Separate from commission")}
       </div>` +
+      ((data.paymentReviews || []).length ? panel("Captured payments needing review", "<p>Check the provider before retrying fulfilment or processing a refund. These payments do not have a completed order.</p>" + table([
+        {label:"Provider order",render:r=>escapeHtml(r.providerOrderId)},
+        {label:"Payment",render:r=>escapeHtml(r.paymentId)},
+        {label:"Store",render:r=>escapeHtml(r.sellerName)},
+        {label:"Amount",render:r=>rupees(r.finance?.customerPaidPaise)},
+        {label:"Reason",render:r=>escapeHtml(r.failureReason)}
+      ],data.paymentReviews)) : "") +
       panel(
         "Payment and commission report",
         financeFilters(data) +
@@ -1776,4 +1775,11 @@
       loadView("dashboard");
     },
   };
+document.addEventListener('click',async event=>{
+  const button=event.target.closest('[data-kyc-file]');if(!button)return;
+  try {button.disabled=true;const response=await fetch(`/api/admin/sellers/${encodeURIComponent(button.dataset.kycSeller)}/documents/${encodeURIComponent(button.dataset.kycFile)}`,{headers:{Authorization:`Bearer ${localStorage.getItem('axzenToken')}`}});
+    if(!response.ok)throw new Error('Document is unavailable.');
+    const url=URL.createObjectURL(await response.blob());const a=document.createElement('a');a.href=url;a.download=button.querySelector('strong').textContent;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+  } catch(error){alert(error.message);}finally{button.disabled=false;}
+});
 })();

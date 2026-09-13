@@ -64,7 +64,17 @@ app.use(express.json({ limit: "1mb" }));
 app.use("/uploads", (req, res) => {
   res.status(403).json({ ok: false, message: "Uploads are private." });
 });
-app.use(express.static(rootDir, { index: false }));
+app.use('/api', (req,res,next)=>{res.setHeader('Cache-Control','no-store');next();});
+app.use('/assets', express.static(path.join(rootDir,'assets'), {maxAge:'1d'}));
+app.use((req,res,next)=>{
+  // Publish only browser assets at the root; never serve server source, configuration or uploads.
+  const forbidden = new Set(["/server.js", "/package.json", "/package-lock.json", "/vercel.json"]);
+  if (!forbidden.has(req.path) && (/^\/[a-z0-9-]+\.(?:css|js|html|webmanifest)$/i.test(req.path) || /^\/customer\/[a-z0-9-]+\.(?:js|css)$/i.test(req.path))) {
+    res.setHeader('Cache-Control','no-cache');
+    return res.sendFile(path.join(rootDir,req.path),error=>{if(error)next();});
+  }
+  next();
+});
 
 app.get("/api", (req, res) => {
   res.json({
@@ -110,6 +120,9 @@ app.get("/api/customer/sellers/:sellerId/categories", getPublicSellerCategories)
 app.get("/api/customer/sellers/:sellerId/reviews", getPublicSellerReviews);
 app.post("/api/customer/cart", authenticate, authorize("customer"), saveCart);
 app.post("/api/customer/orders", authenticate, authorize("customer"), createOrder);
+const customerProfile = require("./controllers/customerController");
+app.get("/api/customer/me",authenticate,authorize("customer"),customerProfile.getProfile);
+app.put("/api/customer/me",authenticate,authorize("customer"),customerProfile.updateProfile);
 app.get("/api/customer/follows", authenticate, authorize("customer"), listCustomerFollows);
 app.post("/api/customer/follows/:sellerId", authenticate, authorize("customer"), followSeller);
 app.delete("/api/customer/follows/:sellerId", authenticate, authorize("customer"), unfollowSeller);
@@ -150,6 +163,8 @@ app.get("*", (req, res, next) => {
     return;
   }
 
+  if (req.path.startsWith("/src/") || req.path.includes(".")) return res.status(404).json({ok:false,message:"Not found."});
+  res.setHeader("Cache-Control","no-cache");
   const page = resolvePage(req);
 
   if (!page) {

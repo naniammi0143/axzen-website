@@ -42,7 +42,7 @@ function sellerOrderView(order) {
   const platformFee = financeValue(order, "commissionAmount", "commissionAmountPaise") || financeValue(order, "commissionAmount", "commissionPaise");
   const savedPaymentCharge = financeValue(order, "paymentCharge", "paymentChargePaise") || financeValue(order, "paymentCharge", "onlinePaymentChargePaise");
   const sellerDeliveryCharge = financeValue(order, "sellerDeliveryCharge", "sellerDeliveryChargePaise");
-  const paymentCharge = savedPaymentCharge || Math.min(Math.round((productTotal * getPaymentChargePercent()) / 100), Math.max(productTotal - platformFee, 0));
+  const paymentCharge = order.paymentMethod === "cod" ? 0 : savedPaymentCharge || Math.min(Math.round((productTotal * getPaymentChargePercent()) / 100), Math.max(productTotal - platformFee, 0));
   const savedPayout = savedPaymentCharge ? financeValue(order, "sellerPayout", "sellerPayoutPaise") || financeValue(order, "sellerPayout", "sellerEarningsPaise") : 0;
   const sellerPayout = Math.max(savedPayout || productTotal - platformFee - paymentCharge - sellerDeliveryCharge, 0);
 
@@ -179,11 +179,13 @@ const acceptSellerOrder = asyncHandler(async (req, res) => {
 });
 
 const rejectSellerOrder = asyncHandler(async (req, res) => {
-  await updateSellerOrderStatus(req, res, "cancelled", {
-    allowed: ["placed", "pending", "accepted", "packed"],
-    deliveryStatus: "cancelled",
-    note: req.body.reason || "Seller rejected order.",
-  });
+  const { seller } = await getSellerOrder(req);
+  const order = await require('../services/cancelOrder')({sellerId:seller._id,$or:[{orderId:req.params.id},...(mongoose.isValidObjectId(req.params.id)?[{_id:req.params.id}]:[])]},req.body.reason || 'Cancelled by seller.');
+  success(res,{order:sellerOrderView(order.toObject())});
+});
+const cancelCustomerOrder = asyncHandler(async (req, res) => {
+  const order = await require('../services/cancelOrder')({customerId:req.user.id,$or:[{orderId:req.params.id},...(mongoose.isValidObjectId(req.params.id)?[{_id:req.params.id}]:[])]},req.body.reason || 'Cancelled by customer.');
+  success(res,{order});
 });
 
 const packSellerOrder = asyncHandler(async (req, res) => {
@@ -193,6 +195,7 @@ const packSellerOrder = asyncHandler(async (req, res) => {
     return;
   }
 
+  if (order.awbNumber || order.providerShipmentId) return success(res,{order:sellerOrderView(order.toObject())});
   const shipment = await createShiprocketShipment({
     order,
     seller,
@@ -200,14 +203,15 @@ const packSellerOrder = asyncHandler(async (req, res) => {
   });
 
   order.status = "packed";
-  order.deliveryStatus = "waiting_for_pickup";
-  order.shipmentStatus = "waiting_for_pickup";
+  order.deliveryStatus = shipment.shipmentStatus;
+  order.shipmentStatus = shipment.shipmentStatus;
+  order.providerShipmentId = shipment.shipmentId;
   order.awbNumber = shipment.awbNumber || "";
   order.courierName = shipment.courierName || "";
   order.trackingUrl = shipment.trackingUrl || "";
   order.pickupAgentName = shipment.pickupAgentName || "";
   order.pickupAgentPhone = shipment.pickupAgentPhone || "";
-  pushTimeline(order, "waiting_for_pickup", "Order packed. Waiting for pickup agent.");
+  pushTimeline(order, "packed", shipment.awbNumber ? "Order packed. Waiting for courier pickup." : "Order packed. Courier assignment pending.");
   await order.save();
 
   await Delivery.findOneAndUpdate(
@@ -219,7 +223,7 @@ const packSellerOrder = asyncHandler(async (req, res) => {
       trackingNumber: shipment.awbNumber || "",
       awbNumber: shipment.awbNumber || "",
       trackingUrl: shipment.trackingUrl || "",
-      status: "waiting_for_pickup",
+      status: shipment.shipmentStatus,
     },
     { upsert: true, new: true }
   );
@@ -240,19 +244,21 @@ const packAndShipSellerOrder = asyncHandler(async (req, res) => {
     return;
   }
 
+  if (order.awbNumber || order.providerShipmentId) return success(res,{order:sellerOrderView(order.toObject())});
   const shipment = await createShiprocketShipment({
     order,
     seller,
     customerAddress: order.shippingAddress || {},
   });
 
-  order.status = "shipped";
-  order.deliveryStatus = "shipped";
-  order.shipmentStatus = shipment.shipmentStatus || "shipped";
+  order.status = "packed";
+  order.deliveryStatus = shipment.shipmentStatus;
+  order.shipmentStatus = shipment.shipmentStatus;
+  order.providerShipmentId = shipment.shipmentId;
   order.awbNumber = shipment.awbNumber || "";
   order.courierName = shipment.courierName || "";
   order.trackingUrl = shipment.trackingUrl || "";
-  pushTimeline(order, "shipped", "Shipment created with Shiprocket.");
+  pushTimeline(order, "packed", "Shipment registered. Courier assignment and pickup pending.");
   await order.save();
 
   await Delivery.findOneAndUpdate(
@@ -264,7 +270,7 @@ const packAndShipSellerOrder = asyncHandler(async (req, res) => {
       trackingNumber: shipment.awbNumber || "",
       awbNumber: shipment.awbNumber || "",
       trackingUrl: shipment.trackingUrl || "",
-      status: "shipped",
+      status: shipment.shipmentStatus,
     },
     { upsert: true, new: true }
   );
@@ -279,11 +285,16 @@ function normalizeShipmentStatus(status = "") {
   if (["rto", "rto_delivered", "returned", "undelivered", "customer_refused"].includes(normalized)) {
     return { orderStatus: "returned", deliveryStatus: "returned" };
   }
-  return { orderStatus: "packed", deliveryStatus: "waiting_for_pickup" };
+  if (["new", "pickup_scheduled", "waiting_for_pickup"].includes(normalized)) return { orderStatus: "packed", deliveryStatus: "waiting_for_pickup" };
+  return null;
 }
 
 async function applyShipmentStatus(order, status, reason = "") {
   const next = normalizeShipmentStatus(status);
+  if (!next || ["cancelled","returned"].includes(order.status) || (order.status === "delivered" && next.orderStatus !== "returned")) return order;
+  const progression = ["placed", "pending", "accepted", "confirmed", "packed", "shipped", "out_for_delivery", "delivered"];
+  if (next.orderStatus !== "returned" && progression.indexOf(next.orderStatus) < progression.indexOf(order.status)) return order;
+  if (next.orderStatus === order.status && next.deliveryStatus === order.deliveryStatus) return order;
   order.status = next.orderStatus;
   order.deliveryStatus = next.deliveryStatus;
   order.shipmentStatus = next.deliveryStatus;
@@ -294,8 +305,9 @@ async function applyShipmentStatus(order, status, reason = "") {
   if (next.orderStatus === "returned") {
     order.returnReason = reason || "Customer did not accept delivery.";
     order.refundStatus = order.paymentMethod === "cod" ? "none" : "scheduled";
-    order.refundDueDate = order.paymentMethod === "cod" ? null : new Date(Date.now() + 24 * 60 * 60 * 1000);
-    if (order.paymentMethod !== "cod") order.paymentStatus = "refunded";
+    order.refundDueDate = null;
+    order.payoutStatus = "failed";
+    await Settlement.updateMany({orderId:order.orderId},{$set:{status:"failed",payoutPaise:0}});
   }
   pushTimeline(order, next.deliveryStatus, reason || `Shipment status updated to ${next.deliveryStatus}.`);
   await order.save();
@@ -305,12 +317,12 @@ async function applyShipmentStatus(order, status, reason = "") {
 
 const syncSellerShipmentStatus = asyncHandler(async (req, res) => {
   const { order } = await getSellerOrder(req);
-  const updated = await applyShipmentStatus(order, req.body.status || "shipped", req.body.reason || "");
-  success(res, { order: sellerOrderView(updated.toObject()) });
+  return res.status(409).json({ok:false,message:"Shipment status is updated by the courier. Contact support if tracking is delayed."});
 });
 
 const shiprocketStatusWebhook = asyncHandler(async (req, res) => {
   const webhookSecret = process.env.SHIPROCKET_WEBHOOK_SECRET || "";
+  if (!webhookSecret) return res.status(503).json({ok:false,message:"Shipment webhook is not configured."});
   if (webhookSecret) {
     const providedSecret = req.headers["x-shiprocket-secret"] || req.headers["x-webhook-secret"] || req.body.secret;
     if (providedSecret !== webhookSecret) {
@@ -320,6 +332,8 @@ const shiprocketStatusWebhook = asyncHandler(async (req, res) => {
   }
   const orderId = req.body.order_id || req.body.orderId;
   const awb = req.body.awb || req.body.awb_code || req.body.awbNumber;
+  if ((orderId && typeof orderId !== "string") || (awb && typeof awb !== "string") || (!orderId && !awb)) return res.status(400).json({ok:false,message:"A valid order ID or AWB is required."});
+  if (typeof (req.body.current_status || req.body.status) !== "string") return res.status(400).json({ok:false,message:"Shipment status is required."});
   const order = await Order.findOne({
     $or: [orderId ? { orderId } : null, awb ? { awbNumber: awb } : null].filter(Boolean),
   });
@@ -327,314 +341,11 @@ const shiprocketStatusWebhook = asyncHandler(async (req, res) => {
     res.status(404).json({ ok: false, message: "Order not found for shipment update." });
     return;
   }
-  const updated = await applyShipmentStatus(order, req.body.current_status || req.body.status || "shipped", req.body.reason || "");
+  const updated = await applyShipmentStatus(order, req.body.current_status || req.body.status, typeof req.body.reason === "string" ? req.body.reason.slice(0,500) : "");
   success(res, { order: sellerOrderView(updated.toObject()) });
 });
 
-async function buildOrderFinanceFromRequest(req) {
-  const cart = await Cart.findOne({ customerId: req.user.id });
-  const requestedItems = Array.isArray(req.body.items) && req.body.items.length ? req.body.items : cart?.items || [];
-
-  if (!requestedItems.length) {
-    return { error: "Cart is empty." };
-  }
-
-  const productIds = requestedItems.map((item) => item.productId || item.id).filter(Boolean);
-  if (!productIds.length) {
-    return { error: "Cart items are invalid." };
-  }
-  if (productIds.some((id) => !mongoose.isValidObjectId(id))) {
-    return { error: "Cart contains invalid products." };
-  }
-
-  const [products, appConfig] = await Promise.all([
-    Product.find({ _id: { $in: productIds }, status: { $in: ["active", "approved"] } }).lean(),
-    CustomerAppConfig.findOne({ key: "default" }).select("festivalOffers").lean(),
-  ]);
-  const productMap = new Map(products.map((product) => [String(product._id), product]));
-  const festivalDiscounts = new Map();
-  (appConfig?.festivalOffers || []).forEach((offer) => {
-    const entries = [
-      ...(offer.sellerEntries || []).flatMap((entry) =>
-        (entry.productIds || []).map((productId) => ({
-          productId,
-          discountPercent: entry.discountPercent,
-        }))
-      ),
-      ...(offer.productIds || []).map((productId) => ({
-        productId,
-        discountPercent: offer.discountPercent,
-      })),
-    ];
-    entries.forEach((entry) => {
-      const productId = String(entry.productId || "");
-      const discount = Math.max(0, Math.min(90, Number(entry.discountPercent) || 0));
-      if (discount > (festivalDiscounts.get(productId) || 0)) festivalDiscounts.set(productId, discount);
-    });
-  });
-  const items = [];
-
-  for (const requested of requestedItems) {
-    const productId = String(requested.productId || requested.id || "");
-    const product = productMap.get(productId);
-    const quantity = Math.max(1, Math.min(Number.parseInt(requested.quantity, 10) || 1, 10));
-    if (!product) {
-      return { error: "One or more cart products are not available anymore." };
-    }
-    if ((Number(product.stock) || 0) < quantity) {
-      return { error: `${product.title} has only ${Number(product.stock) || 0} item(s) available.` };
-    }
-    const basePricePaise = Math.max(0, Number(product.pricePaise) || 0);
-    const festivalDiscount = festivalDiscounts.get(productId) || 0;
-    const pricePaise = festivalDiscount ? Math.round((basePricePaise * (100 - festivalDiscount)) / 100) : basePricePaise;
-    items.push({
-      productId: product._id,
-      sellerId: product.sellerId,
-      sku: product.sku,
-      title: product.title,
-      pricePaise,
-      quantity,
-    });
-  }
-
-  const sellerIds = [...new Set(items.map((item) => String(item.sellerId)))];
-  if (sellerIds.length !== 1) {
-    return { error: "Checkout supports one seller per order. Place separate orders for each seller." };
-  }
-
-  const seller = await Seller.findById(sellerIds[0]);
-  if (!seller) {
-    return { error: "Seller not found for this order." };
-  }
-
-  const productTotalPaise = items.reduce((total, item) => total + (Number(item.pricePaise) || 0) * (Number(item.quantity) || 1), 0);
-  const sellerFreeDeliveryEligible =
-    seller.freeDeliveryEnabled === true && productTotalPaise >= (Number(seller.freeDeliveryMinOrderPaise) || 0);
-  const requestedDeliveryChargePaise = toPaise(req.body.deliveryCharge ?? req.body.deliveryFee ?? 40);
-  const requestedSellerDeliveryChargePaise = toPaise(req.body.sellerDeliveryCharge ?? 0);
-  const deliveryCharge = sellerFreeDeliveryEligible ? 0 : requestedDeliveryChargePaise;
-  const sellerDeliveryCharge = sellerFreeDeliveryEligible
-    ? requestedSellerDeliveryChargePaise || requestedDeliveryChargePaise || 4000
-    : 0;
-  const finance = calculateOrderFinance(items, getSellerCommission(seller), deliveryCharge, sellerDeliveryCharge);
-  finance.freeDeliveryApplied = sellerFreeDeliveryEligible;
-  return { cart, items, seller, finance, freeDeliveryApplied: sellerFreeDeliveryEligible };
-}
-
-async function decrementOrderStock(items = []) {
-  for (const item of items) {
-    const updated = await Product.findOneAndUpdate(
-      { _id: item.productId, stock: { $gte: item.quantity }, status: { $in: ["active", "approved"] } },
-      { $inc: { stock: -item.quantity } },
-      { new: true }
-    );
-    if (!updated) {
-      throw new Error(`${item.title || "Product"} is out of stock. Please refresh cart and try again.`);
-    }
-  }
-}
-
-const createRazorpayCheckoutOrder = asyncHandler(async (req, res) => {
-  const context = await buildOrderFinanceFromRequest(req);
-  if (context.error) {
-    res.status(400).json({ ok: false, message: context.error });
-    return;
-  }
-
-  if (!context.seller.onlinePaymentEnabled) {
-    res.status(400).json({ ok: false, message: "Online payment is disabled for this seller." });
-    return;
-  }
-
-  const receipt = `AXZ-RZP-${Date.now()}`;
-  const razorpayOrder = await createRazorpayOrder({
-    amountPaise: context.finance.customerPaidPaise,
-    receipt,
-    notes: {
-      sellerId: String(context.seller._id),
-      customerId: String(req.user.id),
-    },
-  });
-
-  success(res, {
-    keyId: razorpayConfig().keyId,
-    razorpayOrder,
-    amountPaise: context.finance.customerPaidPaise,
-    amount: formatRupees(context.finance.customerPaidPaise),
-    mockPayment: Boolean(razorpayOrder.mock || !hasRazorpayCredentials()),
-  });
-});
-
-const createOrder = asyncHandler(async (req, res) => {
-  const context = await buildOrderFinanceFromRequest(req);
-  if (context.error) {
-    res.status(400).json({ ok: false, message: context.error });
-    return;
-  }
-
-  const { items, seller, finance } = context;
-  const orderId = `AXZ-${Date.now()}`;
-  const invoiceNumber = `INV-${orderId}`;
-  const paymentMethod = ["cod", "razorpay", "online"].includes(req.body.paymentMethod) ? req.body.paymentMethod : "cod";
-
-  if (paymentMethod === "cod" && !seller.codEnabled) {
-    res.status(400).json({ ok: false, message: "Cash on Delivery is disabled for this seller." });
-    return;
-  }
-
-  if (paymentMethod !== "cod" && !seller.onlinePaymentEnabled) {
-    res.status(400).json({ ok: false, message: "Online payment is disabled for this seller." });
-    return;
-  }
-
-  const isMockOnlinePaid =
-    paymentMethod !== "cod" &&
-    !hasRazorpayCredentials() &&
-    req.body.mockPayment === true &&
-    String(req.body.razorpayPaymentId || "").startsWith("mock_pay_");
-  const isOnlinePaid =
-    isMockOnlinePaid ||
-    (paymentMethod !== "cod" &&
-      req.body.razorpayOrderId &&
-      req.body.razorpayPaymentId &&
-      req.body.razorpaySignature &&
-      verifyRazorpaySignature({
-        razorpayOrderId: req.body.razorpayOrderId,
-        razorpayPaymentId: req.body.razorpayPaymentId,
-        razorpaySignature: req.body.razorpaySignature,
-      }));
-  if (paymentMethod !== "cod" && !isOnlinePaid) {
-    res.status(400).json({ ok: false, message: "Online payment was not completed. Order was not placed." });
-    return;
-  }
-  try {
-    await decrementOrderStock(items);
-  } catch (error) {
-    res.status(409).json({ ok: false, message: error.message || "Stock changed. Please refresh cart." });
-    return;
-  }
-  const transactionId = req.body.razorpayPaymentId || req.body.transactionId || (paymentMethod === "cod" ? `COD-${orderId}` : `PAY-${orderId}`);
-  const order = await Order.create({
-    orderId,
-    customerId: req.user.id,
-    sellerId: seller?._id || items[0].sellerId,
-    sellerName: seller?.businessName || "Seller",
-    items,
-    status: "placed",
-    paymentStatus: paymentMethod === "cod" ? "pending" : "paid",
-    payoutStatus: "pending",
-    productTotal: finance.productTotalPaise,
-    deliveryCharge: finance.deliveryChargePaise,
-    sellerDeliveryCharge: finance.sellerDeliveryChargePaise,
-    freeDeliveryApplied: context.freeDeliveryApplied,
-    customerPaid: finance.customerPaidPaise,
-    commissionType: finance.commissionType,
-    commissionValue: finance.commissionValue,
-    commissionAmount: finance.commissionAmountPaise,
-    paymentCharge: finance.paymentChargePaise,
-    paymentChargePercent: finance.paymentChargePercent,
-    sellerPayout: finance.sellerPayoutPaise,
-    transactionId,
-    paymentMethod,
-    invoiceNumber,
-    invoiceDate: new Date(),
-    deliveryStatus: "created",
-    finance,
-    shippingAddress: req.body.shippingAddress || null,
-    timeline: [
-      {
-        status: "placed",
-        note: "Order placed by customer. Waiting for seller acceptance.",
-        at: new Date(),
-      },
-    ],
-  });
-
-  await Payment.create({
-    orderId,
-    customerId: req.user.id,
-    amountPaise: finance.customerPaidPaise,
-    status: order.paymentStatus === "paid" ? "captured" : "created",
-    provider: paymentMethod === "cod" ? "cod" : "razorpay",
-    transactionId,
-    paymentMethod,
-  });
-  await Settlement.create({
-    orderId,
-    sellerId: order.sellerId,
-    grossPaise: finance.productTotalPaise,
-    deliveryChargePaise: finance.deliveryChargePaise,
-    sellerDeliveryChargePaise: finance.sellerDeliveryChargePaise,
-    commissionPaise: finance.commissionAmountPaise,
-    paymentChargePaise: finance.paymentChargePaise,
-    payoutPaise: finance.sellerPayoutPaise,
-    status: "pending",
-  });
-  await Delivery.create({ orderId, status: "created" });
-  await Cart.deleteOne({ customerId: req.user.id });
-  emitSellerNewOrder(order.sellerId, sellerOrderView(order.toObject()));
-
-  success(
-    res,
-    {
-      order: {
-        orderId,
-        invoiceNumber,
-        status: order.status,
-        statusLabel: "Order placed. Seller will accept shortly.",
-        paymentStatus: order.paymentStatus,
-        paymentMethod: order.paymentMethod,
-        totalPaise: finance.customerPaidPaise,
-        total: formatRupees(finance.customerPaidPaise),
-        sellerPayout: formatRupees(finance.sellerPayoutPaise),
-        platformCommission: formatRupees(finance.commissionAmountPaise),
-        freeDeliveryApplied: context.freeDeliveryApplied,
-      },
-    },
-    201
-  );
-});
-
-const verifyRazorpayPayment = asyncHandler(async (req, res) => {
-  const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
-
-  if (!orderId || !razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
-    res.status(400).json({ ok: false, message: "Razorpay verification details are required." });
-    return;
-  }
-
-  if (!verifyRazorpaySignature({ razorpayOrderId, razorpayPaymentId, razorpaySignature })) {
-    res.status(400).json({ ok: false, message: "Razorpay payment signature is invalid." });
-    return;
-  }
-
-  const order = await Order.findOneAndUpdate(
-    { orderId, customerId: req.user.id },
-    {
-      paymentStatus: "paid",
-      paymentMethod: "razorpay",
-      transactionId: razorpayPaymentId,
-    },
-    { new: true }
-  );
-
-  if (!order) {
-    res.status(404).json({ ok: false, message: "Order not found for payment verification." });
-    return;
-  }
-
-  await Payment.updateMany(
-    { orderId },
-    {
-      status: "captured",
-      provider: "razorpay",
-      transactionId: razorpayPaymentId,
-      paymentMethod: "razorpay",
-    }
-  );
-
-  success(res, { orderId, paymentStatus: order.paymentStatus, transactionId: razorpayPaymentId });
-});
+const { createOrder, createRazorpayCheckoutOrder, verifyRazorpayPayment } = require("./checkoutController");
 
 const getOrderInvoice = asyncHandler(async (req, res) => {
   const lookup = [{ orderId: req.params.id }];
@@ -688,6 +399,7 @@ const getDeliveryLabel = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  cancelCustomerOrder,
   acceptSellerOrder,
   createOrder,
   createRazorpayCheckoutOrder,

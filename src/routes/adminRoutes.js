@@ -55,6 +55,7 @@ router.use(authenticate);
 
 router.get("/overview", authorizeAdminAccess("dashboard"), adminOverview);
 
+router.get("/sellers/:id/documents/:documentId",authorizeAdminAccess("sellers"),require("../controllers/sellerController").downloadKycDocument);
 router.get("/sellers", authorizeAdminAccess("sellers"), listSellers);
 router.get("/sellers/:id/detail", authorizeAdminAccess("sellers"), sellerDetail);
 router.patch("/sellers/:id", authorizeAdminAccess("sellers"), updateSeller);
