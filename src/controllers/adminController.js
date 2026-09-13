@@ -480,12 +480,19 @@ const updateSeller = asyncHandler(async (req, res) => {
     "onlinePaymentEnabled",
     "storeDetails",
     "pickupAddress",
+    "shippingPickupLocation",
   ];
   const update = {};
   allowed.forEach((key) => {
     if (req.body[key] !== undefined) update[key] = req.body[key];
   });
 
+  if(update.shippingPickupLocation!==undefined)update.shippingPickupLocation=require('../utils/storeRules').text(update.shippingPickupLocation,100,'registered pickup location');
+  if(update.storeDetails!==undefined) {
+    const details=require('../utils/storeRules').storeDetails(update.storeDetails);
+    delete update.storeDetails;
+    for(const [key,value] of Object.entries(details)) update['storeDetails.'+key]=value;
+  }
   if (update.commissionType && !["percentage", "fixed"].includes(update.commissionType)) {
     res.status(400).json({ ok: false, message: "Invalid commission type." });
     return;
@@ -535,7 +542,8 @@ const listProducts = asyncHandler(async (req, res) => {
 });
 
 const updateProduct = asyncHandler(async (req, res) => {
-  const allowed = ["status", "category", "subcategory", "pricePaise", "mrpPaise", "discountPaise", "stock", "lowStockThreshold", "gstBps", "rejectionReason", "ratingAverage", "ratingCount", "unitLabel", "description"];
+  if(req.body.ratingAverage!==undefined || req.body.ratingCount!==undefined)return res.status(400).json({ok:false,message:'Ratings are calculated from verified purchase reviews.'});
+  const allowed = ["status", "category", "subcategory", "pricePaise", "mrpPaise", "discountPaise", "stock", "lowStockThreshold", "gstBps", "rejectionReason", "unitLabel", "description"];
   const update = {};
   allowed.forEach((key) => {
     if (req.body[key] !== undefined) update[key] = req.body[key];
@@ -610,36 +618,21 @@ const listOrders = asyncHandler(async (req, res) => {
   success(res, await paged(Order, filter, req.query, { createdAt: -1 }, "customerId sellerId"));
 });
 
-const updateOrder = asyncHandler(async (req, res) => {
-  const allowed = ["status", "paymentStatus", "deliveryStatus", "trackingId", "invoiceNumber", "refundStatus", "failedDeliveryReason"];
-  const update = {};
-  allowed.forEach((key) => {
-    if (req.body[key] !== undefined) update[key] = req.body[key];
-  });
-
-  if (update.status && !orderStatuses.includes(update.status)) {
-    res.status(400).json({ ok: false, message: "Invalid order status." });
-    return;
-  }
-
-  if (update.status === 'cancelled') {
-    const order = await require('../services/cancelOrder')({_id:req.params.id},'Cancelled by support.');
-    await audit(req,'order.cancel','order',order._id,{});
+const updateOrder = asyncHandler(async (req,res) => {
+  const { invalid } = require('../utils/checkoutRules');
+  if (!require('mongoose').isValidObjectId(req.params.id)) throw invalid('Invalid order ID.');
+  if (['paymentStatus','refundStatus','payoutStatus'].some(key=>req.body[key]!==undefined)) throw invalid('Payment and refund state require provider reconciliation, not a fulfilment edit.');
+  const note = require('../utils/storeRules').text(req.body.note || req.body.reason || '',500,'update reason',true);
+  if (req.body.status === 'cancelled') {
+    const order=await require('../services/cancelOrder')({_id:req.params.id},note);
+    await audit(req,'order.cancel','order',order._id,{note});
     return success(res,{order});
   }
-  if (update.paymentStatus === 'refunded' || update.refundStatus === 'processed') return res.status(400).json({ok:false,message:'Refund status requires confirmation from the payment provider.'});
-  if (update.status === 'returned') { update.refundStatus='scheduled';update.payoutStatus='failed'; }
-
-  const order = await Order.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
-  if (!order) {
-    res.status(404).json({ ok: false, message: "Order not found." });
-    return;
-  }
-
-  if (update.status === 'returned') await Settlement.updateMany({orderId:order.orderId},{$set:{status:'failed',payoutPaise:0,payoutDate:null}});
-
-  await audit(req, "order.update", "order", req.params.id, update);
-  success(res, { order });
+  const tracking={};
+  for (const key of ['awbNumber','courierName','trackingUrl']) if (req.body[key]!==undefined) tracking[key]=req.body[key];
+  if (Object.keys(tracking).length && !req.deliveryOperation) throw invalid('Use delivery operations to edit courier details.',403);
+  const order=await require('../services/orderWorkflow').transition({_id:req.params.id},req.body.status,{actor:req.user,note,courier:req.deliveryOperation===true,tracking});
+  success(res,{order});
 });
 
 const listCustomers = asyncHandler(async (req, res) => {
@@ -737,6 +730,23 @@ const updateCustomerAppConfig = asyncHandler(async (req, res) => {
       .map((item) => item.trim())
       .filter(Boolean);
   }
+  const {text,httpsUrl}=require('../utils/storeRules');
+  for (const [key,max] of Object.entries({heroTitle:140,heroSubtitle:300,heroCta:50,supportEmail:160,supportPhone:20})) {
+    if(req.body[key]!==undefined) update[key]=text(req.body[key],max,key,key!=="supportPhone");
+  }
+  for (const key of ['showStores','showOffers','showBestSellers','showReviews']) {
+    if(req.body[key]!==undefined) {
+      if(typeof req.body[key]!=='boolean') throw require('../utils/checkoutRules').invalid('Choose a valid section setting.');
+      update[key]=req.body[key];
+    }
+  }
+  if(update.supportEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(update.supportEmail)) throw require('../utils/checkoutRules').invalid('Enter a valid support email.');
+  if(update.offerImageUrl) update.offerImageUrl=httpsUrl(update.offerImageUrl);
+  if(update.offerImages) update.offerImages=update.offerImages.map(url=>httpsUrl(url));
+  if(update.recommendedSellerIds) {
+    if(update.recommendedSellerIds.length>12 || update.recommendedSellerIds.some(id=>!require('mongoose').isValidObjectId(id))) throw require('../utils/checkoutRules').invalid('Select up to 12 valid stores.');
+  }
+  if(update.categoryOrder && (update.categoryOrder.length>50 || update.categoryOrder.some(c=>typeof c!=='string' || c.length>80))) throw require('../utils/checkoutRules').invalid('Enter up to 50 category names.');
   update.updatedBy = req.user?.id || null;
 
   const config = await CustomerAppConfig.findOneAndUpdate({ key: "default" }, update, {
@@ -1023,19 +1033,11 @@ const listDeliveries = asyncHandler(async (req, res) => {
   success(res, await paged(Delivery, filter, req.query));
 });
 
-const updateDelivery = asyncHandler(async (req, res) => {
-  const allowed = ["partnerName", "trackingNumber", "pickupAddress", "deliveryPincode", "sameDayEligible", "failedReason", "status"];
-  const update = {};
-  allowed.forEach((key) => {
-    if (req.body[key] !== undefined) update[key] = req.body[key];
-  });
-  const delivery = await Delivery.findOneAndUpdate({ orderId: req.params.orderId }, update, {
-    new: true,
-    upsert: true,
-    runValidators: true,
-  });
-  await audit(req, "delivery.update", "delivery", req.params.orderId, update);
-  success(res, { delivery });
+const updateDelivery = asyncHandler(async (req,res) => {
+  const order=await Order.findOne({orderId:req.params.orderId}).select('_id').lean();
+  if (!order) return res.status(404).json({ok:false,message:'Order not found.'});
+  req.params.id=String(order._id);req.deliveryOperation=true;
+  return updateOrder(req,res);
 });
 
 const listEmployees = asyncHandler(async (req, res) => {

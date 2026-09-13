@@ -201,7 +201,7 @@ function optionalCustomerId(req) {
 }
 
 const getPublicSeller = asyncHandler(async (req, res) => {
-  const seller = await Seller.findOne({ _id: req.params.sellerId, isActive: true, status: "active" }).lean();
+  const seller = await Seller.findOne({ _id: req.params.sellerId, ...require("../utils/storeRules").activeStore }).lean();
   if (!seller) {
     res.status(404).json({ ok: false, message: "Seller not found." });
     return;
@@ -216,7 +216,7 @@ const getPublicSeller = asyncHandler(async (req, res) => {
 });
 
 const getPublicSellerProducts = asyncHandler(async (req, res) => {
-  const seller = await Seller.findOne({ _id: req.params.sellerId, isActive: true, status: "active" }).lean();
+  const seller = await Seller.findOne({ _id: req.params.sellerId, ...require("../utils/storeRules").activeStore }).lean();
   if (!seller) {
     res.status(404).json({ ok: false, message: "Seller not found." });
     return;
@@ -226,7 +226,7 @@ const getPublicSellerProducts = asyncHandler(async (req, res) => {
 });
 
 const getPublicSellerCategories = asyncHandler(async (req, res) => {
-  const seller = await Seller.findOne({ _id: req.params.sellerId, isActive: true, status: "active" }).select("_id").lean();
+  const seller = await Seller.findOne({ _id: req.params.sellerId, ...require("../utils/storeRules").activeStore }).select("_id").lean();
   if (!seller) {
     res.status(404).json({ ok: false, message: "Seller not found." });
     return;
@@ -242,7 +242,7 @@ const getPublicSellerCategories = asyncHandler(async (req, res) => {
 });
 
 const getPublicSellerReviews = asyncHandler(async (req, res) => {
-  const seller = await Seller.findOne({ _id: req.params.sellerId, isActive: true, status: "active" }).select("_id").lean();
+  const seller = await Seller.findOne({ _id: req.params.sellerId, ...require("../utils/storeRules").activeStore }).select("_id").lean();
   if (!seller) {
     res.status(404).json({ ok: false, message: "Seller not found." });
     return;
@@ -288,7 +288,7 @@ const updateProfile = asyncHandler(async (req, res) => {
     {
       $set: update,
     },
-    { new: true, upsert: true }
+    { new: true, runValidators: true }
   );
 
   success(res, { seller });

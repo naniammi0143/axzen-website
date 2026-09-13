@@ -68,13 +68,29 @@ const dashboards = {
 const getDashboard = asyncHandler(async (req, res) => {
   const seller = req.params.role === "seller" ? await Seller.findOne({ userId: req.user.id }).lean() : null;
 
+  const admin = ['superadmin','admin','support','finance','delivery_manager'].includes(req.user.role) ? await require('../models/AdminUser').findOne({userId:req.user.id}).select('displayRole permissions').lean() : null;
+  const dashboard={...dashboards[req.params.role],metrics:[]};
+  if(seller){
+    const Product=require('../models/Product'),Order=require('../models/Order');
+    const [live,newOrders,low,shipments]=await Promise.all([
+      Product.countDocuments({sellerId:seller._id,status:{$in:['active','approved']}}),
+      Order.countDocuments({sellerId:seller._id,status:{$in:['placed','pending']}}),
+      Product.countDocuments({sellerId:seller._id,$expr:{$lte:['$stock','$lowStockThreshold']}}),
+      Order.countDocuments({sellerId:seller._id,status:{$in:['packed','shipped','out_for_delivery']}})
+    ]);
+    dashboard.metrics=[['Live products',String(live)],['New orders',String(newOrders)],['Low stock',String(low)],['Active shipments',String(shipments)]];
+  }
   success(res, {
     user: {
       ...req.user,
+      ...(admin ? {admin} : {}),
       seller: seller
         ? {
             id: seller._id,
             businessName: seller.businessName,
+            storeDetails:seller.storeDetails,
+            freeDeliveryEnabled:seller.freeDeliveryEnabled,
+            freeDeliveryMinOrderPaise:seller.freeDeliveryMinOrderPaise,
             fullName: seller.fullName,
             phone: seller.phone,
             email: seller.email,
@@ -99,7 +115,7 @@ const getDashboard = asyncHandler(async (req, res) => {
           }
         : null,
     },
-    dashboard: dashboards[req.params.role],
+    dashboard,
   });
 });
 

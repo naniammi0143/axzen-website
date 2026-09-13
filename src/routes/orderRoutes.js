@@ -18,6 +18,7 @@ const {
 const { authenticate, authorize } = require("../middleware/auth");
 
 const router = express.Router();
+router.put('/:id/review',authenticate,authorize('customer'),require('../controllers/storeController').writeReview);
 const checkout = require("../controllers/checkoutController");
 router.post("/quote",authenticate,authorize("customer"),checkout.quoteOrder);
 router.get("/payment-reviews",authenticate,authorize("customer"),checkout.listPaymentReviews);

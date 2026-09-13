@@ -330,3 +330,89 @@ test("saved addresses persist by customer and never expose another account", asy
     1,
   );
 });
+
+test('seller fulfilment requires explicit acceptance, preserves packing without courier credentials and prevents skipped steps', async () => {
+  const sellerToken=jwt.sign({id:String(seller.userId),role:'seller'},process.env.JWT_SECRET);
+  const o=await Order.create({orderId:'WORKFLOW-1',customerId:customer._id,sellerId:seller._id,sellerName:seller.businessName,status:'placed',paymentMethod:'cod',paymentStatus:'pending',items:[{productId:String(items[0]._id),title:items[0].title,quantity:2,pricePaise:10000}],finance:{},createdAt:new Date(Date.now()-3600000)});
+  assert.equal((await request('/api/orders/seller',null,sellerToken)).status,200);
+  assert.equal((await Order.findById(o._id)).status,'placed','GET must not auto-accept orders');
+  assert.equal((await request(`/api/seller/orders/${o._id}/pack`,{},sellerToken)).status,409);
+  assert.equal((await request(`/api/seller/orders/${o._id}/accept`,{},sellerToken)).status,200);
+  assert.equal((await request(`/api/seller/orders/${o._id}/pack`,{},sellerToken)).status,200);
+  assert.equal((await Order.findById(o._id)).status,'packed');
+  const b=await request(`/api/seller/orders/${o._id}/pack-and-ship`,{packageDetails:{length:10,breadth:10,height:5,weight:.5}},sellerToken);
+  assert.equal(b.status,503);
+  const packed=await Order.findById(o._id);
+  assert.equal(packed.status,'packed');assert.equal(packed.awbNumber,'');assert.equal(packed.shipmentBookingState,'none');
+  assert.equal((await request(`/api/seller/orders/${o._id}/reject`,{reason:'Too late'},sellerToken)).status,409);
+  const outsider=await User.create({role:'seller',name:'Other seller',phone:'+919000001004',status:'active'});
+  await Seller.create({userId:outsider._id,businessName:'Other Store'});
+  const outsideToken=jwt.sign({id:String(outsider._id),role:'seller'},process.env.JWT_SECRET);
+  assert.equal((await request(`/api/seller/orders/${o._id}/accept`,{},outsideToken)).status,404);
+});
+
+test('courier operations are permission scoped, sequential and cannot mark payments paid',async()=>{
+  const Admin=require('../src/models/AdminUser');
+  const op=await User.create({name:'Courier ops',phone:'+919000001005',role:'delivery_manager',status:'active'});
+  const support=await User.create({name:'Support',phone:'+919000001006',role:'support',status:'active'});
+  await Admin.create({userId:op._id,permissions:['delivery','orders']});
+  await Admin.create({userId:support._id,permissions:['orders']});
+  const opToken=jwt.sign({id:String(op._id),role:'delivery_manager'},process.env.JWT_SECRET), supportToken=jwt.sign({id:String(support._id),role:'support'},process.env.JWT_SECRET);
+  const o=await Order.findOne({orderId:'WORKFLOW-1'});
+  const path=`/api/admin/orders/${o._id}/shipment`;
+  assert.equal((await request(path,{status:'shipped',note:'Fixture courier evidence',awbNumber:'TRACK-123',courierName:'Fixture courier'},supportToken,'PATCH')).status,403);
+  assert.equal((await request(path,{status:'delivered',note:'Skip is invalid',awbNumber:'TRACK-123',courierName:'Fixture courier'},opToken,'PATCH')).status,409);
+  assert.equal((await request(path,{status:'shipped',note:'Confirmed pickup',awbNumber:'TRACK-123',courierName:'Fixture courier',trackingUrl:'https://example.com/track/123'},opToken,'PATCH')).status,200);
+  assert.equal((await request(path,{status:'out_for_delivery',note:'Courier scan'},opToken,'PATCH')).status,200);
+  assert.equal((await request(path,{status:'delivered',note:'Courier proof of delivery'},opToken,'PATCH')).status,200);
+  assert.equal((await Order.findById(o._id)).paymentStatus,'pending','a delivery status is not payment reconciliation');
+  assert.equal((await request(path,{status:'shipped',note:'Old scan'},opToken,'PATCH')).status,409);
+  assert.equal((await request(`/api/admin/orders/${o._id}`,{paymentStatus:'paid',note:'Not provider verified'},supportToken,'PATCH')).status,400);
+});
+
+test('store reviews require a delivered purchase, update real ratings, support owner replies and audited moderation',async()=>{
+  const Review=require('../src/models/Review');
+  const o=await Order.findOne({orderId:'WORKFLOW-1'});
+  const path=`/api/orders/${o._id}/review`;
+  const input={productId:String(items[0]._id),rating:4,title:'Useful product',body:'Delivered in good condition.'};
+  const other=await User.create({role:'customer',name:'Another Customer',phone:'+919000001007',status:'active'});
+  const otherToken=jwt.sign({id:String(other._id),role:'customer'},process.env.JWT_SECRET);
+  assert.equal((await request(path,input,otherToken,'PUT')).status,403);
+  assert.equal((await request(path,{...input,productId:String(items[1]._id)},token,'PUT')).status,403);
+  assert.equal((await request(path,{...input,rating:4.7},token,'PUT')).status,400);
+  assert.equal((await request(path,input,token,'PUT')).status,200);
+  assert.equal((await request(path,{...input,rating:5},token,'PUT')).status,200);
+  assert.equal(await Review.countDocuments({customerId:customer._id,productId:items[0]._id}),1);
+  assert.equal((await Product.findById(items[0]._id)).ratingAverage,5);
+  const review=await Review.findOne({customerId:customer._id,productId:items[0]._id});
+  const sellerToken=jwt.sign({id:String(seller.userId),role:'seller'},process.env.JWT_SECRET);
+  assert.equal((await request(`/api/sellers/me/reviews/${review._id}/reply`,{reply:'Thank you for your feedback.'},sellerToken,'PUT')).status,200);
+  const pub=await request(`/api/sellers/public/${seller._id}/customer-reviews`,null,'');
+  assert.equal(pub.body.reviews.reviewCount,1);assert.equal(pub.body.reviews.items[0].verifiedPurchase,true);
+  assert.equal(pub.body.reviews.items[0].customerId,undefined);assert.equal(pub.body.reviews.items[0].orderId,undefined);
+  const root=await User.create({role:'superadmin',name:'Root',phone:'+919000001008',status:'active'});
+  const rootToken=jwt.sign({id:String(root._id),role:'superadmin'},process.env.JWT_SECRET);
+  assert.equal((await request(`/api/admin/reviews/${review._id}`,{status:'hidden',reason:'Fixture moderation'},sellerToken,'PATCH')).status,403);
+  assert.equal((await request(`/api/admin/reviews/${review._id}`,{status:'hidden',reason:'Fixture moderation'},rootToken,'PATCH')).status,200);
+  assert.equal((await Product.findById(items[0]._id)).ratingCount,0);
+  assert.equal((await request(path,input,token,'PUT')).status,409,'editing must not bypass moderation');
+  assert.equal((await request(`/api/admin/reviews/${review._id}`,{status:'published',reason:'Restored after review'},rootToken,'PATCH')).status,200);
+  assert.equal((await Product.findById(items[0]._id)).ratingCount,1);
+  assert.equal((await request(`/api/admin/products/${items[0]._id}`,{ratingAverage:1,ratingCount:200},rootToken,'PATCH')).status,400);
+  const profile=await request(`/api/sellers/public/${seller._id}/profile`,null,'');
+  assert.equal(profile.body.seller.ratingAverage,5);
+  assert.ok(profile.body.bestSellers.some(p=>String(p.id)===String(items[0]._id)&&p.soldUnits>=2));
+  assert.equal(profile.body.seller.panNumber,undefined);
+});
+
+test('store profile edits validate public links and cannot change seller approval or other sellers',async()=>{
+  const sellerToken=jwt.sign({id:String(seller.userId),role:'seller'},process.env.JWT_SECRET);
+  assert.equal((await request('/api/sellers/me/store',{storeDetails:{instagramUrl:'javascript:alert(1)'}},sellerToken,'PUT')).status,400);
+  assert.equal((await request('/api/sellers/me/store',{storeDetails:{instagramUrl:'https://example.com/pretend-instagram'}},sellerToken,'PUT')).status,400);
+  const saved=await request('/api/sellers/me/store',{status:'blocked',storeDetails:{tagline:'Made with care',about:'Our real store story.',instagramUrl:'https://www.instagram.com/axzen/',status:'blocked'}},sellerToken,'PUT');
+  assert.equal(saved.status,200);assert.equal(saved.body.seller.status,'active');
+  assert.equal(saved.body.seller.storeDetails.tagline,'Made with care');
+  await Seller.updateOne({_id:seller._id},{kycStatus:'pending'});
+  assert.equal((await request(`/api/sellers/public/${seller._id}/profile`,null,'')).status,404);
+  await Seller.updateOne({_id:seller._id},{kycStatus:'approved'});
+});

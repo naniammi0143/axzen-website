@@ -1,3 +1,4 @@
+import {storeManager,loadSellerReviews,fulfilmentPanels,parcelDialog,bindSellerWorkspace} from './seller-workspace.js';
 import { firebaseConfig } from "./firebase-config.js";
 import { closeMediaFeed, isMediaOpen, openMediaFeed } from "./media.js";
 import {
@@ -145,7 +146,8 @@ const sellerSectionLabels = {
   inventory: "Inventory",
   returns: "Returns",
   employees: "Employees",
-  profile: "Profile",
+  profile: "Store profile",
+  reviews: "Reviews",
   support: "Support",
   offers: "Offers",
 };
@@ -159,6 +161,7 @@ const sellerHashSections = {
   "#sellerReturns": "returns",
   "#sellerEmployees": "employees",
   "#sellerAbout": "profile",
+  "#sellerReviews": "reviews",
   "#sellerSupport": "support",
   "#sellerOffers": "offers",
 };
@@ -3647,6 +3650,11 @@ function initCustomerLocation() {
 }
 
 async function openOrderInvoice(orderId) {
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    throw new Error("Please allow popups to print the invoice.");
+  }
+  printWindow.opener = null;
   const token = localStorage.getItem("axzenToken");
   const response = await fetch(`/api/orders/${encodeURIComponent(orderId)}/invoice`, {
     headers: {
@@ -3656,13 +3664,10 @@ async function openOrderInvoice(orderId) {
   const result = await response.json();
 
   if (!response.ok) {
+    printWindow.close();
     throw new Error(result.message || "Unable to open invoice.");
   }
 
-  const printWindow = window.open("", "_blank");
-  if (!printWindow) {
-    throw new Error("Please allow popups to print the invoice.");
-  }
   printWindow.document.open();
   printWindow.document.write(result.invoiceHtml);
   printWindow.document.close();
@@ -3670,6 +3675,11 @@ async function openOrderInvoice(orderId) {
 }
 
 async function openDeliveryLabel(orderId) {
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    throw new Error("Please allow popups to print the delivery label.");
+  }
+  printWindow.opener = null;
   const token = localStorage.getItem("axzenToken");
   const response = await fetch(`/api/orders/${encodeURIComponent(orderId)}/delivery-label`, {
     headers: {
@@ -3679,13 +3689,10 @@ async function openDeliveryLabel(orderId) {
   const result = await response.json();
 
   if (!response.ok) {
+    printWindow.close();
     throw new Error(result.message || "Unable to open delivery label.");
   }
 
-  const printWindow = window.open("", "_blank");
-  if (!printWindow) {
-    throw new Error("Please allow popups to print the delivery label.");
-  }
   printWindow.document.open();
   printWindow.document.write(result.labelHtml);
   printWindow.document.close();
@@ -3758,7 +3765,7 @@ function renderSellerWorkspace(user = {}) {
   const modules = [
     ["sellerShipments", "Shipments", "Delivery labels and shipment readiness"],
     ["sellerReturns", "Returns", "Return requests, refund status and issue handling"],
-    ["sellerEmployees", "Employees", "Add seller staff, assign work and manage access"],
+
   ];
   return `
     <article class="dashboard-panel seller-about-panel" id="sellerAbout" data-seller-section="profile">
@@ -3808,6 +3815,7 @@ function renderSellerWorkspace(user = {}) {
         .map(([id, title, detail]) => `<article class="dashboard-panel seller-module-card" id="${escapeHtml(id)}" data-seller-section="${escapeHtml(title.toLowerCase())}"><span>${escapeHtml(title)}</span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></article>`)
         .join("")}
     </section>
+    ${storeManager(seller)}
     ${renderSellerOffersPanel()}
     ${renderSellerInventory(sellerProductsCache)}
     ${renderSellerSupportPanel(sellerTicketsCache)}
@@ -4349,7 +4357,8 @@ const sellerOrderTabs = [
   ["new", "New"],
   ["accepted", "Accepted"],
   ["packed", "Packed"],
-  ["shipped", "Shipped"],
+  ["shipped", "In transit"],
+  ["out_for_delivery", "Out for delivery"],
   ["delivered", "Delivered"],
   ["cancelled", "Cancelled"],
   ["returned", "Returned"],
@@ -4394,22 +4403,12 @@ function sellerPaymentBadge(order = {}) {
   return `<span class="seller-status-badge payment-${escapeHtml(status)}">${escapeHtml(label.replace(/_/g, " "))}</span>`;
 }
 
-function getSellerOrderActions(order = {}) {
-  const status = normalizeSellerOrderStatus(order.status);
-  if (status === "new") {
-    return [
-      ["accept", "Accept"],
-      ["reject", "Cancel"],
-    ];
-  }
-  if (status === "accepted") return [["pack", "Packing Complete"], ["reject", "Cancel"]];
-  if (status === "packed") {
-    const pickupActions = order.pickupAgentPhone ? [["agent", "Assigned to agent"], ["call-agent", "Call agent"]] : [["track", "Waiting for pickup agent"]];
-    return [...pickupActions, ["reject", "Cancel"]];
-  }
-  if (status === "shipped") return [["track", "Track Shipment"]];
-  if (status === "delivered") return [["details", "Delivery Details"]];
-  if (status === "returned") return [["details", "Return Details"]];
+function getSellerOrderActions(order={}) {
+  const status=normalizeSellerOrderStatus(order.status);
+  if(status==='new')return [['accept','Accept order'],['reject','Decline']];
+  if(status==='accepted')return [['pack','Confirm packing'],['reject','Cancel']];
+  if(status==='packed')return !order.providerShipmentId&&!order.awbNumber&&!['booking','needs_review'].includes(order.shipmentBookingState) ? [['book','Request courier']] : [['details','Pickup status']];
+  if(['shipped','out_for_delivery'].includes(status))return [['track','Track shipment']];
   return [];
 }
 
@@ -4528,8 +4527,8 @@ function renderSellerOrderDrawer(order = {}) {
           </section>
           <section>
             <h4>Product details</h4>
-            <p>${escapeHtml(item.title || "Product")}</p>
-            <p>SKU: ${escapeHtml(item.sku || "-")} | Qty: ${Number(item.quantity) || 1}</p>
+            ${(order.items||[]).map(i=>`<p><strong>${escapeHtml(i.title)}</strong><br>SKU ${escapeHtml(i.sku||'-')} · Qty ${i.quantity} · ${rupees(i.pricePaise*i.quantity)}</p>`).join('')}
+            <p><strong>Customer total: ${rupees(order.customerPaid)}</strong></p>
           </section>
           <section>
             <h4>Payment details</h4>
@@ -4549,6 +4548,7 @@ function renderSellerOrderDrawer(order = {}) {
             ${order.refundStatus && order.refundStatus !== "none" ? `<p>Refund: ${escapeHtml(order.refundStatus)}${order.refundDueDate ? ` by ${formatDate(order.refundDueDate)}` : ""}</p>` : ""}
           </section>
         </div>
+        <div class="workspace-actions"><button type="button" data-print-invoice="${escapeHtml(order._id||order.orderId)}">View invoice</button>${order.awbNumber?`<button type="button" data-print-label="${escapeHtml(order._id||order.orderId)}">Delivery label</button>`:''}<a href="#sellerSupport" data-seller-nav="support">Delivery support</a></div>
         <div class="seller-order-timeline">
           <h4>Order timeline</h4>
           ${timeline
@@ -4682,6 +4682,8 @@ async function loadRoleOrders(role) {
   if (!["customer", "seller"].includes(role) || !dashboardPanels) return;
   const token = localStorage.getItem("axzenToken");
   const endpoint = role === "seller" ? "/api/seller/orders" : "/api/orders/customer";
+  const selectedTab=getActiveSellerOrderTab();
+  const savedFilters=Object.fromEntries(['data-seller-order-search','data-seller-payment-filter','data-seller-status-filter','data-seller-date-filter'].map(k=>[k,document.querySelector(`[${k}]`)?.value || '']));
   try {
     const [ordersResponse, sellerResponse] = await Promise.all([
       fetch(endpoint, {
@@ -4708,19 +4710,17 @@ async function loadRoleOrders(role) {
     }
     dashboardPanels.insertAdjacentHTML("beforeend", renderOrderInvoicePanel(result.orders || [], role));
     if (role === "seller") {
+      const refreshed=document.querySelector('#orderInvoicePanel');
+      if(refreshed)refreshed.dataset.activeTab=selectedTab;
+      for(const [key,value] of Object.entries(savedFilters)){const field=document.querySelector(`[${key}]`);if(field)field.value=value;}
+      fulfilmentPanels(result.orders || []);
       updateSellerOrderTopbarTabs(result.orders || []);
       renderSellerOrdersRows();
       setSellerSection(getSellerSectionFromHash());
     }
-  } catch (error) {
-    document.querySelector("#orderInvoicePanel")?.remove();
-    document.querySelector(".seller-payment-settings")?.remove();
-    dashboardPanels.insertAdjacentHTML("beforeend", renderOrderInvoicePanel([], role));
-    if (role === "seller") {
-      updateSellerOrderTopbarTabs([]);
-      renderSellerOrdersRows();
-      setSellerSection(getSellerSectionFromHash());
-    }
+  } catch(error) {
+    if(!document.querySelector('#orderInvoicePanel'))dashboardPanels.insertAdjacentHTML('beforeend',renderOrderInvoicePanel([],role));
+    showSellerOrdersToast(error.message || 'Unable to refresh orders. Last loaded orders remain visible.',true);
   }
 }
 
@@ -4819,6 +4819,7 @@ function enableSellerOwnerMode() {
 
 function renderDashboard(payload) {
   const { user, dashboard } = payload;
+  if(user.role === "seller") localStorage.setItem(SELLER_OWNER_KEY,"true");
   updateSellerHeader(user);
   if (user.role !== "seller") stopSellerOrderPolling();
   if (user.role === "customer") startCustomerNotificationPolling();
@@ -4945,6 +4946,7 @@ function renderDashboard(payload) {
   if (user.role === "seller") {
     setSellerSection(getSellerSectionFromHash());
     loadSellerProducts();
+    loadSellerReviews();
     loadSellerOffers();
     loadSellerFollowerSummary();
     loadSellerTickets();
@@ -6034,10 +6036,11 @@ document.addEventListener("click", async (event) => {
   const orderAction = event.target.closest("[data-seller-order-action]");
   if (orderAction) {
     const action = orderAction.dataset.sellerOrderAction;
+    if(action === "book"){parcelDialog(orderAction.dataset.orderId);return;}
     const orderId = orderAction.dataset.orderId;
     const order = sellerOrdersCache.find((entry) => String(entry._id || entry.orderId) === String(orderId));
     if (action === "track") {
-      if (order?.trackingUrl) window.open(order.trackingUrl, "_blank", "noopener,noreferrer");
+      if (order?.trackingUrl && /^https:\/\//i.test(order.trackingUrl)) window.open(order.trackingUrl, "_blank", "noopener,noreferrer");
       else showSellerOrdersToast("Tracking URL is not available yet.", true);
       return;
     }
@@ -6609,3 +6612,5 @@ if (savedToken && savedRole && savedRole === pageRole) {
 } else {
   syncStorefrontAuthHash();
 }
+
+bindSellerWorkspace(()=>loadRoleOrders("seller"),showSellerOrdersToast);
