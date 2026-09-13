@@ -12,7 +12,6 @@ const asyncHandler = require("../utils/asyncHandler");
 const { success } = require("../utils/apiResponse");
 const { formatRupees, getPaymentChargePercent } = require("../utils/money");
 const { notifyFollowersForProduct } = require("./notificationController");
-const { hashPassword } = require("../utils/password");
 const { grokConfigured, removeBackgroundFromUrl } = require("../utils/grokBackground");
 const { uploadImageBuffer, uploadProductImages } = require("../utils/cloudinary");
 
@@ -1072,17 +1071,13 @@ const createEmployee = asyncHandler(async (req, res) => {
     return;
   }
 
-  if (!req.body.name || !req.body.phone || !req.body.password) {
-    res.status(400).json({ ok: false, message: "Name, phone and password are required." });
-    return;
+  if (!req.body.name || !req.body.phone) {
+    return res.status(400).json({ ok: false, message: "Name and OTP login phone are required." });
   }
-
-  if (String(req.body.password).length < 8) {
-    res.status(400).json({ ok: false, message: "Password must be at least 8 characters." });
-    return;
+  const phone = String(req.body.phone).replace(/[ ()-]/g, '');
+  if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
+    return res.status(400).json({ ok: false, message: "Enter the phone with country code, for example +91 followed by the mobile number." });
   }
-
-  const phone = String(req.body.phone).trim();
   const email = req.body.email ? String(req.body.email).trim().toLowerCase() : undefined;
   const employee = await User.create({
     name: String(req.body.name).trim(),
@@ -1090,7 +1085,6 @@ const createEmployee = asyncHandler(async (req, res) => {
     email,
     role: roleConfig.systemRole,
     status: req.body.status || "active",
-    passwordHash: hashPassword(req.body.password),
   });
 
   const profile = await AdminUser.create({
@@ -1102,7 +1096,9 @@ const createEmployee = asyncHandler(async (req, res) => {
   });
 
   await audit(req, "employee.create", "employee", employee._id, { displayRole, permissions: profile.permissions });
-  success(res, { employee: { ...employee.toObject(), displayRole, permissions: profile.permissions, activityNotes: profile.activityNotes } }, 201);
+  const publicEmployee = employee.toObject();
+  delete publicEmployee.passwordHash;
+  success(res, { employee: { ...publicEmployee, displayRole, permissions: profile.permissions, activityNotes: profile.activityNotes } }, 201);
 });
 
 const updateEmployee = asyncHandler(async (req, res) => {
@@ -1120,7 +1116,6 @@ const updateEmployee = asyncHandler(async (req, res) => {
   if (["active", "blocked", "pending"].includes(req.body.status)) update.status = req.body.status;
   if (req.body.name) update.name = req.body.name;
   if (req.body.email !== undefined) update.email = req.body.email ? String(req.body.email).trim().toLowerCase() : undefined;
-  if (req.body.password) update.passwordHash = hashPassword(req.body.password);
   const employee = await User.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
   if (!employee) {
     res.status(404).json({ ok: false, message: "Employee not found." });

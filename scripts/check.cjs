@@ -6,7 +6,7 @@ function files(dir) {
     .readdirSync(dir, { withFileTypes: true })
     .flatMap((e) =>
       e.isDirectory()
-        ? ["node_modules", ".git", "mobile-www"].includes(e.name)
+        ? ["node_modules", ".git", "mobile-www", "android"].includes(e.name)
           ? []
           : files(path.join(dir, e.name))
         : [path.join(dir, e.name)],

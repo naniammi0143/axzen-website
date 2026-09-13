@@ -87,6 +87,8 @@ let toastTimer,
   firebaseApi,
   confirmation,
   verifier,
+  nativePhoneStop,
+  nativeVerificationId,
   loginBusy = false,
   paymentBusy = false;
 const pendingKey = () => `axzen.payment.pending.${state.user?.id || "guest"}`;
@@ -309,6 +311,10 @@ function storeProfile(data, reviews, params) {
 }
 async function shareStore(id, name) {
   const url = `https://www.axzen.in/?seller=${encodeURIComponent(id)}`;
+  if (native && window.AxzenNative) {
+    try { await window.AxzenNative.share({ title: name || "Store on Axzen", text: "Explore this store on Axzen", url }); } catch {}
+    return;
+  }
   if (navigator.share) {
     try {
       await navigator.share({
@@ -346,6 +352,10 @@ function categoryPhoto(name) {
     ? `<img src="/assets/categories/${path}.png" alt="" loading="lazy">`
     : icon("grid");
 }
+function recentFinds() {
+  const rows = storage.get('axzen.recent.products', []).map(product).filter(Boolean).slice(0, 4);
+  return rows.length ? `<section class="section">${sectionHead('Recently viewed', 'Pick up where you left off.')}${grid(rows)}</section>` : '';
+}
 function home() {
   const featured = state.products.find(
     (p) => p.stock > 0 && (p.image || p.images?.length),
@@ -367,7 +377,7 @@ function home() {
               .join(
                 "",
               )}</div></section><section class="section">${sectionHead("Fresh on Axzen", "The latest additions from our stores.")}${grid(rows)}</section>${promotions()}${deals.length ? `<section class="section">${sectionHead("Good finds. Better prices.", "Savings on selected products.", "#deals", "Shop the finds")}${grid(deals)}</section>` : ""}<section class="section" ${state.config.showStores === false ? "hidden" : ""}>${sectionHead(state.config.spotlightTitle || "Meet the stores", "There’s a story behind every storefront.", "#stores", "Explore stores")}<div class="store-grid">${featuredStores().slice(0, 3).map(storeCard).join("")}</div></section>`
-  }<section class="editorial"><div><h2>Your favourites, all together.</h2><p>Save the things you love. Come back when the time feels right.</p></div><a href="#wishlist" class="primary">Explore your wishlist ${icon("heart")}</a></section>`;
+  }${recentFinds()}<section class="editorial"><div><h2>Your favourites, all together.</h2><p>Save the things you love. Come back when the time feels right.</p></div><a href="#wishlist" class="primary">Explore your wishlist ${icon("heart")}</a></section>`;
 }
 function catalogError() {
   return `<div class="empty">${icon("box")}<h2>We couldn’t load the products</h2><p>Check your connection and try again. Your saved cart is safe.</p><button class="primary" data-action="retry">Try again</button></div>`;
@@ -535,13 +545,20 @@ function updateChrome() {
   $("#delivery-label").textContent =
     storage.get("axzen.delivery.pincode") || "Set pincode";
   const page = route().page;
+  const quickCart = $('#quick-cart');
+  if (quickCart) {
+    quickCart.hidden = !count || ['cart', 'checkout'].includes(page);
+    const subtotal = state.cart.reduce((n, item) => n + (item.pricePaise || 0) * item.quantity, 0);
+    quickCart.innerHTML = `<span>${count} item${count === 1 ? '' : 's'} <small>Item subtotal ${money(subtotal)}</small></span><strong>View cart ${icon('arrow')}</strong>`;
+    document.body.classList.toggle('has-quick-cart', !quickCart.hidden);
+  }
   document
     .querySelectorAll("[data-nav]")
     .forEach((n) =>
       n.classList.toggle(
         "active",
         n.dataset.nav ===
-          (["product", "deals"].includes(page)
+          (["product", "deals", "categories"].includes(page)
             ? "shop"
             : [
                   "order",
@@ -588,6 +605,9 @@ async function render() {
     case "home":
       main.innerHTML = home();
       break;
+    case "categories":
+      main.innerHTML = pageTitle('Shop by category', 'Everyday essentials and something new.') + (state.catalog === 'error' ? catalogError() : `<div class="category-hub">${categories().map(c => `<a href="#shop?category=${encodeURIComponent(c)}"><span>${categoryPhoto(c)}</span><strong>${esc(c)}</strong><small>${state.products.filter(p => p.category?.toLowerCase() === c.toLowerCase()).length} products</small></a>`).join('')}</div>`);
+      break;
     case "shop":
     case "products":
     case "deals":
@@ -611,6 +631,7 @@ async function render() {
       break;
     }
     case "product":
+      if (product(params.get('id'))) storage.set('axzen.recent.products', [params.get('id'), ...storage.get('axzen.recent.products', []).filter(id => id !== params.get('id'))].slice(0, 12));
       main.innerHTML = detail(params.get("id"));
       break;
     case "cart":
@@ -894,6 +915,8 @@ function showDialog(title, body) {
   if (!$("#dialog").open) $("#dialog").showModal();
 }
 function login() {
+  nativePhoneStop?.();
+  nativeVerificationId = null;
   confirmation = null;
   state.loginReturn = location.hash || "#account";
   showDialog(
@@ -1118,6 +1141,8 @@ document.addEventListener("click", async (e) => {
           "axzenCustomerCart",
         ])
           storage.remove(key);
+        await nativePhoneStop?.();
+        await window.AxzenNative?.signOut().catch(() => {});
         if (firebaseApi)
           await firebaseApi.signOut(firebaseApi.auth).catch(() => {});
         toast("You’re signed out");
@@ -1284,6 +1309,20 @@ document.addEventListener("submit", async (e) => {
       case "phone-form": {
         if (loginBusy) break;
         loginBusy = true;
+        if (native && window.AxzenNative) {
+          await nativePhoneStop?.();
+          nativeVerificationId = null;
+          nativePhoneStop = await window.AxzenNative.startPhone('+91' + data.phone, {
+            sent(id) {
+              nativeVerificationId = id;
+              form.id = 'otp-form';
+              form.innerHTML = '<p class="dialog-copy">Enter the code sent to your phone.</p><label class="field">One-time code<input name="otp" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required></label><button class="primary">Verify & sign in</button><button type="button" class="text-button" data-action="login">Change number or resend</button><div class="form-error" role="alert"></div>';
+            },
+            async complete(token) { try { await finishLogin(token); } catch (e) { formError(form, e); } },
+            failed(error) { formError(form, error); }
+          });
+          break;
+        }
         const auth = await loadFirebase();
         verifier?.clear();
         verifier = new auth.RecaptchaVerifier(
@@ -1305,6 +1344,13 @@ document.addEventListener("submit", async (e) => {
         break;
       }
       case "otp-form": {
+        if (native && window.AxzenNative) {
+          if (!nativeVerificationId) throw new Error('Request a new verification code.');
+          const token = await window.AxzenNative.confirmPhone(nativeVerificationId, data.otp);
+          await nativePhoneStop?.();
+          await finishLogin(token);
+          break;
+        }
         const credential = await confirmation.confirm(data.otp);
         await finishLogin(await credential.user.getIdToken());
         break;
@@ -1445,9 +1491,16 @@ window.addEventListener("pageshow", (e) => {
 // Optional Capacitor lifecycle hooks; existing native bundles must include the App plugin.
 if (native) {
   document.documentElement.classList.add("ax-native-app");
-  const app = window.Capacitor?.Plugins?.App;
-  app?.addListener("backButton", () => {
+  document.addEventListener('click', (event) => {
+    const link = event.target.closest('a[href]');
+    if (!link || !/^https:\/\//.test(link.href) || link.origin === location.origin) return;
+    event.preventDefault();
+    window.AxzenNative?.open(link.href).catch(error => toast(error.message));
+  });
+  const app = window.AxzenNative?.app || window.Capacitor?.Plugins?.App;
+  app?.addListener("backButton", ({ canGoBack }) => {
     if ($("#dialog").open) $("#dialog").close();
+    else if (canGoBack) window.history.back();
     else if (route().page !== "home") go("home");
     else app.exitApp?.();
   });
@@ -1469,6 +1522,7 @@ if (native) {
     if (s.isActive) loadCatalog();
   });
 }
+$('#dialog').addEventListener('close', () => { nativePhoneStop?.(); nativeVerificationId = null; });
 async function initialize() {
   state.cart = storage.get("axzen.guest.cart", []);
   if (state.token) {

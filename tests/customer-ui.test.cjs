@@ -305,3 +305,21 @@ test('following store state uses authenticated unfollow endpoint',async()=>{
     assert.ok(app.calls.some(c=>c.url==='/api/customer/follows/'+ 'd'.repeat(24)&&c.method==='DELETE'));
   }finally{app.close();}
 });
+test('customer category hub, recent products and cart shortcut use actual catalog data', async () => {
+  const app = await setup();
+  try {
+    await app.go('#categories');
+    assert.equal(app.w.document.querySelectorAll('.category-hub a').length, 2);
+    await app.go('#product?id=' + ids[0]);
+    await app.go('#home');
+    assert.match(app.w.document.querySelector('#main').textContent, /Recently viewed/);
+    app.w.document.querySelector(`[data-action="add"][data-id="${ids[0]}"]`).click();
+    await tick();
+    const shortcut = app.w.document.querySelector('#quick-cart');
+    assert.equal(shortcut.hidden, false);
+    assert.match(shortcut.textContent, /1 item/);
+    assert.match(shortcut.textContent, /120/);
+    await app.go('#cart');
+    assert.equal(shortcut.hidden, true);
+  } finally { app.close(); }
+});
