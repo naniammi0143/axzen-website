@@ -440,4 +440,3 @@ test('staff creation uses an OTP phone without passwords and remains superadmin-
   assert.equal(result.body.employee.role, 'admin');
   assert.equal((await User.findById(result.body.employee._id).select('+passwordHash')).passwordHash, '');
 });
-

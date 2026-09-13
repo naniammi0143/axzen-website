@@ -1498,8 +1498,9 @@ if (native) {
     window.AxzenNative?.open(link.href).catch(error => toast(error.message));
   });
   const app = window.AxzenNative?.app || window.Capacitor?.Plugins?.App;
-  app?.addListener("backButton", () => {
+  app?.addListener("backButton", ({ canGoBack }) => {
     if ($("#dialog").open) $("#dialog").close();
+    else if (canGoBack) window.history.back();
     else if (route().page !== "home") go("home");
     else app.exitApp?.();
   });

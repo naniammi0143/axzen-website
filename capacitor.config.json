@@ -3,8 +3,26 @@
   "appName": "Axzen",
   "webDir": "mobile-www",
   "backgroundColor": "#102A43",
-  "server": { "androidScheme": "https", "hostname": "localhost" },
-  "android": { "allowMixedContent": false, "webContentsDebuggingEnabled": false },
-  "includePlugins": ["@capacitor/app", "@capacitor/browser", "@capacitor/share"],
-  "plugins": { "FirebaseAuthentication": { "providers": ["phone"], "skipNativeAuth": false } }
+  "server": {
+    "androidScheme": "https",
+    "hostname": "localhost"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false,
+    "minWebViewVersion": 109
+  },
+  "includePlugins": [
+    "@capacitor/app",
+    "@capacitor/browser",
+    "@capacitor/share"
+  ],
+  "plugins": {
+    "FirebaseAuthentication": {
+      "providers": [
+        "phone"
+      ],
+      "skipNativeAuth": false
+    }
+  }
 }

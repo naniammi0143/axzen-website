@@ -323,4 +323,3 @@ test('customer category hub, recent products and cart shortcut use actual catalo
     assert.equal(shortcut.hidden, true);
   } finally { app.close(); }
 });
-
