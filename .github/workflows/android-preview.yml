@@ -1,0 +1,45 @@
+name: Android preview APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [build/android-preview]
+    paths: ['android-preview/**', '.github/workflows/android-preview.yml']
+permissions:
+  contents: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install Android build tools
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Build and lint APK
+        working-directory: android-preview
+        run: ./gradlew --no-daemon assembleDebug lintDebug
+      - name: Verify and package APK
+        run: |
+          mkdir -p apk-output
+          cp android-preview/app/build/outputs/apk/debug/app-debug.apk apk-output/axzen-preview-0.1.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs apk-output/axzen-preview-0.1.apk > apk-output/signature.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging apk-output/axzen-preview-0.1.apk > apk-output/package.txt
+          cd apk-output
+          sha256sum axzen-preview-0.1.apk > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: axzen-preview-apk
+          path: apk-output/
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-lint-report
+          path: android-preview/app/build/reports/lint-results-debug.*
+          if-no-files-found: ignore

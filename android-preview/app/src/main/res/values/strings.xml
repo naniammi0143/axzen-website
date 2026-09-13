@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Axzen Preview</string>
+    <string name="tagline">Your everyday favourites</string>
+    <string name="open_store">Open Axzen</string>
+    <string name="preview_note">Shop securely at www.axzen.in using your phone’s browser.</string>
+    <string name="browser_missing">Install or enable a web browser, then tap Open Axzen.</string>
+</resources>
