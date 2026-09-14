@@ -15,8 +15,11 @@ import {
   const liveOrigin = "https://www.axzen.in";
   const native =
     document.documentElement.classList.contains("ax-native-app") || Boolean(window.Capacitor?.isNativePlatform?.());
-  if (!native || window.__axzenNativeBridge) return;
+  const localPreview =
+    /^(localhost|127\.0\.0\.1)$/i.test(location.hostname) && !["3000", ""].includes(String(location.port || "80"));
+  if ((!native && !localPreview) || window.__axzenNativeBridge) return;
   const originalFetch = window.fetch.bind(window);
+  window.__axzenNativeBridge = true;
   window.fetch = (input, init) => {
     if (typeof input === "string" && input.startsWith("/api/")) {
       return originalFetch(liveOrigin + input, init);
@@ -3830,10 +3833,12 @@ function renderSellerProductManager(products = []) {
         <div>
           <p class="eyebrow">Products</p>
           <h3>Product catalogue</h3>
-          <p>Search products like the customer app. Add new products with up to 5 Cloudinary images.</p>
+          <p>Upload a catalogue for Grok AI conversion, customise each product and photos, then submit for admin approval.</p>
         </div>
         <div class="seller-product-actions">
           <input type="search" data-seller-product-search placeholder="Search products, SKU, category">
+          <button type="button" data-upload-catalogue>Upload Catalogue</button>
+          <input type="file" data-catalogue-file accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" multiple hidden>
           <button type="button" data-toggle-product-form>Add product</button>
           <span>${products.length} products</span>
         </div>
@@ -3865,12 +3870,129 @@ function renderSellerProductManager(products = []) {
         </label>
         <button type="submit">Submit product for approval</button>
       </form>
+      <div class="seller-catalogue-drafts" data-catalogue-drafts hidden></div>
       <div class="seller-product-upload-message" data-seller-product-message aria-live="polite"></div>
       <div class="seller-catalog-grid" data-seller-product-list>
         ${renderSellerProductList(products)}
       </div>
     </article>
   `;
+}
+
+function catalogueCategoryOptions(selected = "Other") {
+  return ["Grocery", "Fashion", "Electronics", "Home", "Beauty", "Food", "Other"]
+    .map((name) => `<option value="${escapeHtml(name)}" ${String(selected) === name ? "selected" : ""}>${escapeHtml(name)}</option>`)
+    .join("");
+}
+
+function renderCatalogueDraftCard(draft = {}, index = 0) {
+  return `
+    <form class="seller-catalogue-draft" data-catalogue-draft="${index}">
+      <div class="seller-catalogue-draft-head">
+        <strong>Product ${index + 1}</strong>
+        <button type="button" data-remove-catalogue-draft="${index}">Remove</button>
+      </div>
+      <label>Title<input name="title" required value="${escapeHtml(draft.title || "")}"></label>
+      <label>SKU<input name="sku" required value="${escapeHtml(draft.sku || "")}"></label>
+      <label>Category
+        <select name="category" required>${catalogueCategoryOptions(draft.category || "Other")}</select>
+      </label>
+      <label>MRP<input name="mrp" type="number" min="0" step="0.01" required value="${escapeHtml(draft.mrp ?? "")}"></label>
+      <label>Price<input name="price" type="number" min="0" step="0.01" required value="${escapeHtml(draft.price ?? "")}"></label>
+      <label>Unit<input name="unitLabel" required value="${escapeHtml(draft.unitLabel || "1 pc")}"></label>
+      <label>Stock<input name="stock" type="number" min="0" step="1" value="${escapeHtml(draft.stock ?? 10)}"></label>
+      <label class="wide">Details<textarea name="description">${escapeHtml(draft.description || "")}</textarea></label>
+      <label class="seller-product-file wide">Add photos
+        <input name="productImages" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple required>
+        <small>Add 1 to 5 product photos. Grok AI cleans backgrounds on submit.</small>
+      </label>
+      <button type="submit">Submit for admin approval</button>
+    </form>
+  `;
+}
+
+function renderCatalogueDrafts(drafts = []) {
+  const host = document.querySelector("[data-catalogue-drafts]");
+  if (!host) return;
+  if (!drafts.length) {
+    host.hidden = true;
+    host.innerHTML = "";
+    return;
+  }
+  host.hidden = false;
+  host.innerHTML = `
+    <div class="seller-catalogue-drafts-head">
+      <div>
+        <h4>Customise Grok products</h4>
+        <p>${drafts.length} product${drafts.length === 1 ? "" : "s"} ready. Edit details, add photos, then submit each for admin approval.</p>
+      </div>
+      <button type="button" data-clear-catalogue-drafts>Clear all</button>
+    </div>
+    <div class="seller-catalogue-draft-grid">
+      ${drafts.map((draft, index) => renderCatalogueDraftCard(draft, index)).join("")}
+    </div>
+  `;
+}
+
+async function parseSellerCatalogueFiles(files = []) {
+  const message = document.querySelector("[data-seller-product-message]");
+  const token = localStorage.getItem("axzenToken");
+  if (!token || localStorage.getItem("axzenRole") !== "seller") {
+    throw new Error("Seller login required.");
+  }
+  if (!files.length) throw new Error("Choose a catalogue PDF or page images first.");
+  if (files.length > 5) throw new Error("Upload maximum 5 catalogue pages.");
+  if (message) {
+    message.textContent = "Grok AI is converting catalogue into products...";
+    message.classList.remove("error");
+  }
+  const formData = new FormData();
+  files.forEach((file) => formData.append("catalogue", file));
+  const response = await fetch("/api/seller/catalogue/parse", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.message || "Unable to convert catalogue.");
+  const drafts = result.products || result.data?.products || [];
+  if (!drafts.length) throw new Error("No products found in this catalogue.");
+  window.__sellerCatalogueDrafts = drafts;
+  renderCatalogueDrafts(drafts);
+  if (message) message.textContent = `${drafts.length} products ready to customise. Add photos and submit for approval.`;
+}
+
+async function submitCatalogueDraft(form) {
+  const message = document.querySelector("[data-seller-product-message]");
+  const token = localStorage.getItem("axzenToken");
+  const submitButton = form.querySelector("button[type='submit']");
+  const files = [...(form.querySelector("[name='productImages']")?.files || [])];
+  if (!files.length) throw new Error("Add at least one product photo.");
+  if (files.length > 5) throw new Error("Upload maximum 5 product images.");
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "Submitting...";
+  }
+  if (message) {
+    message.textContent = "Uploading product for admin approval...";
+    message.classList.remove("error");
+  }
+  const formData = new FormData(form);
+  const response = await fetch("/api/seller/products", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.message || "Unable to submit product.");
+  const index = Number(form.dataset.catalogueDraft);
+  const drafts = Array.isArray(window.__sellerCatalogueDrafts) ? window.__sellerCatalogueDrafts : [];
+  if (Number.isInteger(index)) drafts.splice(index, 1);
+  window.__sellerCatalogueDrafts = drafts;
+  renderCatalogueDrafts(drafts);
+  await loadSellerProducts();
+  await loadSellerOffers();
+  if (message) message.textContent = "Product submitted for admin approval.";
 }
 
 function renderSellerProductList(products = []) {
@@ -5048,6 +5170,42 @@ async function acceptPortalSession(result) {
   }
 }
 
+async function createPhoneSession(role, phone, firebaseToken) {
+  const response = await fetch("/api/auth/phone-login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      role,
+      phone,
+      firebaseToken,
+    }),
+  });
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.message || "Unable to create login session.");
+  }
+
+  await applyAuthSession(result);
+}
+
+async function createPasswordSession(role, phone, password) {
+  const response = await fetch("/api/auth/password-login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ role, phone, password }),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.message || "Unable to login with password.");
+  }
+  await applyAuthSession(result);
+}
+
 phoneForms.forEach((form) => {
   const role = form.dataset.role;
   const customerForm = Boolean(form.closest(".customer-login-section"));
@@ -5064,15 +5222,46 @@ phoneForms.forEach((form) => {
   let verifyingOtp = false;
   let sendPromise = null;
   let pendingOtp = "";
+  const passwordLoginButton = form.querySelector("[data-password-login]");
+  const passwordInput = form.querySelector("[name='password']");
+
+  const loginWithPassword = async () => {
+    const { iso, e164: phone } = phoneFromRoot(form);
+    const password = String(passwordInput?.value || "");
+    if (!isValidE164(phone, iso)) {
+      setLoginMessage(form, "Please enter a valid phone number.", true);
+      return;
+    }
+    if (password.length < 8) {
+      setLoginMessage(form, "Enter your registration password (minimum 8 characters).", true);
+      return;
+    }
+    if (passwordLoginButton) {
+      passwordLoginButton.disabled = true;
+      passwordLoginButton.textContent = "Opening...";
+    }
+    setLoginMessage(form, "Checking password...");
+    try {
+      await createPasswordSession(role, phone, password);
+      setLoginMessage(form, "Login successful. Opening workspace.");
+    } catch (error) {
+      setLoginMessage(form, error.message || "Unable to login with password.", true);
+    } finally {
+      if (passwordLoginButton) {
+        passwordLoginButton.disabled = false;
+        passwordLoginButton.textContent = "Login and open";
+      }
+    }
+  };
 
   const showOtpStep = (phone) => {
     form.classList.add("otp-sent");
     form.classList.remove("is-sending");
     if (phoneInput) phoneInput.readOnly = true;
     if (countrySelect) countrySelect.disabled = true;
-    sendButton.hidden = true;
+    if (sendButton) sendButton.hidden = true;
     if (otpGroup) otpGroup.hidden = false;
-    verifyButton.hidden = false;
+    if (verifyButton) verifyButton.hidden = false;
     if (changeNumberButton) changeNumberButton.hidden = false;
     if (customerForm) setCustomerLoginCopy("otp");
     otpInput?.focus();
@@ -5183,12 +5372,23 @@ phoneForms.forEach((form) => {
     }
   };
 
-  sendButton.addEventListener("click", () => {
+  sendButton?.addEventListener("click", () => {
     sendOtp();
   });
 
-  verifyButton.addEventListener("click", () => {
+  verifyButton?.addEventListener("click", () => {
     verifyOtp();
+  });
+
+  form.addEventListener("submit", (event) => {
+    if (!passwordInput) return;
+    event.preventDefault();
+    loginWithPassword();
+  });
+
+  passwordLoginButton?.addEventListener("click", (event) => {
+    event.preventDefault();
+    loginWithPassword();
   });
 
   changeNumberButton?.addEventListener("click", () => {
@@ -5200,6 +5400,7 @@ phoneForms.forEach((form) => {
   });
 
   phoneInput?.addEventListener("input", () => {
+    if (passwordInput) return;
     const digits = String(phoneInput.value || "").replace(/\D/g, "");
     const iso = countrySelect?.value || "IN";
     if (iso === "IN" && digits.length === 10) sendOtp();
@@ -6125,6 +6326,34 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const uploadCatalogue = event.target.closest("[data-upload-catalogue]");
+  if (uploadCatalogue) {
+    event.preventDefault();
+    document.querySelector("[data-catalogue-file]")?.click();
+    return;
+  }
+
+  const clearCatalogueDrafts = event.target.closest("[data-clear-catalogue-drafts]");
+  if (clearCatalogueDrafts) {
+    event.preventDefault();
+    window.__sellerCatalogueDrafts = [];
+    renderCatalogueDrafts([]);
+    const message = document.querySelector("[data-seller-product-message]");
+    if (message) message.textContent = "Catalogue drafts cleared.";
+    return;
+  }
+
+  const removeCatalogueDraft = event.target.closest("[data-remove-catalogue-draft]");
+  if (removeCatalogueDraft) {
+    event.preventDefault();
+    const index = Number(removeCatalogueDraft.dataset.removeCatalogueDraft);
+    const drafts = Array.isArray(window.__sellerCatalogueDrafts) ? window.__sellerCatalogueDrafts : [];
+    if (Number.isInteger(index)) drafts.splice(index, 1);
+    window.__sellerCatalogueDrafts = drafts;
+    renderCatalogueDrafts(drafts);
+    return;
+  }
+
   const invoiceButton = event.target.closest("[data-print-invoice]");
   const labelButton = event.target.closest("[data-print-label]");
   const settingButton = event.target.closest("[data-seller-setting]");
@@ -6242,6 +6471,20 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("change", (event) => {
+  const catalogueFile = event.target.closest("[data-catalogue-file]");
+  if (catalogueFile) {
+    const files = [...(catalogueFile.files || [])];
+    catalogueFile.value = "";
+    parseSellerCatalogueFiles(files).catch((error) => {
+      const message = document.querySelector("[data-seller-product-message]");
+      if (message) {
+        message.textContent = error.message || "Unable to convert catalogue.";
+        message.classList.add("error");
+      }
+    });
+    return;
+  }
+
   const freeDeliveryChoice = event.target.closest("[data-seller-payment-form] [name='freeDeliveryEnabled']");
   if (freeDeliveryChoice) {
     syncSellerFreeDeliveryThreshold(freeDeliveryChoice.form);
@@ -6464,6 +6707,26 @@ document.addEventListener("submit", async (event) => {
       await loadSellerOffers();
     } catch (error) {
       alert(error.message || "Unable to save offer items.");
+    }
+    return;
+  }
+
+  const catalogueDraftForm = event.target.closest("[data-catalogue-draft]");
+  if (catalogueDraftForm) {
+    event.preventDefault();
+    const submitButton = catalogueDraftForm.querySelector("button[type='submit']");
+    try {
+      await submitCatalogueDraft(catalogueDraftForm);
+    } catch (error) {
+      const message = document.querySelector("[data-seller-product-message]");
+      if (message) {
+        message.textContent = error.message || "Unable to submit product.";
+        message.classList.add("error");
+      }
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Submit for admin approval";
+      }
     }
     return;
   }

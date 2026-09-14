@@ -10,6 +10,7 @@ const env = {
   firebaseServiceAccountJson: process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "",
   xaiApiKey: process.env.XAI_API_KEY || process.env.GROK_API_KEY || "",
   xaiImageModel: process.env.XAI_IMAGE_MODEL || "grok-imagine-image-2.0",
+  xaiChatModel: process.env.XAI_CHAT_MODEL || "grok-2-vision-1212",
   whatsappVerifyToken: process.env.WHATSAPP_VERIFY_TOKEN || "axzen-wa-verify",
   whatsappToken: process.env.WHATSAPP_TOKEN || "",
   whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",

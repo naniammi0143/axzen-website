@@ -8,6 +8,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const { success } = require("../utils/apiResponse");
 const { uploadProductImages } = require("../utils/cloudinary");
 const { formatRupees, toPaise } = require("../utils/money");
+const { convertCatalogueFiles, grokConfigured } = require("../utils/grokCatalogue");
 
 const allowedProductImageTypes = new Set(["image/jpeg", "image/png"]);
 
@@ -195,9 +196,45 @@ const createSellerProduct = asyncHandler(async (req, res) => {
   success(res, { product }, 201);
 });
 
+function collectCatalogueFiles(files = {}) {
+  return [
+    ...normalizeFiles(files.catalogue),
+    ...normalizeFiles(files.catalogues),
+    ...normalizeFiles(files.cataloguePages),
+    ...normalizeFiles(files.file),
+    ...normalizeFiles(files.files),
+  ].filter(Boolean);
+}
+
+const parseSellerCatalogue = asyncHandler(async (req, res) => {
+  const seller = await Seller.findOne({ userId: req.user.id });
+  if (!seller) {
+    res.status(400).json({ ok: false, message: "Complete seller profile first." });
+    return;
+  }
+  if (!seller.isActive || seller.approvalStatus !== "approved" || seller.kycStatus !== "approved") {
+    res.status(403).json({ ok: false, message: "Seller account is waiting for admin approval." });
+    return;
+  }
+  if (!grokConfigured()) {
+    res.status(503).json({ ok: false, message: "Grok AI is not configured on the server." });
+    return;
+  }
+
+  const catalogueFiles = collectCatalogueFiles(req.files);
+  if (!catalogueFiles.length) {
+    res.status(400).json({ ok: false, message: "Upload a catalogue PDF or page images first." });
+    return;
+  }
+
+  const products = await convertCatalogueFiles(catalogueFiles);
+  success(res, { products, count: products.length });
+});
+
 module.exports = {
   createSellerProduct,
   listProducts,
   listSellerProducts,
   updateSellerInventory,
+  parseSellerCatalogue,
 };

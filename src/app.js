@@ -22,7 +22,7 @@ const {
   packSellerOrder,
   rejectSellerOrder,
 } = require("./controllers/orderController");
-const { createSellerProduct, listProducts, listSellerProducts, updateSellerInventory } = require("./controllers/productController");
+const { createSellerProduct, listProducts, listSellerProducts, updateSellerInventory, parseSellerCatalogue } = require("./controllers/productController");
 const { getPublicSeller, getPublicSellerCategories, getPublicSellerProducts, getPublicSellerReviews, listSellerFestivalOffers, joinSellerFestivalOffer } = require("./controllers/sellerController");
 const { financeSummary, publicCustomerAppConfig } = require("./controllers/adminController");
 const { verifyWhatsappWebhook, receiveWhatsappWebhook } = require("./controllers/whatsappController");
@@ -138,6 +138,7 @@ app.get("/api/seller/offers", authenticate, authorize("seller"), listSellerFesti
 app.post("/api/seller/offers/:id/join", authenticate, authorize("seller"), joinSellerFestivalOffer);
 app.get("/api/seller/products", authenticate, authorize("seller"), listSellerProducts);
 app.post("/api/seller/products", authenticate, authorize("seller"), multipartForm({ optional: true, maxBytes: 30 * 1024 * 1024 }), createSellerProduct);
+app.post("/api/seller/catalogue/parse", authenticate, authorize("seller"), multipartForm({ maxBytes: 30 * 1024 * 1024 }), parseSellerCatalogue);
 app.patch("/api/seller/products/:id/inventory", authenticate, authorize("seller"), updateSellerInventory);
 app.get("/api/seller/followers", authenticate, authorize("seller"), sellerFollowerSummary);
 app.post("/api/seller/followers/notify", authenticate, authorize("seller"), sendSellerFollowerNotification);

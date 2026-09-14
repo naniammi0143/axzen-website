@@ -5,6 +5,7 @@ const {
   listProducts,
   listSellerProducts,
   updateSellerInventory,
+  parseSellerCatalogue,
 } = require("../controllers/productController");
 const { authenticate, authorize } = require("../middleware/auth");
 const { multipartForm } = require("../middleware/multipartUpload");
@@ -15,6 +16,13 @@ const router = express.Router();
 router.get("/", listProducts);
 router.get("/seller", authenticate, authorize("seller"), listSellerProducts);
 router.patch("/seller/:id/inventory", authenticate, authorize("seller"), updateSellerInventory);
+router.post(
+  "/seller/catalogue/parse",
+  authenticate,
+  authorize("seller"),
+  multipartForm({ maxBytes: 30 * 1024 * 1024 }),
+  parseSellerCatalogue
+);
 router.post(
   "/seller",
   authenticate,
