@@ -1,3 +1,4 @@
+import { initAdminAccess, requireAdminPasswordChange } from './admin-access.js';
 import { initSellerAccess, passwordSettings } from './seller-access.js';
 import {storeManager,loadSellerReviews,fulfilmentPanels,parcelDialog,bindSellerWorkspace} from './seller-workspace.js';
 import { firebaseConfig } from "./firebase-config.js";
@@ -5009,6 +5010,7 @@ async function createPhoneSession(role, phone, firebaseToken) {
 }
 
 async function acceptPortalSession(result) {
+  if (requireAdminPasswordChange(result)) return;
   localStorage.setItem("axzenToken", result.token);
   localStorage.setItem("axzenRole", result.user.role);
   localStorage.setItem("axzenPhone", result.user.phone);
@@ -6601,7 +6603,7 @@ window.addEventListener("popstate", () => {
   }
 });
 
-if (savedToken && savedRole && savedRole === pageRole) {
+if (savedToken && savedRole && (savedRole === pageRole || (pageRole === "admin" && ["superadmin", "support", "finance", "delivery_manager"].includes(savedRole)))) {
   loadDashboard(savedRole, savedToken)
     .then(() => syncStorefrontAuthHash())
     .catch(() => {
@@ -6622,3 +6624,4 @@ if (savedToken && savedRole && savedRole === pageRole) {
 bindSellerWorkspace(()=>loadRoleOrders("seller"),showSellerOrdersToast);
 
 initSellerAccess(acceptPortalSession);
+initAdminAccess(acceptPortalSession);

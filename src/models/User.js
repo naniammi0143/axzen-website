@@ -20,6 +20,8 @@ const userSchema = new mongoose.Schema(
       },
     },
     phone: { type: String, trim: true, default: "" },
+    username: { type: String, trim: true, lowercase: true },
+    mustChangePassword: { type: Boolean, default: false },
     passwordHash: { type: String, default: "", select: false },
     sessionVersion: { type: Number, default: 0 },
     passwordFailedAttempts: { type: Number, default: 0, select: false },
@@ -39,6 +41,7 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+userSchema.index({ username: 1 }, { unique: true, partialFilterExpression: { username: { $type: "string" } } });
 userSchema.index({ phone: 1, role: 1 }, { unique: true, sparse: true });
 userSchema.index(
   { email: 1, role: 1 },

@@ -13,6 +13,7 @@ function signToken(user, auth = {}) {
   return jwt.sign(
     {
       ...auth,
+      ...(user.mustChangePassword ? { purpose: "password-change" } : {}),
       sessionVersion: user.sessionVersion || 0,
       id: user._id.toString(),
       role: user.role,
@@ -20,7 +21,7 @@ function signToken(user, auth = {}) {
       name: user.name,
     },
     env.jwtSecret,
-    { expiresIn: "8h" }
+    { expiresIn: user.mustChangePassword ? "10m" : "8h" }
   );
 }
 
@@ -126,9 +127,11 @@ const phoneLogin = asyncHandler(async (req, res) => {
 function sessionResponse(user, roleProfile, auth = {}) {
   return {
     token: signToken(user, auth),
+    requiresPasswordChange: Boolean(user.mustChangePassword),
     user: {
       id: user._id,
       name: user.name,
+      username: user.username,
       phone: user.phone,
       role: user.role,
       admin:

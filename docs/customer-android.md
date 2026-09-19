@@ -51,12 +51,8 @@ proper service configuration before calling the build production-ready.
 
 ## Admin and superadmin access
 
-The portal is `https://admin.axzen.in`. Both roles use an active registered staff
-phone number and a fresh Firebase OTP. There is no shared admin password or
-default superadmin credential. Staff creation/editing now describes the actual
-OTP flow instead of asking for an unused password. Existing password hashes
-are not exposed or reset. Only a superadmin can assign staff roles.
-
-The owner must identify which phone belongs to the superadmin and which belongs
-to the admin before accounts can be provisioned or their access verified. A phone
-number alone is never treated as proof of phone possession; login requires OTP.
+The portal is `https://admin.axzen.in`. The first company owner can be provisioned
+with a username and temporary password using private server configuration. See
+[Superadmin access](superadmin-access.md) for setup and first-login activation.
+Existing staff can continue using their registered phone and Firebase OTP.
+Only a superadmin can assign staff roles. There is no shared password in the app.

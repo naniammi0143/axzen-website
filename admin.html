@@ -28,7 +28,7 @@
     <section class="login-section auth-gate portal-auth admin-auth" id="login">
       <div class="auth-copy">
         <p class="eyebrow">Admin website - admin.axzen.in</p>
-        <h1>Company control starts with secure phone login.</h1>
+        <h1>Your company. One control center.</h1>
         <p>Open the Axzen admin panel for seller approvals, product moderation, orders, commission settings, and settlements.</p>
         <div class="auth-highlights" aria-label="Admin controls">
           <span>Seller approvals</span>
@@ -41,10 +41,28 @@
           <span class="login-icon">A</span>
           <div>
             <p class="eyebrow">Admin login</p>
-            <h2>Verify your phone</h2>
+            <h2 id="adminLoginHeading">Sign in to company control</h2>
           </div>
         </div>
-        <form class="role-login-form firebase-phone-form" data-role="admin">
+        <div class="seller-login-methods" id="adminLoginMethods" aria-label="Admin login method">
+          <button type="button" data-admin-login-method="password" aria-pressed="true">Password</button>
+          <button type="button" data-admin-login-method="otp" aria-pressed="false">Mobile OTP</button>
+        </div>
+        <form class="role-login-form" id="adminPasswordLogin">
+          <label>Username or mobile number<input name="username" type="text" autocomplete="username" placeholder="Your admin username" maxlength="50" required></label>
+          <label>Password<input name="password" type="password" autocomplete="current-password" maxlength="128" required></label>
+          <button type="submit">Sign in</button>
+          <p class="login-message" aria-live="polite"></p>
+        </form>
+        <form class="role-login-form" id="adminPasswordChange" hidden>
+          <p>Choose a private password to activate your company workspace. Use at least 14 characters.</p>
+          <label>New password<input name="password" type="password" autocomplete="new-password" minlength="14" maxlength="128" required></label>
+          <label>Confirm password<input name="confirmPassword" type="password" autocomplete="new-password" minlength="14" maxlength="128" required></label>
+          <button type="submit">Save password and open workspace</button>
+          <button type="button" class="secondary-button" data-cancel-password>Back to sign in</button>
+          <p class="login-message" aria-live="polite"></p>
+        </form>
+        <form class="role-login-form firebase-phone-form" data-role="admin" hidden>
           <div class="phone-login-field">
             <span>Phone number</span>
             <div class="phone-input-row">
@@ -152,6 +170,6 @@
   </main>
 
   <script src="admin-panel.js?v=offers3"></script>
-  <script type="module" src="portal.js?v=store27"></script>
+  <script type="module" src="portal.js?v=admin28"></script>
 </body>
 </html>
