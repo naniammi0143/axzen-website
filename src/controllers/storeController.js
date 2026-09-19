@@ -1,3 +1,4 @@
+const { publishedProductRatings } = require("../utils/productRatings");
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
 const env = require("../config/env");
@@ -120,6 +121,7 @@ const profile = asyncHandler(async (req, res) => {
       ]),
       Config.findOne({ key: "default" }).select("festivalOffers").lean(),
     ]);
+  const ratings = await publishedProductRatings(products.map(p => p._id));
   const sold = new Map(sales.map((r) => [String(r._id), r.units]));
   const offers = discounts(config?.festivalOffers);
   const rows = products.map((p) => ({
@@ -139,8 +141,7 @@ const profile = asyncHandler(async (req, res) => {
     pricePaise: Math.round(
       (p.pricePaise * (100 - (offers.get(String(p._id)) || 0))) / 100,
     ),
-    ratingAverage: p.ratingAverage,
-    ratingCount: p.ratingCount,
+    ...(ratings.get(String(p._id)) || { ratingAverage: 0, ratingCount: 0 }),
     soldUnits: sold.get(String(p._id)) || 0,
     createdAt: p.createdAt,
     verifiedSeller: true,

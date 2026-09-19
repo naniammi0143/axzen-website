@@ -2,7 +2,16 @@ name: Customer Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [feature/customer-android-app]
+    branches: [main, feature/customer-android-app]
+    paths:
+      - 'customer/**'
+      - 'native/**'
+      - 'scripts/*mobile*'
+      - 'scripts/build-customer-app.cjs'
+      - 'capacitor.config.json'
+      - 'index.html'
+      - 'package*.json'
+      - '.github/workflows/customer-android.yml'
 permissions:
   contents: read
 jobs:

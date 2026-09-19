@@ -50,7 +50,7 @@ const products = [
 async function tick() {
   for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
 }
-async function setup({ fail = false, signedIn = false } = {}) {
+async function setup({ fail = false, signedIn = false, mixedStoreCategories = false } = {}) {
   const dom = new JSDOM(
     fs.readFileSync(path.join(root, "index.html"), "utf8"),
     { url: "https://www.axzen.in/", runScripts: "outside-only" },
@@ -87,7 +87,7 @@ async function setup({ fail = false, signedIn = false } = {}) {
           addresses: body?.addresses || [],
         },
       };
-    else if (url.includes('/api/sellers/public/') && url.includes('/profile')) data={seller:{id:'d'.repeat(24),name:'First Store',category:'Food',city:'Hyderabad',createdAt:'2024-01-01',followerCount:12,productCount:2,ratingAverage:4.7,reviewCount:2,isFollowing:signedIn,storeDetails:{tagline:'Made with care',about:'Our story',instagramUrl:'https://www.instagram.com/axzen/'}},products:[products[0],products[2]],bestSellers:[{...products[0],soldUnits:7}]};
+    else if (url.includes('/api/sellers/public/') && url.includes('/profile')) data={seller:{id:'d'.repeat(24),name:'First Store',category:'Food',city:'Hyderabad',createdAt:'2024-01-01',followerCount:12,productCount:2,ratingAverage:4.7,reviewCount:2,isFollowing:signedIn,storeDetails:{tagline:'Made with care',about:'Our story',instagramUrl:'https://www.instagram.com/axzen/'}},products:[products[0],mixedStoreCategories ? {...products[2],category:' Food '} : products[2]],bestSellers:[{...products[0],soldUnits:7}]};
     else if (url.includes('/customer-reviews')) data={reviews:{ratingAverage:4.7,reviewCount:2,page:1,hasMore:false,bars:[{stars:5,count:1},{stars:4,count:1}],items:[{id:'r1',productId:ids[0],productTitle:'Fresh Rice',authorName:'Customer',rating:5,title:'Great',body:'<img src=x onerror=alert(1)>',createdAt:'2026-09-01',sellerReply:'Thank you'}]}};
     else if (url === "/api/cart") data = { cart: { items: [] } };
     else if (url === "/api/wishlist") data = { wishlist: { products: [] } };
@@ -321,5 +321,19 @@ test('customer category hub, recent products and cart shortcut use actual catalo
     assert.match(shortcut.textContent, /120/);
     await app.go('#cart');
     assert.equal(shortcut.hidden, true);
+  } finally { app.close(); }
+});
+
+test('store categories collapse case and whitespace and retain both products after filtering', async () => {
+  const app = await setup({mixedStoreCategories:true});
+  try {
+    await app.go('#store?id=' + 'd'.repeat(24) + '&category=food');
+    const d = app.w.document;
+    const select = d.querySelector('[aria-label="Store category"]');
+    assert.deepEqual([...select.options].map(o => o.textContent), ['All categories', 'Food']);
+    assert.equal(select.value, 'Food');
+    assert.equal(d.querySelectorAll('.product-card').length, 2);
+    await app.go('#categories');
+    assert.equal([...d.querySelectorAll('a')].filter(a => a.textContent.trim() === 'food').length, 0);
   } finally { app.close(); }
 });

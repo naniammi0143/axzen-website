@@ -201,12 +201,22 @@ function card(p) {
 function grid(rows) {
   return `<div class="product-grid">${rows.map(card).join("")}</div>`;
 }
+function normalizeCategories(products) {
+  const categoryNames = new Map();
+  return products.map((p) => {
+    const raw = String(p.category || "General").trim() || "General";
+    const key = raw.toLowerCase();
+    if (!categoryNames.has(key))
+      categoryNames.set(key, raw.charAt(0).toUpperCase() + raw.slice(1));
+    return { ...p, category: categoryNames.get(key) };
+  });
+}
 function categories() {
   const preferred = (state.config.categoryOrder || []).map((c) =>
     c.toLowerCase(),
   );
   return [
-    ...new Set(state.products.map((p) => p.category).filter(Boolean)),
+    ...new Set(normalizeCategories(state.products).map((p) => p.category)),
   ].sort((a, b) => {
     const first = preferred.indexOf(a.toLowerCase()),
       second = preferred.indexOf(b.toLowerCase());
@@ -291,7 +301,7 @@ function storeProfile(data, reviews, params) {
       sort: tab === "best" ? "" : params.get("sort") || "newest",
     });
     if (tab === "best") rows.sort((a, b) => b.soldUnits - a.soldUnits);
-    content = `<div class="store-catalog-heading"><div><h2>${tab === "best" ? "Customer favourites" : "Shop the collection"}</h2><p class="muted">${tab === "best" ? "Ranked by units in delivered orders." : `${data.products.length} products from ${esc(s.name)}`}</p></div></div><form id="store-filter-form" class="store-search" data-id="${esc(id)}" data-tab="${tab}"><input type="search" name="q" aria-label="Search this store" placeholder="Search this store" value="${esc(params.get("q") || "")}"><select name="category" aria-label="Store category"><option value="">All categories</option>${[...new Set(data.products.map((p) => p.category))].map((c) => `<option ${params.get("category") === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>${
+    content = `<div class="store-catalog-heading"><div><h2>${tab === "best" ? "Customer favourites" : "Shop the collection"}</h2><p class="muted">${tab === "best" ? "Ranked by units in delivered orders." : `${data.products.length} products from ${esc(s.name)}`}</p></div></div><form id="store-filter-form" class="store-search" data-id="${esc(id)}" data-tab="${tab}"><input type="search" name="q" aria-label="Search this store" placeholder="Search this store" value="${esc(params.get("q") || "")}"><select name="category" aria-label="Store category"><option value="">All categories</option>${[...new Set(data.products.map((p) => p.category))].map((c) => `<option ${(params.get("category") || "").trim().toLowerCase() === c.toLowerCase() ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>${
       tab === "products"
         ? `<select name="sort" aria-label="Sort store products">${[
             ["newest", "Newest"],
@@ -686,6 +696,8 @@ async function render() {
           ),
         ]);
         if (v !== viewNumber) return;
+        data.products = normalizeCategories(data.products);
+        data.bestSellers = normalizeCategories(data.bestSellers);
         state.storeData = data;
         const incoming = new Set(data.products.map(productKey));
         state.products = [
@@ -822,14 +834,7 @@ async function loadCatalog() {
     ]);
     if (!Array.isArray(catalog.products))
       throw new Error("Invalid catalog response.");
-    const categoryNames = new Map();
-    state.products = catalog.products.map((p) => {
-      const raw = String(p.category || "General").trim();
-      const key = raw.toLowerCase();
-      if (!categoryNames.has(key))
-        categoryNames.set(key, raw.charAt(0).toUpperCase() + raw.slice(1));
-      return { ...p, category: categoryNames.get(key) };
-    });
+    state.products = normalizeCategories(catalog.products);
     state.config = config.config || {};
     state.catalog = "ready";
     state.cart = reconcileCart(state.cart, state.products);

@@ -383,6 +383,18 @@ test('courier operations are permission scoped, sequential and cannot mark payme
 
 test('store reviews require a delivered purchase, update real ratings, support owner replies and audited moderation',async()=>{
   const Review=require('../src/models/Review');
+  async function assertPublicRating(average, count) {
+    for (const route of ['/api/customer/catalog', `/api/sellers/public/${seller._id}/profile`]) {
+      const response = await request(route, null, '');
+      assert.equal(response.status, 200);
+      const product = response.body.products.find(p => String(p.id) === String(items[0]._id));
+      assert.equal(product.ratingAverage, average);
+      assert.equal(product.ratingCount, count);
+      assert.equal(product.sellerName, seller.businessName);
+    }
+  }
+  await Product.updateOne({_id:items[0]._id}, {$set:{ratingAverage:4.8,ratingCount:99,sellerName:'Outdated store name'}});
+  await assertPublicRating(0, 0);
   const o=await workflowOrder('REVIEW-1', 'delivered');
   const path=`/api/orders/${o._id}/review`;
   const input={productId:String(items[0]._id),rating:4,title:'Useful product',body:'Delivered in good condition.'};
@@ -395,6 +407,7 @@ test('store reviews require a delivered purchase, update real ratings, support o
   assert.equal((await request(path,{...input,rating:5},token,'PUT')).status,200);
   assert.equal(await Review.countDocuments({customerId:customer._id,productId:items[0]._id}),1);
   assert.equal((await Product.findById(items[0]._id)).ratingAverage,5);
+  await assertPublicRating(5, 1);
   const review=await Review.findOne({customerId:customer._id,productId:items[0]._id});
   const sellerToken=jwt.sign({id:String(seller.userId),role:'seller'},process.env.JWT_SECRET);
   assert.equal((await request(`/api/sellers/me/reviews/${review._id}/reply`,{reply:'Thank you for your feedback.'},sellerToken,'PUT')).status,200);
@@ -406,6 +419,7 @@ test('store reviews require a delivered purchase, update real ratings, support o
   assert.equal((await request(`/api/admin/reviews/${review._id}`,{status:'hidden',reason:'Fixture moderation'},sellerToken,'PATCH')).status,403);
   assert.equal((await request(`/api/admin/reviews/${review._id}`,{status:'hidden',reason:'Fixture moderation'},rootToken,'PATCH')).status,200);
   assert.equal((await Product.findById(items[0]._id)).ratingCount,0);
+  await assertPublicRating(0, 0);
   assert.equal((await request(path,input,token,'PUT')).status,409,'editing must not bypass moderation');
   assert.equal((await request(`/api/admin/reviews/${review._id}`,{status:'published',reason:'Restored after review'},rootToken,'PATCH')).status,200);
   assert.equal((await Product.findById(items[0]._id)).ratingCount,1);
