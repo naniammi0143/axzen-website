@@ -2,6 +2,7 @@ const app = require("../src/app");
 const connectDb = require("../src/config/db");
 const {
   provisionConfiguredSuperadmin,
+  provisionConfiguredSuperadminPhone,
 } = require("../src/services/bootstrapSuperadmin");
 
 let readyPromise;
@@ -9,7 +10,10 @@ let readyPromise;
 async function ensureReady() {
   if (!readyPromise) {
     readyPromise = connectDb()
-      .then(() => provisionConfiguredSuperadmin())
+      .then(async () => {
+        await provisionConfiguredSuperadmin();
+        await provisionConfiguredSuperadminPhone();
+      })
       .catch((error) => {
         readyPromise = null;
         throw error;

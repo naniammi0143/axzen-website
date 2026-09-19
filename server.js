@@ -6,11 +6,13 @@ const seedDefaults = require("./src/utils/seed");
 const { initializeRealtime } = require("./src/utils/realtime");
 const {
   provisionConfiguredSuperadmin,
+  provisionConfiguredSuperadminPhone,
 } = require("./src/services/bootstrapSuperadmin");
 
 async function startServer() {
   await connectDb();
   await provisionConfiguredSuperadmin();
+  await provisionConfiguredSuperadminPhone();
   if (process.env.SEED_DEMO === "true" && process.env.NODE_ENV !== "production")
     await seedDefaults();
   const server = http.createServer(app);

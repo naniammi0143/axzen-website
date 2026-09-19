@@ -3,9 +3,10 @@ const User = require("../models/User");
 const AdminUser = require("../models/AdminUser");
 const BootstrapState = require("../models/BootstrapState");
 const AuditLog = require("../models/AuditLog");
-const { verifyPassword } = require("../utils/passwords");
+const { loginPhone, verifyPassword } = require("../utils/passwords");
 const { invalid } = require("../utils/checkoutRules");
 const MARKER = "first-password-superadmin";
+const PHONE_MARKER = "configured-phone-superadmin";
 function setupConfig() {
   try {
     const data = JSON.parse(process.env.AXZEN_SUPERADMIN_SETUP || "{}");
@@ -147,8 +148,88 @@ async function provisionConfiguredSuperadmin() {
   return createConfiguredSuperadmin(config, true);
 }
 
+async function provisionConfiguredSuperadminPhone() {
+  const phone = loginPhone(process.env.AXZEN_SUPERADMIN_PHONE || "");
+  if (!phone) return null;
+  await BootstrapState.init();
+  let result;
+  await mongoose.connection.transaction(async (session) => {
+    if (await BootstrapState.exists({ _id: PHONE_MARKER }).session(session))
+      return;
+
+    const staff = await User.find({
+      phone,
+      role: {
+        $in: [
+          "superadmin",
+          "admin",
+          "support",
+          "finance",
+          "delivery_manager",
+        ],
+      },
+    }).session(session);
+    let owner =
+      staff.find((candidate) => candidate.role === "superadmin") ||
+      staff.find((candidate) => candidate.role === "admin") ||
+      staff[0];
+
+    if (owner) {
+      owner.role = "superadmin";
+      owner.status = "active";
+      owner.mustChangePassword = false;
+      owner.sessionVersion = (owner.sessionVersion || 0) + 1;
+      await owner.save({ session });
+    } else {
+      [owner] = await User.create(
+        [
+          {
+            phone,
+            name: "Axzen Owner",
+            role: "superadmin",
+            status: "active",
+            mustChangePassword: false,
+          },
+        ],
+        { session },
+      );
+    }
+
+    await AdminUser.findOneAndUpdate(
+      { userId: owner._id },
+      {
+        $set: { displayRole: "Super Admin" },
+        $addToSet: {
+          permissions: "*",
+          activityNotes: "Company owner - phone OTP",
+        },
+      },
+      { upsert: true, session },
+    );
+    await BootstrapState.create([{ _id: PHONE_MARKER, userId: owner._id }], {
+      session,
+    });
+    await AuditLog.create(
+      [
+        {
+          actorId: owner._id,
+          actorRole: "superadmin",
+          action: "superadmin.phone.provisioned",
+          entityType: "user",
+          entityId: String(owner._id),
+          metadata: { method: "private-server-configuration" },
+        },
+      ],
+      { session },
+    );
+    result = owner;
+  });
+  return result;
+}
+
 module.exports = {
   bootstrapSuperadmin,
   provisionConfiguredSuperadmin,
+  provisionConfiguredSuperadminPhone,
   setupConfig,
 };
