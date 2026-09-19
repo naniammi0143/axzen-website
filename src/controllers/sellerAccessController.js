@@ -9,6 +9,7 @@ const { text } = require('../utils/storeRules');
 const { validPassword, hashPassword, verifyPassword, loginPhone } = require('../utils/passwords');
 const { signToken, sessionResponse } = require('./authController');
 const failure = 'Unable to sign in. Check your phone and password, or use mobile OTP.';
+const disabledLoginPhone = () => `disabled:${new mongoose.Types.ObjectId()}`;
 
 const createStore = asyncHandler(async (req, res) => {
   const access = req.body.access || 'otp';
@@ -33,7 +34,7 @@ const createStore = asyncHandler(async (req, res) => {
   await mongoose.connection.transaction(async session => {
     if (phone && await User.exists({ phone, role: 'seller' }).session(session))
       throw invalid('This phone already has a seller account. Open its existing store instead.', 409);
-    const [user] = await User.create([{ name: fullName, phone: phone || undefined, email: email || undefined, role: 'seller', status: 'pending', passwordHash }], { session });
+    const [user] = await User.create([{ name: fullName, phone: phone || disabledLoginPhone(), email: email || undefined, role: 'seller', status: 'pending', passwordHash }], { session });
     [seller] = await Seller.create([{ ...details, userId: user._id, approvalStatus: 'pending', kycStatus: 'pending', status: 'inactive', isActive: false, payoutEnabled: false }], { session });
     await AuditLog.create([{ actorId: req.user.id, actorRole: req.user.role, action: 'seller.create', entityType: 'seller', entityId: String(seller._id), metadata: { access, approvalStatus: 'pending' } }], { session });
   });

@@ -512,7 +512,7 @@ test('superadmin creates no-login stores and controls store and product catalogu
   assert.equal(second.status, 201, JSON.stringify(second.body));
   assert.match(first.body.seller.businessName, /^New store /);
   const noLoginOwner = await User.findById(first.body.seller.userId).lean();
-  assert.equal(noLoginOwner.phone, undefined);
+  assert.match(noLoginOwner.phone, /^disabled:[a-f0-9]{24}$/);
   const ordinaryAdmin = await User.create({ role: 'admin', name: 'Ordinary Admin', phone: '+919000003102', status: 'active' });
   const ordinaryToken = jwt.sign({ id: String(ordinaryAdmin._id), role: 'admin' }, process.env.JWT_SECRET);
   assert.equal((await request('/api/admin/sellers', { access: 'none' }, ordinaryToken)).status, 403);

@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const AuditLog = require("../models/AuditLog");
 const AdminUser = require("../models/AdminUser");
 const CustomerAppConfig = require("../models/CustomerAppConfig");
@@ -405,6 +406,7 @@ const sellerDetail = asyncHandler(async (req, res) => {
     res.status(404).json({ ok: false, message: "Seller not found." });
     return;
   }
+  if (seller.userId?.phone?.startsWith("disabled:")) seller.userId.phone = "";
 
   const [orders, products] = await Promise.all([
     Order.find({ sellerId: seller._id }).sort({ createdAt: -1 }).limit(500).lean(),
@@ -545,7 +547,7 @@ const updateSeller = asyncHandler(async (req, res) => {
   const userUpdate = {};
   if (update.fullName !== undefined) userUpdate.name = update.fullName;
   if (update.email !== undefined) userUpdate.email = update.email || undefined;
-  if (update.phone !== undefined) userUpdate.phone = update.phone || undefined;
+  if (update.phone !== undefined) userUpdate.phone = update.phone || `disabled:${new mongoose.Types.ObjectId()}`;
   if (Object.keys(userUpdate).length) {
     const set = Object.fromEntries(Object.entries(userUpdate).filter(([, value]) => value !== undefined));
     const unset = Object.fromEntries(Object.entries(userUpdate).filter(([, value]) => value === undefined).map(([key]) => [key, 1]));
