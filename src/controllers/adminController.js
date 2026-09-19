@@ -14,6 +14,8 @@ const { formatRupees, getPaymentChargePercent } = require("../utils/money");
 const { notifyFollowersForProduct } = require("./notificationController");
 const { grokConfigured, removeBackgroundFromUrl } = require("../utils/grokBackground");
 const { uploadImageBuffer, uploadProductImages } = require("../utils/cloudinary");
+const { text: cleanText, httpsUrl } = require("../utils/storeRules");
+const { loginPhone } = require("../utils/passwords");
 
 const orderStatuses = ["pending", "confirmed", "packed", "shipped", "out_for_delivery", "delivered", "cancelled", "returned"];
 const productStatuses = ["pending_approval", "approved", "active", "rejected", "blocked", "inactive"];
@@ -480,11 +482,40 @@ const updateSeller = asyncHandler(async (req, res) => {
     "storeDetails",
     "pickupAddress",
     "shippingPickupLocation",
+    "businessName",
+    "fullName",
+    "phone",
+    "email",
+    "category",
+    "city",
+    "state",
+    "pincode",
   ];
   const update = {};
   allowed.forEach((key) => {
     if (req.body[key] !== undefined) update[key] = req.body[key];
   });
+
+  const identityFields = ["businessName", "fullName", "phone", "email", "category", "city", "state", "pincode"];
+  if (identityFields.some((key) => req.body[key] !== undefined) && req.user.role !== "superadmin") {
+    return res.status(403).json({ ok: false, message: "Only the superadmin can change store identity and login details." });
+  }
+  if (update.businessName !== undefined) update.businessName = cleanText(String(update.businessName || ""), 150, "store name") || "Untitled store";
+  if (update.fullName !== undefined) update.fullName = cleanText(String(update.fullName || ""), 100, "owner name");
+  if (update.category !== undefined) update.category = cleanText(String(update.category || ""), 80, "category") || "General";
+  for (const [key, max] of Object.entries({ city: 100, state: 100, pincode: 6 })) {
+    if (update[key] !== undefined) update[key] = cleanText(String(update[key] || ""), max, key);
+  }
+  if (update.pincode && !/^[1-9]\d{5}$/.test(update.pincode)) return res.status(400).json({ ok: false, message: "Enter a valid six-digit pincode." });
+  if (update.email !== undefined) {
+    update.email = cleanText(String(update.email || ""), 254, "email").toLowerCase();
+    if (update.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(update.email)) return res.status(400).json({ ok: false, message: "Enter a valid email." });
+  }
+  if (update.phone !== undefined) {
+    const normalizedPhone = update.phone ? loginPhone(update.phone) : null;
+    if (update.phone && !normalizedPhone) return res.status(400).json({ ok: false, message: "Enter the mobile number with country code." });
+    update.phone = normalizedPhone || "";
+  }
 
   if(update.shippingPickupLocation!==undefined)update.shippingPickupLocation=require('../utils/storeRules').text(update.shippingPickupLocation,100,'registered pickup location');
   if(update.storeDetails!==undefined) {
@@ -507,7 +538,20 @@ const updateSeller = asyncHandler(async (req, res) => {
     return;
   }
 
-  const seller = await Seller.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
+  const seller = await Seller.findById(req.params.id);
+  if (!seller) return res.status(404).json({ ok: false, message: "Seller not found." });
+  Object.entries(update).forEach(([key, value]) => seller.set(key, value));
+  await seller.save();
+  const userUpdate = {};
+  if (update.fullName !== undefined) userUpdate.name = update.fullName;
+  if (update.email !== undefined) userUpdate.email = update.email || undefined;
+  if (update.phone !== undefined) userUpdate.phone = update.phone || undefined;
+  if (Object.keys(userUpdate).length) {
+    const set = Object.fromEntries(Object.entries(userUpdate).filter(([, value]) => value !== undefined));
+    const unset = Object.fromEntries(Object.entries(userUpdate).filter(([, value]) => value === undefined).map(([key]) => [key, 1]));
+    await User.updateOne({ _id: seller.userId }, { ...(Object.keys(set).length ? { $set: set } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {}) });
+  }
+  if (update.businessName !== undefined) await Product.updateMany({ sellerId: seller._id }, { $set: { sellerName: update.businessName } });
   await audit(req, "seller.update", "seller", req.params.id, update);
   success(res, { seller });
 });
@@ -542,12 +586,36 @@ const listProducts = asyncHandler(async (req, res) => {
 
 const updateProduct = asyncHandler(async (req, res) => {
   if(req.body.ratingAverage!==undefined || req.body.ratingCount!==undefined)return res.status(400).json({ok:false,message:'Ratings are calculated from verified purchase reviews.'});
-  const allowed = ["status", "category", "subcategory", "pricePaise", "mrpPaise", "discountPaise", "stock", "lowStockThreshold", "gstBps", "rejectionReason", "unitLabel", "description"];
+  const allowed = ["status", "title", "sku", "category", "subcategory", "pricePaise", "mrpPaise", "discountPaise", "stock", "lowStockThreshold", "gstBps", "rejectionReason", "unitLabel", "description", "images"];
   const update = {};
   allowed.forEach((key) => {
     if (req.body[key] !== undefined) update[key] = req.body[key];
   });
+  const catalogueFields = ["title", "sku", "category", "subcategory", "pricePaise", "mrpPaise", "discountPaise", "stock", "lowStockThreshold", "gstBps", "unitLabel", "description", "images"];
+  if (catalogueFields.some((key) => req.body[key] !== undefined) && req.user.role !== "superadmin") {
+    return res.status(403).json({ ok: false, message: "Only the superadmin can directly edit product catalogue details." });
+  }
+  if (update.title !== undefined) update.title = cleanText(String(update.title || ""), 180, "product title") || "Untitled product";
+  if (update.sku !== undefined) {
+    update.sku = cleanText(String(update.sku || ""), 80, "SKU").toUpperCase();
+    if (!update.sku) delete update.sku;
+  }
+  for (const [key, max] of Object.entries({ category: 80, subcategory: 80, unitLabel: 80, description: 4000 })) {
+    if (update[key] !== undefined) update[key] = cleanText(String(update[key] || ""), max, key);
+  }
+  for (const key of ["pricePaise", "mrpPaise", "discountPaise", "stock", "lowStockThreshold", "gstBps"]) {
+    if (update[key] !== undefined) {
+      const value = update[key] === "" || update[key] === null ? 0 : Number(update[key]);
+      if (!Number.isFinite(value) || value < 0) return res.status(400).json({ ok: false, message: `${key} must be zero or a positive number.` });
+      update[key] = Math.round(value);
+    }
+  }
+  if (update.images !== undefined) {
+    const list = Array.isArray(update.images) ? update.images : String(update.images || "").split(/\n|,/);
+    update.images = [...new Set(list.map((value) => String(value || "").trim()).filter(Boolean))].slice(0, 12).map((value) => httpsUrl(value, "product image"));
+  }
   const product = await Product.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
+  if (!product) return res.status(404).json({ ok: false, message: "Product not found." });
   await audit(req, "product.update", "product", req.params.id, update);
   success(res, { product });
 });
@@ -730,8 +798,8 @@ const updateCustomerAppConfig = asyncHandler(async (req, res) => {
       .filter(Boolean);
   }
   const {text,httpsUrl}=require('../utils/storeRules');
-  for (const [key,max] of Object.entries({heroTitle:140,heroSubtitle:300,heroCta:50,supportEmail:160,supportPhone:20})) {
-    if(req.body[key]!==undefined) update[key]=text(req.body[key],max,key,key!=="supportPhone");
+  for (const [key,max] of Object.entries({heroTitle:140,heroSubtitle:300,heroCta:50,supportEmail:160,supportPhone:20,saleTitle:140,saleSubtitle:300,saleCta:50,spotlightTitle:100})) {
+    if(req.body[key]!==undefined) update[key]=text(req.body[key],max,key);
   }
   for (const key of ['showStores','showOffers','showBestSellers','showReviews']) {
     if(req.body[key]!==undefined) {
@@ -764,8 +832,7 @@ function collectOfferImageUrls(body = {}) {
 }
 
 function festivalOfferValidationError(offer = {}) {
-  if (!offer.title) return "Offer title is required.";
-  if (offer.imageUrls.length < 3 || offer.imageUrls.length > 4) return "Add 3 to 4 unique offer images.";
+  if (offer.imageUrls.length > 4) return "Add up to 4 unique offer images.";
   const invalidImage = offer.imageUrls.find((value) => {
     try {
       return !["http:", "https:"].includes(new URL(value).protocol);

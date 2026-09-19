@@ -36,6 +36,14 @@ async function admin(user) {
         ],
         products: [],
       };
+    else if (url.includes("/api/admin/products"))
+      data = {
+        items: [{
+          _id: "b".repeat(24), sellerName: "One Store", title: "Sample product",
+          sku: "SKU-1", category: "General", pricePaise: 12500,
+          mrpPaise: 15000, stock: 4, images: [], status: "approved",
+        }], total: 1, page: 1,
+      };
     return {
       ok: true,
       status: 200,
@@ -149,6 +157,33 @@ test('admin store creation submits chosen access and clears password when switch
   f.dispatchEvent(new a.w.Event('submit',{bubbles:true,cancelable:true})); await tick();
   const call=a.calls.find(c=>c.url==='/api/admin/sellers'&&c.method==='POST');
   assert.ok(call); const body=JSON.parse(call.body);assert.equal(body.access,'otp');assert.equal(body.password,undefined);
+ }finally{a.close();}
+});
+test('superadmin can create a seller-managed store without OTP or a phone',async()=>{
+ const a=await admin({role:'superadmin',admin:{permissions:['*']}});
+ try {
+  const d=a.w.document;
+  d.querySelector('[data-admin-view="sellers"]').click();await tick();
+  d.querySelector('[data-action="seller-create"]').click();
+  const f=d.querySelector('[data-store-create]');
+  assert.ok(f.elements.access.querySelector('option[value="none"]'));
+  f.elements.access.value='none';f.elements.access.dispatchEvent(new a.w.Event('change',{bubbles:true}));
+  assert.equal(f.elements.phone.required,false);
+  f.dispatchEvent(new a.w.Event('submit',{bubbles:true,cancelable:true}));await tick();
+  const call=a.calls.find(c=>c.url==='/api/admin/sellers'&&c.method==='POST');
+  assert.ok(call);const body=JSON.parse(call.body);assert.equal(body.access,'none');assert.equal(body.phone,'');
+ }finally{a.close();}
+});
+test('superadmin product editor controls images, stock and prices',async()=>{
+ const a=await admin({role:'superadmin',admin:{permissions:['*']}});
+ try {
+  const d=a.w.document;d.querySelector('[data-admin-view="products"]').click();await tick();
+  d.querySelector('[data-action="product-edit"]').click();
+  const f=d.querySelector('[data-product-edit]');
+  f.elements.priceRupees.value='99.50';f.elements.images.value='https://images.example.com/item.png';
+  f.dispatchEvent(new a.w.Event('submit',{bubbles:true,cancelable:true}));await tick();
+  const call=a.calls.find(c=>c.url.includes('/api/admin/products/')&&c.method==='PATCH');
+  assert.ok(call);const body=JSON.parse(call.body);assert.equal(body.pricePaise,9950);assert.equal(body.images,'https://images.example.com/item.png');
  }finally{a.close();}
 });
 test('seller password login keeps credentials out of storage and opens the same session handler',async()=>{

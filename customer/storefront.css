@@ -2177,6 +2177,41 @@ dialog::backdrop {
   border-radius: var(--radius);
   overflow: hidden;
   padding: 18px;
+  min-height: 148px;
+  color: var(--ink);
+  position: relative;
+  isolation: isolate;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+.offer-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 36px rgba(20, 37, 63, 0.12);
+}
+.offer-placeholder {
+  background: linear-gradient(135deg, #fff3e8 0%, #ffe0bf 100%);
+  border-color: #f1c89d;
+}
+.offer-placeholder:nth-child(2) {
+  background: linear-gradient(135deg, #eef7ff 0%, #dcecff 100%);
+  border-color: #bed5ec;
+}
+.offer-placeholder:nth-child(3) {
+  background: linear-gradient(135deg, #eef9f0 0%, #d8efdd 100%);
+  border-color: #bdddc5;
+}
+.offer-card-icon {
+  width: 76px;
+  height: 76px;
+  flex: 0 0 76px;
+  display: grid;
+  place-items: center;
+  border-radius: 22px;
+  color: #d84c1b;
+  background: rgba(255, 255, 255, 0.72);
+}
+.offer-card-icon svg {
+  width: 34px;
+  height: 34px;
 }
 .offer-card img {
   width: 100px;

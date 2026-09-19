@@ -19,7 +19,15 @@ const userSchema = new mongoose.Schema(
         return normalized || undefined;
       },
     },
-    phone: { type: String, trim: true, default: "" },
+    phone: {
+      type: String,
+      trim: true,
+      set: (value) => {
+        if (!value) return undefined;
+        const normalized = String(value).trim();
+        return normalized || undefined;
+      },
+    },
     username: { type: String, trim: true, lowercase: true },
     mustChangePassword: { type: Boolean, default: false },
     passwordHash: { type: String, default: "", select: false },

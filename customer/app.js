@@ -233,11 +233,16 @@ function offerProducts(offer) {
   return state.products.filter((p) => ids.has(productKey(p)));
 }
 function promotions() {
-  const offers = (state.config.festivalOffers || []).filter(
-    (o) => offerProducts(o).length,
-  );
-  if (state.config.showOffers === false || !offers.length) return "";
-  return `<section class="section">${sectionHead("In season. On offer.", "Discover offers from our stores.", "#deals")}<div class="offer-grid">${offers.map((o) => `<a class="offer-card" href="#offer?id=${encodeURIComponent(o.id)}">${safeUrl(o.imageUrl || o.imageUrls?.[0]) ? `<img src="${esc(safeUrl(o.imageUrl || o.imageUrls?.[0]))}" alt="" loading="lazy">` : icon("bag")}<div><h3>${esc(o.title)}</h3><span>Explore ${offerProducts(o).length} products →</span></div></a>`).join("")}</div></section>`;
+  if (state.config.showOffers === false) return "";
+  const configured = state.config.festivalOffers || [];
+  const offers = configured.length
+    ? configured
+    : [
+        { id: "daily-deals", title: state.config.saleTitle || "Today’s best offers", fallback: true, href: "#deals" },
+        { id: "new-arrivals", title: "Fresh finds", fallback: true, href: "#shop?sort=newest" },
+        { id: "store-offers", title: "Offers from stores", fallback: true, href: "#stores" },
+      ];
+  return `<section class="section offer-section">${sectionHead(state.config.saleTitle || "In season. On offer.", state.config.saleSubtitle || "Discover offers from our stores.", "#deals", state.config.saleCta || "Shop offers")}<div class="offer-grid">${offers.map((o) => { const count = offerProducts(o).length; const href = o.href || (count ? `#offer?id=${encodeURIComponent(o.id)}` : "#deals"); const image = safeUrl(o.imageUrl || o.imageUrls?.[0]); return `<a class="offer-card${image ? " has-image" : " offer-placeholder"}" href="${esc(href)}">${image ? `<img src="${esc(image)}" alt="" loading="lazy">` : `<span class="offer-card-icon">${icon("bag")}</span>`}<div><h3>${esc(o.title || "Special offer")}</h3><span>${count ? `Explore ${count} product${count === 1 ? "" : "s"}` : (o.fallback ? "Explore now" : "Products coming soon")} →</span></div></a>`; }).join("")}</div></section>`;
 }
 function featuredStores() {
   const order = (state.config.recommendedSellerIds || []).map(String);

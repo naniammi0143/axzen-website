@@ -502,3 +502,34 @@ test('admin creates stores with OTP/password access without granting public or s
   assert.equal((await User.findById(otpOnly.body.seller.userId).select('+passwordHash')).passwordHash,'');
   assert.equal((await request(path,{phone:'+919000001022',password:'Anything-2026'},'')).status,401);
 });
+
+test('superadmin creates no-login stores and controls store and product catalogue fields', async () => {
+  const root = await User.create({ role: 'superadmin', name: 'Catalogue Owner', phone: '+919000003101', status: 'active' });
+  const rootToken = jwt.sign({ id: String(root._id), role: 'superadmin' }, process.env.JWT_SECRET);
+  const first = await request('/api/admin/sellers', { access: 'none' }, rootToken);
+  const second = await request('/api/admin/sellers', { access: 'none', businessName: '' }, rootToken);
+  assert.equal(first.status, 201, JSON.stringify(first.body));
+  assert.equal(second.status, 201, JSON.stringify(second.body));
+  assert.match(first.body.seller.businessName, /^New store /);
+  const noLoginOwner = await User.findById(first.body.seller.userId).lean();
+  assert.equal(noLoginOwner.phone, undefined);
+  const ordinaryAdmin = await User.create({ role: 'admin', name: 'Ordinary Admin', phone: '+919000003102', status: 'active' });
+  const ordinaryToken = jwt.sign({ id: String(ordinaryAdmin._id), role: 'admin' }, process.env.JWT_SECRET);
+  assert.equal((await request('/api/admin/sellers', { access: 'none' }, ordinaryToken)).status, 403);
+
+  const storeEdit = await request(`/api/admin/sellers/${first.body.seller._id}`, {
+    businessName: 'Owner Controlled Store', phone: '', storeDetails: { profileImageUrl: '', offerBannerUrl: '' },
+  }, rootToken, 'PATCH');
+  assert.equal(storeEdit.status, 200, JSON.stringify(storeEdit.body));
+  assert.equal(storeEdit.body.seller.businessName, 'Owner Controlled Store');
+
+  const productEdit = await request(`/api/admin/products/${items[0]._id}`, {
+    title: '', pricePaise: '', mrpPaise: 15900, stock: '', images: ['https://images.example.com/item.png'],
+  }, rootToken, 'PATCH');
+  assert.equal(productEdit.status, 200, JSON.stringify(productEdit.body));
+  assert.equal(productEdit.body.product.title, 'Untitled product');
+  assert.equal(productEdit.body.product.pricePaise, 0);
+  assert.equal(productEdit.body.product.stock, 0);
+  assert.deepEqual(productEdit.body.product.images, ['https://images.example.com/item.png']);
+  assert.equal((await request(`/api/admin/products/${items[1]._id}`, { pricePaise: 10 }, ordinaryToken, 'PATCH')).status, 403);
+});

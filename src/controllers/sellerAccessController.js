@@ -11,13 +11,13 @@ const { signToken, sessionResponse } = require('./authController');
 const failure = 'Unable to sign in. Check your phone and password, or use mobile OTP.';
 
 const createStore = asyncHandler(async (req, res) => {
-  const phone = loginPhone(req.body.phone);
-  if (!phone) throw invalid('Enter a valid owner mobile number, including country code.');
-  const fullName = text(req.body.fullName, 100, 'owner name');
-  const businessName = text(req.body.businessName, 150, 'store name');
-  if (!fullName || !businessName) throw invalid('Owner name and store name are required.');
   const access = req.body.access || 'otp';
-  if (!['otp', 'password'].includes(access)) throw invalid('Choose OTP or OTP and password access.');
+  if (!['none', 'otp', 'password'].includes(access)) throw invalid('Choose no login, OTP, or password access.');
+  if (access === 'none' && req.user.role !== 'superadmin') throw invalid('Only the superadmin can create a store without login access.', 403);
+  const phone = req.body.phone ? loginPhone(req.body.phone) : null;
+  if (access !== 'none' && !phone) throw invalid('Enter a valid owner mobile number, including country code.');
+  const fullName = text(req.body.fullName ?? '', 100, 'owner name') || 'Store owner';
+  const businessName = text(req.body.businessName ?? '', 150, 'store name') || `New store ${new Date().toISOString().slice(0, 10)}`;
   if (access === 'password' && !validPassword(req.body.password)) throw invalid('Use a password with 10–128 characters.');
   if (access === 'otp' && req.body.password) throw invalid('Choose password access before setting a password.');
   const email = text(req.body.email ?? "", 254, 'email').toLowerCase();
@@ -25,15 +25,15 @@ const createStore = asyncHandler(async (req, res) => {
   const pincode = text(req.body.pincode ?? "", 6, 'pincode');
   if (pincode && !/^[1-9]\d{5}$/.test(pincode)) throw invalid('Enter a valid six-digit pincode.');
   const passwordHash = access === 'password' ? await hashPassword(req.body.password) : '';
-  const details = { fullName, businessName, phone, email, pincode,
+  const details = { fullName, businessName, phone: phone || '', email, pincode,
     category: text(req.body.category ?? "", 80, 'category') || 'General',
     city: text(req.body.city ?? "", 100, 'city'), state: text(req.body.state ?? "", 100, 'state'),
     pickupAddress: text(req.body.pickupAddress ?? "", 500, 'pickup address') };
   let seller;
   await mongoose.connection.transaction(async session => {
-    if (await User.exists({ phone, role: 'seller' }).session(session))
+    if (phone && await User.exists({ phone, role: 'seller' }).session(session))
       throw invalid('This phone already has a seller account. Open its existing store instead.', 409);
-    const [user] = await User.create([{ name: fullName, phone, email: email || undefined, role: 'seller', status: 'pending', passwordHash }], { session });
+    const [user] = await User.create([{ name: fullName, phone: phone || undefined, email: email || undefined, role: 'seller', status: 'pending', passwordHash }], { session });
     [seller] = await Seller.create([{ ...details, userId: user._id, approvalStatus: 'pending', kycStatus: 'pending', status: 'inactive', isActive: false, payoutEnabled: false }], { session });
     await AuditLog.create([{ actorId: req.user.id, actorRole: req.user.role, action: 'seller.create', entityType: 'seller', entityId: String(seller._id), metadata: { access, approvalStatus: 'pending' } }], { session });
   });

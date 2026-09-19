@@ -154,6 +154,17 @@ test("catalog uses real data, normalizes categories and hides invented ratings",
     app.close();
   }
 });
+test("home keeps polished offer boxes visible when no offers are configured", async () => {
+  const app = await setup();
+  try {
+    const cards = app.w.document.querySelectorAll(".offer-card");
+    assert.equal(cards.length, 3);
+    assert.match(app.w.document.querySelector(".offer-section").textContent, /Today’s best offers/);
+    assert.equal(app.w.document.querySelectorAll(".offer-placeholder").length, 3);
+  } finally {
+    app.close();
+  }
+});
 test("search filters actual products and clears safely to an empty result", async () => {
   const app = await setup();
   try {
