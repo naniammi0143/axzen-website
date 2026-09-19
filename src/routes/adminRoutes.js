@@ -46,7 +46,7 @@ const {
   updateSeller,
   updateSettlement,
 } = require("../controllers/adminController");
-const { authenticate, authorizeAdminAccess } = require("../middleware/auth");
+const { authenticate, authorize, authorizeAdminAccess } = require("../middleware/auth");
 const { multipartForm } = require("../middleware/multipartUpload");
 
 const router = express.Router();
@@ -58,6 +58,7 @@ router.patch('/reviews/:id',authorizeAdminAccess('customerapp'),require('../cont
 router.get("/overview", authorizeAdminAccess("dashboard"), adminOverview);
 
 router.get("/sellers/:id/documents/:documentId",authorizeAdminAccess("sellers"),require("../controllers/sellerController").downloadKycDocument);
+router.post("/sellers", authorize("admin", "superadmin"), authorizeAdminAccess("sellers"), require("../controllers/sellerAccessController").createStore);
 router.get("/sellers", authorizeAdminAccess("sellers"), listSellers);
 router.get("/sellers/:id/detail", authorizeAdminAccess("sellers"), sellerDetail);
 router.patch("/sellers/:id", authorizeAdminAccess("sellers"), updateSeller);

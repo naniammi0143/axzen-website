@@ -2638,3 +2638,8 @@ dialog::backdrop {
   .ax-native-app .announcement, .ax-native-app footer { display:none; }
   .ax-native-app .header { padding-top:env(safe-area-inset-top); }
 }
+
+/* The Axzen identity is a single outlined wordmark, including the red dot. */
+.brand img.axzen-wordmark { width:132px; height:auto; display:block; }
+.footer-brand img.axzen-wordmark { width:148px; height:auto; display:block; }
+@media (max-width:700px) { .brand img.axzen-wordmark { width:112px; height:auto; } }

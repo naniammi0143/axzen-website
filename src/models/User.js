@@ -21,6 +21,9 @@ const userSchema = new mongoose.Schema(
     },
     phone: { type: String, trim: true, default: "" },
     passwordHash: { type: String, default: "", select: false },
+    sessionVersion: { type: Number, default: 0 },
+    passwordFailedAttempts: { type: Number, default: 0, select: false },
+    passwordLockedUntil: { type: Date, default: null, select: false },
     firebaseUid: { type: String, trim: true, default: "" },
     role: {
       type: String,

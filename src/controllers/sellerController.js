@@ -9,7 +9,7 @@ const { verifyFirebaseToken } = require("../config/firebase");
 const asyncHandler = require("../utils/asyncHandler");
 const { success } = require("../utils/apiResponse");
 const { formatRupees, toPaise } = require("../utils/money");
-const { hashPassword } = require("../utils/password");
+const { hashPassword, validPassword } = require("../utils/passwords");
 
 
 function clean(value = "") {
@@ -63,7 +63,7 @@ function validateRegistration(body, files) {
   if (mobileDigits.length < 6 || mobileDigits.length > 15) return "Enter a valid mobile number.";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean(body.email))) return "Email must be valid.";
   if (body.password !== body.confirmPassword) return "Password and confirm password must match.";
-  if (clean(body.password).length < 8) return "Password must be at least 8 characters.";
+  if (!validPassword(body.password)) return "Password must have 10–128 characters.";
   if (!/^\d{6}$/.test(clean(body.pincode))) return "Pincode must be 6 digits.";
   if (!/^[A-Z]{4}0[A-Z0-9]{6}$/i.test(clean(body.ifsc))) return "IFSC format is invalid.";
   if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/i.test(clean(body.panNumber))) return "PAN number format is invalid.";
@@ -322,6 +322,7 @@ const registerSeller = asyncHandler(async (req, res) => {
   });
 
   if (existingSeller) {
+    if (await User.exists({_id:existingSeller.userId,status:"blocked"})) return res.status(403).json({ok:false,message:"This account is blocked. Contact support."});
     if (existingSeller.phone !== phone) {
       return res.status(409).json({ ok: false, message: "This email is already registered. Sign in with the registered phone to update your store." });
     }
@@ -333,11 +334,11 @@ const registerSeller = asyncHandler(async (req, res) => {
       email,
       phone,
       firebaseUid: decoded.uid,
-      passwordHash: hashPassword(req.body.password),
+      passwordHash: await hashPassword(req.body.password),
       role: "seller",
       status: "pending",
     };
-    await User.findOneAndUpdate({ _id: existingSeller.userId }, userUpdate, { new: true });
+    await User.findOneAndUpdate({ _id: existingSeller.userId }, { $set: userUpdate, $inc: {sessionVersion:1} }, { new: true });
 
     Object.assign(existingSeller, buildSellerUpdate(req, phone, email));
     existingSeller.kycDocuments = [
@@ -365,7 +366,7 @@ const registerSeller = asyncHandler(async (req, res) => {
     email,
     phone,
     firebaseUid: decoded.uid,
-    passwordHash: hashPassword(req.body.password),
+    passwordHash: await hashPassword(req.body.password),
     role: "seller",
     status: "pending",
   };

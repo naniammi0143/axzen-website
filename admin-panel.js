@@ -691,6 +691,7 @@
     state.cache.sellers = data.items || [];
     qs('[data-view-panel="sellers"]').innerHTML = panel(
       "Seller approvals and performance",
+      (['admin','superadmin'].includes(state.user?.role) ? '<div class="workspace-heading"><p>Create a store for a seller and choose their login access.</p><button type="button" data-action="seller-create">+ Add store</button></div>' : '') +
       filterBar("sellers", [
         { key: "approvalStatus", label: "Approval status", options: ["pending", "approved", "rejected"] },
         { key: "kycStatus", label: "KYC status", options: ["pending", "approved", "rejected"] },
@@ -715,6 +716,26 @@
           `
         )
     );
+  }
+
+  function openCreateStore() {
+    const drawer = ensureReportDrawer('seller-create', 'Add a store');
+    qs('.report-drawer-body', drawer).innerHTML = `<form class="workspace-form" data-store-create>
+      <p class="wide">Create the seller's account. Review KYC and approve the store from Sellers when it is ready.</p>
+      <label>Store name<input name="businessName" required maxlength="150"></label>
+      <label>Owner name<input name="fullName" required maxlength="100"></label>
+      <label>Owner mobile number<input name="phone" type="tel" placeholder="+91 98765 43210" required maxlength="20"><small>This number is used for seller login.</small></label>
+      <label>Email (optional)<input name="email" type="email" maxlength="254"></label>
+      <label>Category<input name="category" value="General" maxlength="80"></label>
+      <label>City<input name="city" maxlength="100"></label>
+      <label>State<input name="state" maxlength="100"></label>
+      <label>Pincode<input name="pincode" inputmode="numeric" pattern="[1-9][0-9]{5}" maxlength="6"></label>
+      <label class="wide">Pickup address<textarea name="pickupAddress" maxlength="500"></textarea></label>
+      <label>Login access<select name="access" data-store-access><option value="otp">Mobile OTP only</option><option value="password">Mobile OTP + password</option></select></label>
+      <label data-store-password-field hidden>Initial password<input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" disabled><small>Use at least 10 characters. Share it privately with the owner.</small></label>
+      <button type="submit">Create store</button><p data-store-create-message role="status"></p></form>`;
+    openReportDrawer(drawer);
+    qs('[name="businessName"]', drawer).focus();
   }
 
   function openSellerStoreControls(index) {
@@ -1400,6 +1421,13 @@
       state.searchTimer = window.setTimeout(() => loadView(), 350);
     });
     document.addEventListener("change", async (event) => {
+      if (event.target.matches('[data-store-access]')) {
+        const form = event.target.closest('form'), field = form.querySelector('[data-store-password-field]'), input = field.querySelector('input');
+        const enabled = event.target.value === 'password';
+        field.hidden = !enabled; input.disabled = !enabled; input.required = enabled;
+        if (!enabled) input.value = '';
+        return;
+      }
       const offerSeller = event.target.closest("[data-offer-seller]");
       if (offerSeller) {
         const row = offerSeller.closest("[data-festival-offer]");
@@ -1571,6 +1599,7 @@
       }
       if (action === "payout-paid") return patch(`/api/admin/finance/orders/${id}/payout`, { payoutStatus: "paid" });
       if (action === "payout-failed") return patch(`/api/admin/finance/orders/${id}/payout`, { payoutStatus: "failed" });
+      if (action === "seller-create") return openCreateStore();
       if (action === "seller-view") return openSellerDetail(id);
       if (action === "seller-store-controls") return openSellerStoreControls(target.dataset.index);
       if (action === "seller-approve") return patch(`/api/admin/sellers/${id}/approve`, {});
@@ -1617,6 +1646,20 @@
     });
 
     document.addEventListener("submit", async (event) => {
+      const storeForm = event.target.closest('[data-store-create]');
+      if (storeForm) {
+        event.preventDefault();
+        const button = storeForm.querySelector('button[type="submit"]'), message = storeForm.querySelector('[data-store-create-message]');
+        button.disabled = true; message.textContent = 'Creating store…';
+        try {
+          const result = await api('/api/admin/sellers', {method:'POST', body:JSON.stringify(Object.fromEntries(new FormData(storeForm)))});
+          storeForm.reset(); closeTopReportDrawer(); state.search = ''; state.filterQuery = '';
+          const search = qs('#adminSearch'); if (search) search.value = '';
+          await loadView('sellers'); toast(result.message || 'Store created. Pending review.');
+        } catch (error) { message.textContent = error.message; }
+        finally { button.disabled = false; }
+        return;
+      }
       const controls=event.target.closest('[data-customer-controls],[data-shipment-form]');
       if(controls){event.preventDefault();const f=new FormData(controls),body=Object.fromEntries(f),button=controls.querySelector('button[type="submit"]'),msg=controls.querySelector('[data-controls-message]');button.disabled=true;try{
         if(controls.hasAttribute('data-customer-controls')){

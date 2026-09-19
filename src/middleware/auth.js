@@ -14,8 +14,8 @@ async function authenticate(req, res, next) {
 
   try {
     const claims = jwt.verify(token, env.jwtSecret, { algorithms: ["HS256"] });
-    const user = await User.findById(claims.id).select("name phone role status").lean();
-    if (!user || user.status === "blocked" || user.role !== claims.role ||
+    const user = await User.findById(claims.id).select("name phone role status sessionVersion").lean();
+    if (!user || (user.sessionVersion || 0) !== (claims.sessionVersion || 0) || user.status === "blocked" || user.role !== claims.role ||
         (!["customer", "seller"].includes(user.role) && user.status !== "active")) {
       return res.status(401).json({ ok: false, message: "Your session is no longer active. Please sign in again." });
     }

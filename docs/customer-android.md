@@ -1,6 +1,6 @@
 # Axzen customer Android app
 
-Package `in.axzen.customer`, version `0.2-beta`, Android 7+ (API 24), target API 36.
+Package `in.axzen.customer`, version `0.3-beta`, Android 7+ (API 24), target API 36.
 This Capacitor app bundles the customer UI in the APK. It does not launch the
 whole storefront in a browser tab. Native sharing and Android back/lifecycle
 handling complement categories, product search, stores, favourites, saved cart,

@@ -71,6 +71,7 @@ async function verifyIdTokenWithGoogleCerts(idToken) {
     return {
       uid: payload.user_id || payload.sub,
       phone_number: payload.phone_number,
+      auth_time: payload.auth_time,
     };
   } catch (error) {
     throw sessionExpiredError();
@@ -85,6 +86,7 @@ async function verifyFirebaseToken(idToken) {
   if (env.nodeEnv === "test" && process.env.ALLOW_TEST_AUTH === "true" && idToken.startsWith("local-test")) {
     return {
       uid: idToken,
+      auth_time: Math.floor(Date.now() / 1000),
       phone_number: "+919999999999",
     };
   }

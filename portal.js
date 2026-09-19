@@ -1,3 +1,4 @@
+import { initSellerAccess, passwordSettings } from './seller-access.js';
 import {storeManager,loadSellerReviews,fulfilmentPanels,parcelDialog,bindSellerWorkspace} from './seller-workspace.js';
 import { firebaseConfig } from "./firebase-config.js";
 import { closeMediaFeed, isMediaOpen, openMediaFeed } from "./media.js";
@@ -659,8 +660,8 @@ function productImage(product = {}) {
 }
 
 function productImgTag(src, alt, extra = "") {
-  const url = src || "assets/logo.png";
-  return `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" ${extra} onerror="this.onerror=null;this.src='assets/logo.png'">`;
+  const url = src || "assets/brand/wordmark.svg";
+  return `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" ${extra} onerror="this.onerror=null;this.src='assets/brand/wordmark.svg'">`;
 }
 
 function findStorefrontProduct(productId) {
@@ -3816,6 +3817,7 @@ function renderSellerWorkspace(user = {}) {
         .join("")}
     </section>
     ${storeManager(seller)}
+    ${passwordSettings()}
     ${renderSellerOffersPanel()}
     ${renderSellerInventory(sellerProductsCache)}
     ${renderSellerSupportPanel(sellerTicketsCache)}
@@ -4237,7 +4239,7 @@ function showSellerBrowserNotification(order = {}) {
   const amount = rupees(sellerNotificationAmount(order));
   new Notification("🔔 New Order Received", {
     body: `Order ID: ${order.orderId}\nCustomer: ${customerName}\nAmount: ${amount}`,
-    icon: "/assets/favicon.png",
+    icon: "/assets/brand/app-icon.png",
     tag: order.orderId || `axzen-order-${Date.now()}`,
   });
 }
@@ -4885,7 +4887,7 @@ function renderDashboard(payload) {
           <article><span>4</span><strong>Seller panel</strong><small>Products unlock after approval</small></article>
         </div>
         <div class="seller-pending-actions">
-          <a class="primary-button" href="#sellerAbout">About registration</a>
+          <a class="primary-button" href="/seller/register">Complete registration / KYC</a><a class="secondary-button" href="#sellerAbout">Store profile &amp; password</a>
           <button class="secondary-button logout-button" type="button" id="sellerPendingLogout">Logout</button>
         </div>
       </article>
@@ -5003,6 +5005,10 @@ async function createPhoneSession(role, phone, firebaseToken) {
     throw new Error(result.message || "Unable to create login session.");
   }
 
+  await acceptPortalSession(result);
+}
+
+async function acceptPortalSession(result) {
   localStorage.setItem("axzenToken", result.token);
   localStorage.setItem("axzenRole", result.user.role);
   localStorage.setItem("axzenPhone", result.user.phone);
@@ -6614,3 +6620,5 @@ if (savedToken && savedRole && savedRole === pageRole) {
 }
 
 bindSellerWorkspace(()=>loadRoleOrders("seller"),showSellerOrdersToast);
+
+initSellerAccess(acceptPortalSession);

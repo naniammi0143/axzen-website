@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Register as Seller on Axzen</title>
-  <link rel="icon" type="image/png" href="/assets/favicon.png">
+  <link rel="icon" type="image/svg+xml" href="/assets/brand/app-icon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -13,8 +13,7 @@
 <body class="portal-page seller-register-page">
   <header class="site-header">
     <a class="brand" href="/seller" aria-label="Seller Axzen home">
-      <img class="brand-logo" src="/assets/logo.png" alt="Axzen" onerror="this.hidden=true">
-      <span class="brand-mark">S</span>
+      <img class="brand-logo" src="/assets/brand/wordmark.svg" alt="Axzen" onerror="this.hidden=true">
       <span class="sr-only">Seller Axzen</span>
     </a>
     <nav class="main-nav">
@@ -73,8 +72,8 @@
             <h2>Account login</h2>
           </div>
           <label>Email<input name="email" type="email" required></label>
-          <label>Password<input name="password" type="password" minlength="8" required></label>
-          <label>Confirm password<input name="confirmPassword" type="password" minlength="8" required></label>
+          <label>Password<input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required></label>
+          <label>Confirm password<input name="confirmPassword" type="password" minlength="10" maxlength="128" autocomplete="new-password" required></label>
           <input name="firebaseToken" type="hidden" required>
         </div>
 
