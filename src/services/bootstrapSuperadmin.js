@@ -34,16 +34,68 @@ async function createConfiguredSuperadmin(config, allowExisting) {
   await BootstrapState.init();
   let result;
   await mongoose.connection.transaction(async (session) => {
-    if (
-      (await BootstrapState.exists({ _id: MARKER }).session(session)) ||
-      (await User.exists({ role: "superadmin" }).session(session))
-    ) {
+    if (await BootstrapState.exists({ _id: MARKER }).session(session)) {
       if (allowExisting) return;
       throw invalid(
         "Initial setup is already complete. Use an existing superadmin account.",
         409,
       );
     }
+
+    const existingOwners = await User.find({ role: "superadmin" })
+      .select("+passwordHash")
+      .session(session);
+    if (existingOwners.length) {
+      const owner = existingOwners.length === 1 ? existingOwners[0] : null;
+      const canAttachCredentials =
+        owner &&
+        owner.status === "active" &&
+        !owner.username &&
+        !owner.passwordHash;
+
+      if (!canAttachCredentials) {
+        if (allowExisting) return;
+        throw invalid(
+          "Initial setup is already complete. Use an existing superadmin account.",
+          409,
+        );
+      }
+
+      owner.username = config.username;
+      owner.passwordHash = config.passwordHash;
+      owner.mustChangePassword = true;
+      await owner.save({ session });
+      await AdminUser.findOneAndUpdate(
+        { userId: owner._id },
+        {
+          $set: { displayRole: "Super Admin" },
+          $addToSet: {
+            permissions: "*",
+            activityNotes: "Company owner",
+          },
+        },
+        { upsert: true, session },
+      );
+      await BootstrapState.create([{ _id: MARKER, userId: owner._id }], {
+        session,
+      });
+      await AuditLog.create(
+        [
+          {
+            actorId: owner._id,
+            actorRole: "superadmin",
+            action: "superadmin.bootstrap.credentials_attached",
+            entityType: "user",
+            entityId: String(owner._id),
+            metadata: { method: "private-server-configuration" },
+          },
+        ],
+        { session },
+      );
+      result = owner;
+      return;
+    }
+
     const [user] = await User.create(
       [
         {

@@ -63,7 +63,30 @@ test("private bootstrap, restricted initial session, password rotation and repla
     null,
   );
   assert.equal(await User.countDocuments({ role: "superadmin" }), 0);
+
+  const protectedOwner = await User.create({
+    name: "Configured Owner",
+    username: "configured.owner",
+    role: "superadmin",
+    status: "active",
+    passwordHash: config.passwordHash,
+  });
+  assert.equal(await provisionConfiguredSuperadmin(), undefined);
+  assert.equal(await BootstrapState.countDocuments(), 0);
+  assert.equal(
+    (await User.findById(protectedOwner._id)).username,
+    "configured.owner",
+  );
+  await User.deleteOne({ _id: protectedOwner._id });
+
+  const phoneOnlyOwner = await User.create({
+    name: "Existing Phone Owner",
+    phone: "+919000000099",
+    role: "superadmin",
+    status: "active",
+  });
   const provisioned = await provisionConfiguredSuperadmin();
+  assert.equal(String(provisioned._id), String(phoneOnlyOwner._id));
   assert.equal(provisioned.username, config.username);
   assert.equal(await provisionConfiguredSuperadmin(), undefined);
   const login = (password) =>

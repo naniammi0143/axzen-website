@@ -19,6 +19,10 @@ password or credentials are shipped in source code, the website or the APK.
    full-permission staff profile in one database transaction. Open the admin
    portal's Password tab and sign in with the generated username and temporary
    password within 72 hours of generation.
+   If exactly one active phone-only superadmin already exists, setup safely
+   attaches the new username and temporary password to that account instead of
+   creating a duplicate. It never overwrites an account that already has
+   username/password credentials.
 5. Choose a new private password of 14–128 characters. The initial 10-minute
    session can only change the password; company controls are inaccessible until
    this completes. The old session is invalidated on password change.
