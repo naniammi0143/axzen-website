@@ -70,7 +70,7 @@ export function filterProducts(
           .toLowerCase()
           .includes(search.toLowerCase())) &&
       (!category ||
-        String(p.category).toLowerCase() === category.toLowerCase()) &&
+        String(p.category).trim().toLowerCase() === category.trim().toLowerCase()) &&
       (!seller || String(p.sellerId) === seller) &&
       (!stock || p.stock > 0) &&
       (!maxPrice || p.pricePaise <= Number(maxPrice) * 100) &&

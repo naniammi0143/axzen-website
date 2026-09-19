@@ -1,3 +1,4 @@
+const { publishedProductRatings } = require("../utils/productRatings");
 const Product = require("../models/Product");
 const Seller = require("../models/Seller");
 const Follow = require("../models/Follow");
@@ -41,6 +42,7 @@ const listProducts = asyncHandler(async (req, res) => {
   const active = await Seller.find({userId:{$nin:demoUsers.map(u=>u._id)},isActive:true,status:'active',approvalStatus:'approved',kycStatus:'approved'}).select('_id').lean();
   const products = await Product.find({sellerId:{$in:active.map(s=>s._id)}, status:{$in:['active','approved']}}).sort({createdAt:-1}).limit(500).lean();
   const config = await CustomerAppConfig.findOne({key:'default'}).select('festivalOffers').lean();
+  const ratings = await publishedProductRatings(products.map(p => p._id));
   const offers = discounts(config?.festivalOffers);
 
   const sellerIds = [...new Set(products.map((product) => String(product.sellerId)).filter(Boolean))];
@@ -67,7 +69,7 @@ const listProducts = asyncHandler(async (req, res) => {
         title: product.title,
         category: product.category,
         sellerId: product.sellerId,
-        sellerName: product.sellerName,
+        sellerName: settings.businessName,
         description: product.description || "",
         mrpPaise: product.mrpPaise || product.pricePaise,
         mrp: formatRupees(product.mrpPaise || product.pricePaise),
@@ -77,8 +79,7 @@ const listProducts = asyncHandler(async (req, res) => {
         verifiedSeller: true,
         price: formatRupees(product.pricePaise),
         unitLabel: product.unitLabel || "1 pc",
-        ratingAverage: Number(product.ratingAverage || 0),
-        ratingCount: Number(product.ratingCount || 0),
+        ...(ratings.get(String(product._id)) || { ratingAverage: 0, ratingCount: 0 }),
         stock: product.stock,
         images: product.images || [],
         image: product.images?.[0] || "",
