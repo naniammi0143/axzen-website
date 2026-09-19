@@ -27,17 +27,23 @@ async function bootstrapSuperadmin(username, password) {
   const config = setupConfig();
   if (!config || username !== config.username) return null;
   if (!(await verifyPassword(password, config.passwordHash))) return null;
+  return createConfiguredSuperadmin(config, false);
+}
+
+async function createConfiguredSuperadmin(config, allowExisting) {
   await BootstrapState.init();
   let result;
   await mongoose.connection.transaction(async (session) => {
     if (
       (await BootstrapState.exists({ _id: MARKER }).session(session)) ||
       (await User.exists({ role: "superadmin" }).session(session))
-    )
+    ) {
+      if (allowExisting) return;
       throw invalid(
         "Initial setup is already complete. Use an existing superadmin account.",
         409,
       );
+    }
     const [user] = await User.create(
       [
         {
@@ -82,4 +88,15 @@ async function bootstrapSuperadmin(username, password) {
   });
   return result;
 }
-module.exports = { bootstrapSuperadmin, setupConfig };
+
+async function provisionConfiguredSuperadmin() {
+  const config = setupConfig();
+  if (!config) return null;
+  return createConfiguredSuperadmin(config, true);
+}
+
+module.exports = {
+  bootstrapSuperadmin,
+  provisionConfiguredSuperadmin,
+  setupConfig,
+};

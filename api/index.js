@@ -1,12 +1,19 @@
 const app = require("../src/app");
 const connectDb = require("../src/config/db");
-
+const {
+  provisionConfiguredSuperadmin,
+} = require("../src/services/bootstrapSuperadmin");
 
 let readyPromise;
 
 async function ensureReady() {
   if (!readyPromise) {
-    readyPromise = connectDb().catch(error => { readyPromise = null; throw error; });
+    readyPromise = connectDb()
+      .then(() => provisionConfiguredSuperadmin())
+      .catch((error) => {
+        readyPromise = null;
+        throw error;
+      });
   }
 
   return readyPromise;
@@ -14,7 +21,11 @@ async function ensureReady() {
 
 module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
-  if (req.url === "/api/not-found") { res.statusCode=404;res.end("Not found");return; }
+  if (req.url === "/api/not-found") {
+    res.statusCode = 404;
+    res.end("Not found");
+    return;
+  }
   if (req.url === "/api" || req.url === "/api/" || req.url === "/api/health") {
     res.statusCode = 200;
     res.setHeader("Content-Type", "application/json");
@@ -23,7 +34,7 @@ module.exports = async (req, res) => {
         ok: true,
         service: "Axzen API",
         database: readyPromise ? "initializing" : "not checked",
-      })
+      }),
     );
     return;
   }
@@ -38,7 +49,7 @@ module.exports = async (req, res) => {
       JSON.stringify({
         ok: false,
         message: "The service is temporarily unavailable. Please try again.",
-      })
+      }),
     );
   }
 };

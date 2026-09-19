@@ -4,10 +4,15 @@ const connectDb = require("./src/config/db");
 const env = require("./src/config/env");
 const seedDefaults = require("./src/utils/seed");
 const { initializeRealtime } = require("./src/utils/realtime");
+const {
+  provisionConfiguredSuperadmin,
+} = require("./src/services/bootstrapSuperadmin");
 
 async function startServer() {
   await connectDb();
-  if (process.env.SEED_DEMO === "true" && process.env.NODE_ENV !== "production") await seedDefaults();
+  await provisionConfiguredSuperadmin();
+  if (process.env.SEED_DEMO === "true" && process.env.NODE_ENV !== "production")
+    await seedDefaults();
   const server = http.createServer(app);
   initializeRealtime(server);
 

@@ -10,6 +10,7 @@ const BootstrapState = require("../src/models/BootstrapState");
 const { hashPassword } = require("../src/utils/passwords");
 const {
   bootstrapSuperadmin,
+  provisionConfiguredSuperadmin,
   setupConfig,
 } = require("../src/services/bootstrapSuperadmin");
 let db, server, base, config;
@@ -62,6 +63,9 @@ test("private bootstrap, restricted initial session, password rotation and repla
     null,
   );
   assert.equal(await User.countDocuments({ role: "superadmin" }), 0);
+  const provisioned = await provisionConfiguredSuperadmin();
+  assert.equal(provisioned.username, config.username);
+  assert.equal(await provisionConfiguredSuperadmin(), undefined);
   const login = (password) =>
     request("/api/auth/admin-password-login", {
       username: config.username,
