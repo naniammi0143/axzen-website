@@ -6,6 +6,12 @@ The Password tab accepts a provisioned username or staff mobile number. Mobile
 OTP remains available for existing staff with registered phones. No universal
 password or credentials are shipped in source code, the website or the APK.
 
+For OTP-only ownership, configure the private Production secret
+`AXZEN_SUPERADMIN_PHONE` in E.164 format (`+91XXXXXXXXXX`). On the next API
+start, an existing staff account for that phone is promoted to superadmin, or a
+dedicated superadmin account is created. Login still requires a valid Firebase
+phone OTP. Remove the secret and redeploy after the one-time marker is created.
+
 ## Provision the first superadmin
 
 1. Run `node scripts/generate-superadmin-setup.cjs /absolute/private/path/owner-setup.json`
@@ -37,8 +43,9 @@ The superadmin has full permissions. Other staff retain their assigned access.
 ## Safety and recovery
 
 - Bootstrap is disabled without valid, unexpired private server configuration.
-- Bootstrap refuses to run if any superadmin exists or its permanent consumed
-  marker exists. Replaying configuration or redeploying cannot reset an owner.
+- Password bootstrap refuses to overwrite configured owners. Both password and
+  phone provisioning use permanent consumed markers, so replaying configuration
+  or redeploying cannot reset an owner.
 - Five failed password attempts lock the account for 15 minutes; the login
   endpoints also enforce a request rate limit. Blocked accounts cannot sign in.
 - Passwords are hashed with scrypt; hashes and password attempts are not exposed

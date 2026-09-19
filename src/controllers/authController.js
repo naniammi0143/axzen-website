@@ -91,7 +91,13 @@ const phoneLogin = asyncHandler(async (req, res) => {
 
   let user;
   if (adminRoles.includes(role)) {
-    user = await User.findOne({ phone, role: role === "admin" ? { $in: adminRoles } : role });
+    if (role === "admin") {
+      user =
+        (await User.findOne({ phone, role: "superadmin" })) ||
+        (await User.findOne({ phone, role: { $in: adminRoles } }));
+    } else {
+      user = await User.findOne({ phone, role });
+    }
     if (!user || user.status !== "active") {
       return res.status(403).json({ ok: false, message: "An active staff account is required. Contact your administrator." });
     }

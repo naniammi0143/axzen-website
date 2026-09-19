@@ -1,6 +1,7 @@
 const { test, before, after } = require("node:test");
 const assert = require("node:assert/strict");
 process.env.NODE_ENV = "test";
+process.env.ALLOW_TEST_AUTH = "true";
 process.env.JWT_SECRET = "test-only-admin-access-not-production";
 const mongoose = require("mongoose");
 const { MongoMemoryReplSet } = require("mongodb-memory-server");
@@ -11,6 +12,7 @@ const { hashPassword } = require("../src/utils/passwords");
 const {
   bootstrapSuperadmin,
   provisionConfiguredSuperadmin,
+  provisionConfiguredSuperadminPhone,
   setupConfig,
 } = require("../src/services/bootstrapSuperadmin");
 let db, server, base, config;
@@ -194,4 +196,25 @@ test("private bootstrap, restricted initial session, password rotation and repla
     bootstrapSuperadmin(config.username, temporary),
     /already complete/,
   );
+
+  process.env.AXZEN_SUPERADMIN_PHONE = "+919999999999";
+  const phoneAdmin = await User.create({
+    name: "Phone Admin",
+    phone: process.env.AXZEN_SUPERADMIN_PHONE,
+    role: "admin",
+    status: "active",
+    mustChangePassword: true,
+  });
+  const phoneOwner = await provisionConfiguredSuperadminPhone();
+  assert.equal(String(phoneOwner._id), String(phoneAdmin._id));
+  assert.equal(phoneOwner.role, "superadmin");
+  assert.equal(phoneOwner.mustChangePassword, false);
+  assert.equal(await provisionConfiguredSuperadminPhone(), undefined);
+  const phoneLogin = await request("/api/auth/phone-login", {
+    role: "admin",
+    firebaseToken: "local-test-owner-phone",
+  });
+  assert.equal(phoneLogin.status, 200);
+  assert.equal(phoneLogin.body.user.role, "superadmin");
+  assert.equal(phoneLogin.body.user.admin.permissions.includes("*"), true);
 });
