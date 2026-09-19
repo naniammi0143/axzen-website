@@ -1,5 +1,5 @@
 const express = require("express");
-const rateLimit = require("express-rate-limit");
+const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 const { body } = require("express-validator");
 const { phoneLogin } = require("../controllers/authController");
 const validate = require("../middleware/validate");
@@ -11,6 +11,7 @@ const authLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
 });
 
 router.post(

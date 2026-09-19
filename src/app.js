@@ -40,6 +40,7 @@ const { authenticate, authorize } = require("./middleware/auth");
 const { multipartForm } = require("./middleware/multipartUpload");
 
 const app = express();
+app.set("trust proxy", 1);
 const rootDir = path.join(__dirname, "..");
 
 app.use(
