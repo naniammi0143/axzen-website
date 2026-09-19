@@ -14,10 +14,14 @@ async function authenticate(req, res, next) {
 
   try {
     const claims = jwt.verify(token, env.jwtSecret, { algorithms: ["HS256"] });
-    const user = await User.findById(claims.id).select("name phone role status sessionVersion").lean();
+    const user = await User.findById(claims.id).select("name phone role status sessionVersion mustChangePassword").lean();
     if (!user || (user.sessionVersion || 0) !== (claims.sessionVersion || 0) || user.status === "blocked" || user.role !== claims.role ||
         (!["customer", "seller"].includes(user.role) && user.status !== "active")) {
       return res.status(401).json({ ok: false, message: "Your session is no longer active. Please sign in again." });
+    }
+    if (user.mustChangePassword || claims.purpose === 'password-change') {
+      const passwordRoute = ['/api/auth','/api/users'].includes(req.baseUrl) && req.path === '/admin-password' && req.method === 'PUT';
+      if (!passwordRoute || claims.purpose !== 'password-change') return res.status(403).json({ok:false,message:'Change your temporary password before opening company controls.',requiresPasswordChange:true});
     }
     req.user = { ...claims, name: user.name, phone: user.phone };
     next();

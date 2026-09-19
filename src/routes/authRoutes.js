@@ -28,4 +28,7 @@ const access = require('../controllers/sellerAccessController');
 const { authenticate, authorize } = require('../middleware/auth');
 router.post('/seller-password-login', authLimiter, access.passwordLogin);
 router.put('/seller-password', authLimiter, authenticate, authorize('seller'), access.setSellerPassword);
+const adminAccess = require('../controllers/adminAccessController');
+router.post('/admin-password-login', authLimiter, adminAccess.passwordLogin);
+router.put('/admin-password', authLimiter, authenticate, authorize('admin','superadmin'), adminAccess.changePassword);
 module.exports = router;
