@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Seller Axzen - Seller Portal</title>
-  <link rel="icon" type="image/png" href="/assets/favicon.png">
+  <link rel="icon" type="image/svg+xml" href="/assets/brand/app-icon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -14,8 +14,7 @@
 <body class="portal-page seller-page">
   <header class="site-header seller-site-header">
     <a class="brand" href="/seller" aria-label="Seller Axzen home">
-      <img class="brand-logo" src="assets/logo.png" alt="" onerror="this.hidden=true">
-      <span class="brand-mark">S</span>
+      <img class="brand-logo" src="assets/brand/wordmark.svg" alt="" onerror="this.hidden=true">
       <span id="sellerBrandText">Seller</span>
     </a>
     <nav class="main-nav seller-main-nav">
@@ -45,15 +44,16 @@
       <article class="login-card compact-login seller-login-card">
         <div class="seller-card-topline">
           <span>Secure access</span>
-          <b>Phone OTP</b>
+          <b>OTP or password</b>
         </div>
         <div class="login-card-heading">
           <span class="login-icon">S</span>
           <div>
             <p class="eyebrow">Seller login</p>
-            <h2>Verify your phone</h2>
+            <h2>Welcome to your store</h2>
           </div>
         </div>
+        <div class="seller-login-methods" aria-label="Seller login method"><button type="button" data-seller-login-method="otp" aria-pressed="true">Mobile OTP</button><button type="button" data-seller-login-method="password" aria-pressed="false">Password</button></div>
         <form class="role-login-form firebase-phone-form" data-role="seller">
           <div class="phone-login-field">
             <span>Phone number</span>
@@ -68,6 +68,13 @@
           <button type="button" data-verify-otp hidden>Verify and continue</button>
           <p class="login-message" aria-live="polite"></p>
         </form>
+        <form class="role-login-form" data-seller-password-login hidden>
+          <label>Owner mobile number<input type="tel" name="phone" autocomplete="username" placeholder="+91 98765 43210" required maxlength="20"></label>
+          <label>Password<input type="password" name="password" autocomplete="current-password" required maxlength="128"></label>
+          <button type="submit">Sign in with password</button>
+          <p data-access-message role="alert"></p>
+          <button type="button" class="secondary-button" data-seller-login-method="otp">Forgot password? Use mobile OTP</button>
+        </form>
         <div class="seller-login-footnote">
           <span>New seller?</span>
           <a href="/seller/register">Submit registration and KYC</a>
@@ -81,7 +88,7 @@
     <section class="section dashboard-section seller-dashboard-app" id="dashboard" hidden>
       <div class="dashboard-shell">
         <aside class="dashboard-sidebar">
-          <img class="seller-sidebar-logo" src="assets/seller-sidebar-logo.png" alt="Axzen Seller" onerror="this.hidden=true">
+          <img class="seller-sidebar-logo" src="assets/brand/wordmark-light.svg" alt="Axzen Seller" onerror="this.hidden=true">
           <p class="eyebrow" id="dashboardRole" hidden>Seller</p>
           <h2 id="dashboardTitle" hidden>Welcome</h2>
           <p id="dashboardSummary" hidden></p>
@@ -106,7 +113,7 @@
         <div class="dashboard-main">
           <header class="seller-dashboard-topbar">
             <div class="seller-topbar-brand">
-              <img src="assets/logo.png" alt="Axzen" onerror="this.hidden=true">
+              <img src="assets/brand/wordmark.svg" alt="Axzen" onerror="this.hidden=true">
               <div>
                 <p class="eyebrow">Seller workspace</p>
                 <h1>Orders</h1>

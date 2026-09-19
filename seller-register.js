@@ -99,7 +99,7 @@ function validateForm(formData) {
   if (!formData.get("firebaseToken")) return "Please verify mobile OTP first.";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Email must be valid.";
   if (password !== confirmPassword) return "Password and confirm password must match.";
-  if (password.length < 8) return "Password must be at least 8 characters.";
+  if (password.trim().length < 10 || password.length > 128) return "Password must have 10–128 characters.";
   if (!/^\d{6}$/.test(pincode)) return "Pincode must be 6 digits.";
   if (!/^[A-Z]{4}0[A-Z0-9]{6}$/i.test(ifsc)) return "IFSC format is invalid.";
   if (formData.get("marketplaceTerms") !== "on") return "Accept marketplace seller terms.";

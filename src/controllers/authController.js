@@ -9,9 +9,11 @@ const { success } = require("../utils/apiResponse");
 
 const adminRoles = ["admin", "superadmin", "support", "finance", "delivery_manager"];
 
-function signToken(user) {
+function signToken(user, auth = {}) {
   return jwt.sign(
     {
+      ...auth,
+      sessionVersion: user.sessionVersion || 0,
       id: user._id.toString(),
       role: user.role,
       phone: user.phone,
@@ -118,8 +120,12 @@ const phoneLogin = asyncHandler(async (req, res) => {
 
   const roleProfile = await ensureRoleProfile(user);
 
-  success(res, {
-    token: signToken(user),
+  success(res, sessionResponse(user, roleProfile, { authMethod: 'otp', authTime: decoded.auth_time }));
+});
+
+function sessionResponse(user, roleProfile, auth = {}) {
+  return {
+    token: signToken(user, auth),
     user: {
       id: user._id,
       name: user.name,
@@ -145,9 +151,10 @@ const phoneLogin = asyncHandler(async (req, res) => {
             }
           : undefined,
     },
-  });
-});
+  };
+}
 
 module.exports = {
+  signToken, sessionResponse,
   phoneLogin,
 };

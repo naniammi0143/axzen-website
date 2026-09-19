@@ -67,7 +67,7 @@ function buildDeliveryLabelHtml(order) {
   <main class="label">
     <section class="top">
       <div>
-        <img src="/assets/logo.png" alt="Axzen logo">
+        <img src="/assets/brand/wordmark.svg" alt="Axzen logo">
         <h1>Delivery Label</h1>
       </div>
       <span class="badge">${codAmount ? `COD ${money(codAmount)}` : "Prepaid"}</span>

@@ -12898,3 +12898,9 @@ html {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* Shared outlined Axzen wordmark replaces the previous emblem. */
+.brand img.brand-logo, .seller-site-header .brand img.brand-logo { display:block; width:132px; height:auto; max-height:none; object-fit:contain; }
+.admin-sidebar-logo, .seller-sidebar-logo { width:150px; height:auto; object-fit:contain; }
+.seller-topbar-brand img { width:110px; height:auto; object-fit:contain; }
+@media(max-width:700px) { .brand img.brand-logo, .seller-site-header .brand img.brand-logo { width:112px; } }

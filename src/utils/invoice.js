@@ -134,7 +134,7 @@ function buildInvoiceHtml(order, options = {}) {
   <main class="page">
     <section class="topbar">
       <div class="brand">
-        <img src="/assets/logo.png" alt="Axzen logo">
+        <img src="/assets/brand/wordmark.svg" alt="Axzen logo">
         <div>
           <h1>Tax Invoice</h1>
           <p>Axzen e-commerce marketplace invoice</p>

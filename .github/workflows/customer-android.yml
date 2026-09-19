@@ -5,6 +5,7 @@ on:
     branches: [main, feature/customer-android-app]
     paths:
       - 'customer/**'
+      - 'assets/brand/**'
       - 'native/**'
       - 'scripts/*mobile*'
       - 'scripts/build-customer-app.cjs'
@@ -52,12 +53,12 @@ jobs:
       - name: Verify APK
         run: |
           mkdir -p apk-output
-          cp android/app/build/outputs/apk/debug/app-debug.apk apk-output/axzen-customer-0.2-beta.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk apk-output/axzen-customer-0.3-beta.apk
           cp android/axzen-build-info.json apk-output/build-info.json
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs apk-output/axzen-customer-0.2-beta.apk > apk-output/signature.txt
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging apk-output/axzen-customer-0.2-beta.apk > apk-output/package.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs apk-output/axzen-customer-0.3-beta.apk > apk-output/signature.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging apk-output/axzen-customer-0.3-beta.apk > apk-output/package.txt
           cd apk-output
-          sha256sum axzen-customer-0.2-beta.apk > SHA256SUMS.txt
+          sha256sum axzen-customer-0.3-beta.apk > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: axzen-customer-apk

@@ -40,7 +40,7 @@ async function build() {
   fs.writeFileSync(stylesPath, fs.readFileSync(stylesPath, 'utf8').replace('<item name="android:background">@drawable/splash</item>', '<item name="windowSplashScreenBackground">#102A43</item><item name="windowSplashScreenAnimatedIcon">@drawable/ic_axzen</item>'));
   const gradlePath = 'android/app/build.gradle';
   fs.writeFileSync(gradlePath, fs.readFileSync(gradlePath, 'utf8')
-    .replace(/versionCode \d+/, 'versionCode 2').replace(/versionName "[^"]+"/, 'versionName "0.2-beta"'));
+    .replace(/versionCode \d+/, 'versionCode 3').replace(/versionName "[^"]+"/, 'versionName "0.3-beta"'));
   fs.writeFileSync('android/axzen-build-info.json', JSON.stringify({ appId: config.appId, nativePhoneLogin: !!firebasePath, api: 'https://www.axzen.in' }, null, 2));
   console.log('Android customer project ready. Native phone login configured:', !!firebasePath);
 }

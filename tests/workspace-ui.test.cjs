@@ -133,3 +133,35 @@ test("seller shipment panel uses real items and keeps booking errors visible", (
     w.close();
   }
 });
+
+test('admin store creation submits chosen access and clears password when switching to OTP',async()=>{
+ const a=await admin({role:'admin',admin:{permissions:['sellers']}});
+ try {
+  const d=a.w.document;
+  d.querySelector('[data-action="seller-create"]').click();
+  const f=d.querySelector('[data-store-create]');
+  f.elements.businessName.value='New Store'; f.elements.fullName.value='Owner';f.elements.phone.value='9876543210';
+  f.elements.access.value='password'; f.elements.access.dispatchEvent(new a.w.Event('change',{bubbles:true}));
+  assert.equal(f.elements.password.disabled,false); assert.equal(f.elements.password.required,true);
+  f.elements.password.value='Fixture-2026';
+  f.elements.access.value='otp'; f.elements.access.dispatchEvent(new a.w.Event('change',{bubbles:true}));
+  assert.equal(f.elements.password.value,''); assert.equal(f.elements.password.disabled,true);
+  f.dispatchEvent(new a.w.Event('submit',{bubbles:true,cancelable:true})); await tick();
+  const call=a.calls.find(c=>c.url==='/api/admin/sellers'&&c.method==='POST');
+  assert.ok(call); const body=JSON.parse(call.body);assert.equal(body.access,'otp');assert.equal(body.password,undefined);
+ }finally{a.close();}
+});
+test('seller password login keeps credentials out of storage and opens the same session handler',async()=>{
+ const dom=new JSDOM(fs.readFileSync('seller.html','utf8'),{url:'https://seller.axzen.in',runScripts:'outside-only'}),w=dom.window;
+ try {
+  let accepted,body;
+  w.fetch=async(url,options)=>{body=JSON.parse(options.body);assert.equal(url,'/api/auth/seller-password-login');return {ok:true,json:async()=>({token:'fixture-session',user:{role:'seller'}})}};
+  w.eval(fs.readFileSync('seller-access.js','utf8').replace(/export /g,''));
+  w.initSellerAccess(async result=>{accepted=result});
+  const d=w.document;d.querySelector('[data-seller-login-method="password"]').click();
+  const f=d.querySelector('[data-seller-password-login]');assert.equal(f.hidden,false);assert.equal(d.querySelector('.firebase-phone-form').hidden,true);
+  f.elements.phone.value='9876543210';f.elements.password.value='Fixture-password';
+  f.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await tick();
+  assert.equal(body.password,'Fixture-password');assert.equal(accepted.user.role,'seller');assert.equal(w.localStorage.length,0);assert.equal(f.elements.password.value,'');
+ }finally{w.close();}
+});

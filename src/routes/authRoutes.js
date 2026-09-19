@@ -24,4 +24,8 @@ router.post(
   phoneLogin
 );
 
+const access = require('../controllers/sellerAccessController');
+const { authenticate, authorize } = require('../middleware/auth');
+router.post('/seller-password-login', authLimiter, access.passwordLogin);
+router.put('/seller-password', authLimiter, authenticate, authorize('seller'), access.setSellerPassword);
 module.exports = router;

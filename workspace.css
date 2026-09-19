@@ -350,3 +350,11 @@
     white-space: normal;
   }
 }
+
+/* Seller access and store onboarding. */
+.seller-login-methods { display:flex; gap:8px; margin:18px 0; }
+.seller-login-methods button { flex:1; background:#f1f5f9; color:#102a43; border:1px solid #d9e2ec; }
+.seller-login-methods button[aria-pressed="true"] { background:#102a43; color:white; }
+[data-store-create] { padding:24px; }
+[data-store-create-message], [data-access-message] { overflow-wrap:anywhere; }
+[hidden] { display:none !important; }
