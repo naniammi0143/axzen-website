@@ -15,6 +15,7 @@
 
   const titles = {
     dashboard: "Dashboard",
+    company: "Company Control",
     sellers: "Seller Management",
     products: "Product Approval",
     orders: "Order Management",
@@ -45,6 +46,7 @@
 
   const viewPermissions = {
     dashboard: "dashboard",
+    company: "company",
     sellers: "sellers",
     products: "products",
     orders: "orders",
@@ -60,7 +62,7 @@
   };
 
   const roleViewAccess = {
-    superadmin: ["dashboard", "sellers", "products", "orders", "payments", "customers", "customerapp", "reviews", "delivery", "helpdesk", "employees", "reports", "audit"],
+    superadmin: ["dashboard", "company", "sellers", "products", "orders", "payments", "customers", "customerapp", "reviews", "delivery", "helpdesk", "employees", "reports", "audit"],
     admin: ["dashboard", "sellers", "products", "orders", "customers", "customerapp", "reviews", "delivery", "helpdesk", "employees", "reports"],
     support: ["dashboard", "orders", "customers", "helpdesk"],
     finance: ["dashboard", "payments", "reports"],
@@ -722,16 +724,16 @@
     const drawer = ensureReportDrawer('seller-create', 'Add a store');
     qs('.report-drawer-body', drawer).innerHTML = `<form class="workspace-form" data-store-create>
       <p class="wide">Create the seller's account. Review KYC and approve the store from Sellers when it is ready.</p>
-      <label>Store name<input name="businessName" required maxlength="150"></label>
-      <label>Owner name<input name="fullName" required maxlength="100"></label>
-      <label>Owner mobile number<input name="phone" type="tel" placeholder="+91 98765 43210" required maxlength="20"><small>This number is used for seller login.</small></label>
+      <label>Store name<input name="businessName" maxlength="150" placeholder="Auto-generates when empty"></label>
+      <label>Owner name<input name="fullName" maxlength="100" placeholder="Store owner"></label>
+      <label>Owner mobile number<input name="phone" type="tel" placeholder="+91 98765 43210" maxlength="20"><small>Optional for stores created without login access.</small></label>
       <label>Email (optional)<input name="email" type="email" maxlength="254"></label>
       <label>Category<input name="category" value="General" maxlength="80"></label>
       <label>City<input name="city" maxlength="100"></label>
       <label>State<input name="state" maxlength="100"></label>
       <label>Pincode<input name="pincode" inputmode="numeric" pattern="[1-9][0-9]{5}" maxlength="6"></label>
       <label class="wide">Pickup address<textarea name="pickupAddress" maxlength="500"></textarea></label>
-      <label>Login access<select name="access" data-store-access><option value="otp">Mobile OTP only</option><option value="password">Mobile OTP + password</option></select></label>
+      <label>Login access<select name="access" data-store-access>${state.user?.role === 'superadmin' ? '<option value="none">No login access</option>' : ''}<option value="otp">Mobile OTP only</option><option value="password">Mobile OTP + password</option></select></label>
       <label data-store-password-field hidden>Initial password<input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" disabled><small>Use at least 10 characters. Share it privately with the owner.</small></label>
       <button type="submit">Create store</button><p data-store-create-message role="status"></p></form>`;
     openReportDrawer(drawer);
@@ -746,6 +748,14 @@
       <form class="customer-app-form seller-store-control-form" data-seller-store-controls="${escapeHtml(seller._id)}">
         <p class="eyebrow">Customer seller page</p>
         <h3>${escapeHtml(seller.businessName || "Seller")}</h3>
+        ${state.user?.role === 'superadmin' ? `<label>Store name<input name="businessName" value="${escapeHtml(seller.businessName || "")}" placeholder="Untitled store"></label>
+        <label>Owner name<input name="fullName" value="${escapeHtml(seller.fullName || "")}"></label>
+        <label>Login mobile<input name="phone" value="${escapeHtml(seller.phone || "")}" placeholder="Optional · +91..."></label>
+        <label>Owner email<input name="email" value="${escapeHtml(seller.email || "")}" placeholder="Optional"></label>
+        <label>Category<input name="category" value="${escapeHtml(seller.category || "")}" placeholder="General"></label>
+        <label>City<input name="city" value="${escapeHtml(seller.city || "")}"></label>
+        <label>State<input name="state" value="${escapeHtml(seller.state || "")}"></label>
+        <label>Pincode<input name="pincode" value="${escapeHtml(seller.pincode || "")}" inputmode="numeric" maxlength="6"></label>` : ''}
         <label>Profile photo URL<input name="profileImageUrl" value="${escapeHtml(details.profileImageUrl || "")}" placeholder="https://.../profile.png"></label>
         <label>Offer banner URL<input name="offerBannerUrl" value="${escapeHtml(details.offerBannerUrl || "")}" placeholder="https://.../banner.png"></label>
         <label>Store tagline<input name="tagline" value="${escapeHtml(details.tagline || "")}" placeholder="Your trusted destination for premium products"></label>
@@ -766,6 +776,7 @@
   }
 
   function renderProducts(data) {
+    state.cache.products = data.items || [];
     const productThumb = (row) => {
       const images = row.images || [];
       if (!images.length) return `<span class="product-image-empty">No image</span>`;
@@ -792,6 +803,7 @@
           ],
           data.items,
           (row) => `
+            ${state.user?.role === 'superadmin' ? `<button data-action="product-edit" data-index="${state.cache.products.indexOf(row)}">Edit details</button>` : ''}
             <button data-action="product-approve" data-id="${row._id}">Approve</button>
             <button data-action="product-clean-bg" data-id="${row._id}">Clean BG</button>
             <button data-action="product-reject" data-id="${row._id}">Reject</button>
@@ -799,6 +811,27 @@
           `
         )
     );
+  }
+
+  function openProductEditor(index) {
+    const product = state.cache.products?.[Number(index)] || {};
+    const drawer = ensureReportDrawer("product-edit", "Product catalogue controls");
+    qs(".report-drawer-body", drawer).innerHTML = `<form class="workspace-form" data-product-edit="${escapeHtml(product._id)}">
+      <p class="wide">Every field is optional. Empty prices and stock are saved as zero; empty images remove the product gallery.</p>
+      <label>Product name<input name="title" maxlength="180" value="${escapeHtml(product.title || '')}" placeholder="Untitled product"></label>
+      <label>SKU<input name="sku" maxlength="80" value="${escapeHtml(product.sku || '')}" placeholder="Keep current when empty"></label>
+      <label>Category<input name="category" maxlength="80" value="${escapeHtml(product.category || '')}"></label>
+      <label>Subcategory<input name="subcategory" maxlength="80" value="${escapeHtml(product.subcategory || '')}"></label>
+      <label>Selling price (Rs.)<input name="priceRupees" type="number" min="0" step="0.01" value="${escapeHtml(((Number(product.pricePaise) || 0) / 100).toFixed(2))}"></label>
+      <label>MRP (Rs.)<input name="mrpRupees" type="number" min="0" step="0.01" value="${escapeHtml(((Number(product.mrpPaise) || 0) / 100).toFixed(2))}"></label>
+      <label>Stock<input name="stock" type="number" min="0" step="1" value="${escapeHtml(product.stock ?? 0)}"></label>
+      <label>Unit label<input name="unitLabel" maxlength="80" value="${escapeHtml(product.unitLabel || '')}" placeholder="1 pc"></label>
+      <label>Status<select name="status">${['pending_approval','approved','active','inactive','blocked','rejected'].map(status => `<option value="${status}" ${product.status === status ? 'selected' : ''}>${status.replaceAll('_',' ')}</option>`).join('')}</select></label>
+      <label class="wide">Image URLs<textarea name="images" rows="5" placeholder="One HTTPS image URL per line">${escapeHtml((product.images || []).join('\n'))}</textarea></label>
+      <label class="wide">Description<textarea name="description" rows="6" maxlength="4000">${escapeHtml(product.description || '')}</textarea></label>
+      <button type="submit">Save product details</button><p data-product-edit-message role="status"></p>
+    </form>`;
+    openReportDrawer(drawer);
   }
 
   function renderOrders(data) {
@@ -907,12 +940,12 @@
           <strong>${offer.id ? "Edit offer" : "Create offer"}</strong>
           <button type="button" data-close-offer-form>Close</button>
         </div>
-        <label>Offer title<input name="title" value="${escapeHtml(offer.title || "Festival Offer")}" required></label>
-        <label>Image 1 URL<input name="imageUrl1" type="url" value="${escapeHtml(images[0] || "")}" placeholder="https://.../offer-1.png" required></label>
-        <label>Image 2 URL<input name="imageUrl2" type="url" value="${escapeHtml(images[1] || "")}" placeholder="https://.../offer-2.png" required></label>
-        <label>Image 3 URL<input name="imageUrl3" type="url" value="${escapeHtml(images[2] || "")}" placeholder="https://.../offer-3.png" required></label>
+        <label>Offer title<input name="title" value="${escapeHtml(offer.title || "Festival Offer")}" placeholder="Festival Offer"></label>
+        <label>Image 1 URL<input name="imageUrl1" type="url" value="${escapeHtml(images[0] || "")}" placeholder="https://.../offer-1.png"></label>
+        <label>Image 2 URL<input name="imageUrl2" type="url" value="${escapeHtml(images[1] || "")}" placeholder="https://.../offer-2.png"></label>
+        <label>Image 3 URL<input name="imageUrl3" type="url" value="${escapeHtml(images[2] || "")}" placeholder="https://.../offer-3.png"></label>
         <label>Image 4 URL<input name="imageUrl4" type="url" value="${escapeHtml(images[3] || "")}" placeholder="https://.../offer-4.png"></label>
-        <p>Add 3 to 4 images. Sellers later add their products and discount to this offer.</p>
+        <p>Images are optional. Add up to 4; a polished Axzen offer card is shown when empty.</p>
         <button type="submit">${offer.id ? "Save offer" : "Create offer"}</button>
       </form>
     `;
@@ -920,8 +953,8 @@
 
   function customerControls(data) {
     const c=data.config||{};
-    const fields=[['heroTitle','Homepage headline',140],['heroSubtitle','Homepage introduction',300],['heroCta','Shop button text',50],['spotlightTitle','Featured stores heading',100],['supportEmail','Support email',160]];
-    return `<article class="admin-panel"><header class="workspace-heading"><div><p class="eyebrow">Storefront control centre</p><h2>Customer website & mobile storefront</h2><p>Saved changes appear on the next page refresh. Brand colours stay navy and orange.</p></div><a href="https://www.axzen.in" target="_blank" rel="noopener">Open customer site ↗</a></header><form class="workspace-form" data-customer-controls>${fields.map(([name,label,max])=>`<label>${label}<input name="${name}" maxlength="${max}" value="${escapeHtml(c[name]||'')}" required></label>`).join('')}<label>Category order<input name="categoryOrder" value="${escapeHtml((c.categoryOrder||[]).join(', '))}" placeholder="Grocery, Fashion, Home"><small>Comma-separated names; other categories follow automatically.</small></label><fieldset class="wide"><legend>Visible sections</legend>${[['showStores','Featured stores on home'],['showOffers','Festival offers on home'],['showBestSellers','Best sellers in store profiles'],['showReviews','Customer reviews in store profiles']].map(([name,label])=>`<label class="workspace-check"><input type="checkbox" name="${name}" ${c[name]!==false?'checked':''}>${label}</label>`).join('')}</fieldset><fieldset class="wide"><legend>Featured stores · select up to 12</legend><div class="featured-store-options">${(data.sellers||[]).filter(s=>s.isActive&&s.status==='active').map(s=>`<label class="workspace-check"><input type="checkbox" name="recommendedSellerIds" value="${escapeHtml(s._id)}" ${(c.recommendedSellerIds||[]).map(String).includes(String(s._id))?'checked':''}>${escapeHtml(s.businessName)}</label>`).join('')||'<p>No active stores yet.</p>'}</div></fieldset><button type="submit">Save customer storefront</button><p data-controls-message role="status"></p></form></article>`;
+    const fields=[['heroTitle','Homepage headline',140],['heroSubtitle','Homepage introduction',300],['heroCta','Shop button text',50],['saleTitle','Offers heading',140],['saleSubtitle','Offers introduction',300],['saleCta','Offers button text',50],['spotlightTitle','Featured stores heading',100],['supportEmail','Support email',160],['supportPhone','Support phone',20]];
+    return `<article class="admin-panel"><header class="workspace-heading"><div><p class="eyebrow">Storefront control centre</p><h2>Customer website & mobile storefront</h2><p>Every field is optional. Saved changes appear on the next page refresh.</p></div><a href="https://www.axzen.in" target="_blank" rel="noopener">Open customer site ↗</a></header><form class="workspace-form" data-customer-controls>${fields.map(([name,label,max])=>`<label>${label}<input name="${name}" maxlength="${max}" value="${escapeHtml(c[name]||'')}"></label>`).join('')}<label>Category order<input name="categoryOrder" value="${escapeHtml((c.categoryOrder||[]).join(', '))}" placeholder="Grocery, Fashion, Home"><small>Comma-separated names; other categories follow automatically.</small></label><fieldset class="wide"><legend>Visible sections</legend>${[['showStores','Featured stores on home'],['showOffers','Festival offers on home'],['showBestSellers','Best sellers in store profiles'],['showReviews','Customer reviews in store profiles']].map(([name,label])=>`<label class="workspace-check"><input type="checkbox" name="${name}" ${c[name]!==false?'checked':''}>${label}</label>`).join('')}</fieldset><fieldset class="wide"><legend>Featured stores · select up to 12</legend><div class="featured-store-options">${(data.sellers||[]).filter(s=>s.isActive&&s.status==='active').map(s=>`<label class="workspace-check"><input type="checkbox" name="recommendedSellerIds" value="${escapeHtml(s._id)}" ${(c.recommendedSellerIds||[]).map(String).includes(String(s._id))?'checked':''}>${escapeHtml(s.businessName)}</label>`).join('')||'<p>No active stores yet.</p>'}</div></fieldset><button type="submit">Save customer storefront</button><p data-controls-message role="status"></p></form></article>`;
   }
   function renderReviews(data) {
     qs('[data-view-panel="reviews"]').innerHTML=panel('Verified purchase reviews',`<p>Moderate abusive or inappropriate content with a recorded reason. Ratings are calculated from published customer reviews.</p>${filterBar('reviews',[{key:'status',label:'Visibility',options:['published','hidden']}])}${table([{label:'Store / product',render:r=>`${escapeHtml(r.sellerId?.businessName||'Store')}<small>${escapeHtml(r.productTitle)}</small>`},{label:'Review',render:r=>`<strong>${escapeHtml(r.authorName)} · ${r.rating} ★</strong><p>${escapeHtml(r.body)}</p>${r.sellerReply?`<small>Store reply: ${escapeHtml(r.sellerReply)}</small>`:''}`},{label:'Status',render:r=>`${statusBadge(r.status)}<small>${escapeHtml(r.moderationReason)}</small>`}],data.items,r=>`<button data-review-moderate="${r._id}" data-status="${r.status==='hidden'?'published':'hidden'}">${r.status==='hidden'?'Restore':'Hide'}</button>`)}<div class="workspace-actions">${data.page>1?`<button data-review-page="${data.page-1}">Previous</button>`:''}<span>Page ${data.page} · ${data.total} reviews</span>${data.page*30<data.total?`<button data-review-page="${data.page+1}">Next</button>`:''}</div>`);
@@ -1377,6 +1410,44 @@
     );
   }
 
+  function renderCompanyControl({ overview = {}, compliance = {} } = {}) {
+    const stats = overview.stats || {};
+    const areas = [
+      ["sellers", "Seller governance", "Onboarding, KYC, activation, store identity and commission controls", stats.pendingSellers || 0, "pending"],
+      ["products", "Catalogue & inventory", "Product approval, pricing, images, stock and low-stock review", stats.lowStockCount || 0, "low stock"],
+      ["orders", "Order operations", "Accept, pack, cancel, invoice and end-to-end order lifecycle", stats.pendingOrders || 0, "open"],
+      ["delivery", "Fulfilment & logistics", "Shipping labels, AWB, courier assignment and delivery tracking", "Live", "operations"],
+      ["payments", "Finance & settlements", "Customer payments, commission, gateway costs and seller payouts", stats.monthlyRevenue?.formatted || "Rs. 0", "month revenue"],
+      ["customers", "Customer operations", "Accounts, support, order history and account safety", stats.totalCustomers || 0, "customers"],
+      ["customerapp", "Growth & storefront", "Homepage offers, featured stores, app content and reviews", "Web + App", "channels"],
+      ["employees", "Workforce & access", "Role-based staff access, status and responsibility assignment", "RBAC", "protected"],
+      ["reports", "Analytics & compliance", "Sales, tax, products, returns, shipments and CSV registers", compliance.rows?.length || 0, "registers"],
+      ["audit", "Security & audit", "Permanent record of sensitive company actions and exports", "Live", "audit trail"],
+    ];
+    qs('[data-view-panel="company"]').innerHTML = `
+      <section class="company-command-centre">
+        <header class="company-command-hero">
+          <div><p class="eyebrow">Axzen corporate command centre</p><h2>Manage Axzen in one place.</h2><p>Manage stores, catalogue, orders, settlements, staff access and storefront content. Review reports and audit records from this dashboard.</p></div>
+          <button type="button" data-company-open="reports" data-report="compliance">Open compliance register</button>
+        </header>
+        <div class="company-health-grid">
+          ${card("Total revenue", stats.totalRevenue?.formatted || "Rs. 0", "Paid marketplace orders")}
+          ${card("Today’s orders", stats.todayOrders || 0, `${stats.pendingOrders || 0} need action`)}
+          ${card("Active sellers", stats.activeSellers || 0, `${stats.pendingSellers || 0} pending review`)}
+          ${card("Delivered", stats.deliveredOrders || 0, "Completed orders")}
+        </div>
+        <div class="company-control-grid">
+          ${areas.map(([view,title,description,value,label])=>`<button type="button" class="company-control-card" data-company-open="${view}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(title)}</strong><p>${escapeHtml(description)}</p><b>${escapeHtml(value)} →</b></button>`).join('')}
+        </div>
+        <article class="admin-panel company-compliance-panel"><div class="panel-heading"><h2>Corporate records readiness</h2><span>${escapeHtml(compliance.cards?.[0]?.value || compliance.rows?.length || 0)} areas</span></div>${table([
+          {label:"Register",render:row=>`<strong>${escapeHtml(row.area)}</strong><small>${escapeHtml(row.source)}</small>`},
+          {label:"What Axzen maintains",render:row=>escapeHtml(row.maintain)},
+          {label:"Owner",render:row=>escapeHtml(row.owner)},
+          {label:"Status",render:row=>statusBadge(row.status)},
+        ],(compliance.rows||[]).slice(0,10))}</article>
+      </section>`;
+  }
+
   async function loadView(view = state.view) {
     state.view = view;
     qs("#adminPageTitle").textContent = titles[view] || "Admin";
@@ -1385,6 +1456,11 @@
 
     try {
       if (view === "dashboard") return await loadDashboard();
+      if (view === "company") {
+        if (state.user?.role !== "superadmin") throw new Error("Company Control requires superadmin access.");
+        const [overview, compliance] = await Promise.all([api("/api/admin/overview"), api("/api/admin/reports/compliance")]);
+        return renderCompanyControl({ overview, compliance });
+      }
       if (view === "payments") {
         return renderPayments(await api(`/api/admin/finance/report?${state.financeQuery || ""}`));
       }
@@ -1424,7 +1500,9 @@
       if (event.target.matches('[data-store-access]')) {
         const form = event.target.closest('form'), field = form.querySelector('[data-store-password-field]'), input = field.querySelector('input');
         const enabled = event.target.value === 'password';
+        const phone = form.querySelector('[name="phone"]');
         field.hidden = !enabled; input.disabled = !enabled; input.required = enabled;
+        if (phone) phone.required = event.target.value !== 'none';
         if (!enabled) input.value = '';
         return;
       }
@@ -1529,6 +1607,12 @@
         return;
       }
 
+      const companyOpen = event.target.closest("[data-company-open]");
+      if (companyOpen) {
+        if (companyOpen.dataset.report) state.reportType = companyOpen.dataset.report;
+        return loadView(companyOpen.dataset.companyOpen);
+      }
+
       const exportButton = event.target.closest("[data-export]");
       if (exportButton) {
         const type = exportButton.dataset.export;
@@ -1605,6 +1689,7 @@
       if (action === "seller-approve") return patch(`/api/admin/sellers/${id}/approve`, {});
       if (action === "seller-reject") return patch(`/api/admin/sellers/${id}/reject`, {});
       if (action === "seller-toggle") return patch(`/api/admin/sellers/${id}`, { status: target.dataset.status });
+      if (action === "product-edit") return openProductEditor(target.dataset.index);
       if (action === "product-approve") return patch(`/api/admin/products/${id}/approve`, {});
       if (action === "product-clean-bg") {
         toast("Grok AI is removing the background...");
@@ -1656,6 +1741,34 @@
           storeForm.reset(); closeTopReportDrawer(); state.search = ''; state.filterQuery = '';
           const search = qs('#adminSearch'); if (search) search.value = '';
           await loadView('sellers'); toast(result.message || 'Store created. Pending review.');
+        } catch (error) { message.textContent = error.message; }
+        finally { button.disabled = false; }
+        return;
+      }
+      const productEditForm = event.target.closest('[data-product-edit]');
+      if (productEditForm) {
+        event.preventDefault();
+        const values = Object.fromEntries(new FormData(productEditForm).entries());
+        const message = productEditForm.querySelector('[data-product-edit-message]');
+        const button = productEditForm.querySelector('button[type="submit"]');
+        const payload = {
+          title: values.title,
+          sku: values.sku,
+          category: values.category,
+          subcategory: values.subcategory,
+          pricePaise: Math.round((Number(values.priceRupees) || 0) * 100),
+          mrpPaise: Math.round((Number(values.mrpRupees) || 0) * 100),
+          stock: Number(values.stock) || 0,
+          unitLabel: values.unitLabel,
+          status: values.status,
+          images: values.images,
+          description: values.description,
+        };
+        button.disabled = true;
+        message.textContent = 'Saving product…';
+        try {
+          await api(`/api/admin/products/${productEditForm.dataset.productEdit}`, { method: 'PATCH', body: JSON.stringify(payload) });
+          toast('Product details saved.'); closeTopReportDrawer(); await loadView('products');
         } catch (error) { message.textContent = error.message; }
         finally { button.disabled = false; }
         return;
@@ -1756,10 +1869,6 @@
             ),
           ],
         };
-        if (payload.imageUrls.length < 3) {
-          toast("Add at least 3 offer images.", true);
-          return;
-        }
         try {
           const offerId = offerForm.dataset.offerId;
           if (offerId) await api(`/api/admin/customer-app/offers/${encodeURIComponent(offerId)}`, { method: "PATCH", body: JSON.stringify(payload) });
@@ -1776,8 +1885,11 @@
       if (sellerStoreControls) {
         event.preventDefault();
         const fields=Object.fromEntries(new FormData(sellerStoreControls).entries());
-        const {shippingPickupLocation,...storeDetails}=fields;
-        const payload={storeDetails,shippingPickupLocation};
+        const identityKeys=['businessName','fullName','phone','email','category','city','state','pincode'];
+        const identity=Object.fromEntries(identityKeys.filter(key=>Object.hasOwn(fields,key)).map(key=>[key,fields[key]]));
+        const {shippingPickupLocation,...remaining}=fields;
+        identityKeys.forEach(key=>delete remaining[key]);
+        const payload={...identity,storeDetails:remaining,shippingPickupLocation};
         try {
           await api(`/api/admin/sellers/${sellerStoreControls.dataset.sellerStoreControls}`, { method: "PATCH", body: JSON.stringify(payload) });
           toast("Seller storefront controls saved.");
@@ -1818,7 +1930,7 @@
       state.token = token;
       state.user = user;
       const permissions = user.admin?.permissions || [];
-      const hasAccess = view => user.role==='superadmin' || (user.admin ? permissions.includes('*') || permissions.includes(viewPermissions[view]) : (roleViewAccess[user.role]||[]).includes(view));
+      const hasAccess = view => view === 'company' ? user.role === 'superadmin' : user.role==='superadmin' || (user.admin ? permissions.includes('*') || permissions.includes(viewPermissions[view]) : (roleViewAccess[user.role]||[]).includes(view));
       qs('#adminRoleLabel').textContent=`${(user.admin?.displayRole||user.role).replaceAll('_',' ')} access`;
       qsa('[data-admin-view]').forEach(button=>button.toggleAttribute('hidden',!hasAccess(button.dataset.adminView)));
       if (user.role === "finance") {

@@ -3682,23 +3682,21 @@ async function openDeliveryLabel(orderId) {
     throw new Error("Please allow popups to print the delivery label.");
   }
   printWindow.opener = null;
-  const token = localStorage.getItem("axzenToken");
-  const response = await fetch(`/api/orders/${encodeURIComponent(orderId)}/delivery-label`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-  const result = await response.json();
-
-  if (!response.ok) {
+  try {
+    const token = localStorage.getItem("axzenToken");
+    const response = await fetch(`/api/orders/${encodeURIComponent(orderId)}/delivery-label`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const result = await response.json();
+    if (!response.ok || !result.labelHtml) throw new Error(result.message || "Unable to open delivery label.");
+    printWindow.document.open();
+    printWindow.document.write(result.labelHtml);
+    printWindow.document.close();
+    printWindow.focus();
+  } catch (error) {
     printWindow.close();
-    throw new Error(result.message || "Unable to open delivery label.");
+    throw error;
   }
-
-  printWindow.document.open();
-  printWindow.document.write(result.labelHtml);
-  printWindow.document.close();
-  printWindow.focus();
 }
 
 function renderSellerPaymentSettings(seller = {}) {
@@ -4394,6 +4392,21 @@ function sellerOrderProductTitle(order = {}) {
   return sellerOrderFirstItem(order).title || "Product";
 }
 
+function sellerOrderItemImage(item = {}) {
+  let image = "";
+  try {
+    const source = item.image || item.images?.[0];
+    if (!source) throw new Error("No image");
+    const candidate = new URL(source, location.origin);
+    if (["http:", "https:"].includes(candidate.protocol)) image = candidate.href;
+  } catch {
+    image = "";
+  }
+  return image
+    ? `<img src="${escapeHtml(image)}" alt="" loading="lazy">`
+    : `<span class="seller-order-image-empty">${escapeHtml((item.title || "P").slice(0, 1).toUpperCase())}</span>`;
+}
+
 function sellerStatusBadge(value = "") {
   const normalized = normalizeSellerOrderStatus(value);
   const label = normalized === "waiting_for_pickup" ? "Waiting for pickup agent" : normalized.replace(/_/g, " ");
@@ -4490,12 +4503,12 @@ function renderSellerOrdersRows() {
           <td><button class="seller-order-link" type="button" data-order-details="${escapeHtml(order._id || order.orderId)}">${escapeHtml(order.orderId)}</button></td>
           <td>${formatDate(order.createdAt)}</td>
           <td>${escapeHtml(sellerOrderCustomerName(order))}</td>
-          <td>${escapeHtml(sellerOrderProductTitle(order))}</td>
+          <td><div class="seller-order-product">${sellerOrderItemImage(item)}<span><strong>${escapeHtml(sellerOrderProductTitle(order))}</strong><small>${escapeHtml(item.sku || "No SKU")}</small></span></div></td>
           <td>${Number(item.quantity) || 1}</td>
           <td>${sellerPaymentBadge(order)}</td>
           <td>${sellerStatusBadge(order.status)}</td>
           <td>${sellerStatusBadge(order.shipmentStatus || order.deliveryStatus || "created")}</td>
-          <td><div class="seller-order-actions">${actions}<button type="button" data-order-details="${escapeHtml(order._id || order.orderId)}">Details</button></div></td>
+          <td><div class="seller-order-actions">${actions}<button type="button" data-print-label="${escapeHtml(order._id || order.orderId)}">Print label</button><button type="button" data-order-details="${escapeHtml(order._id || order.orderId)}">Details</button></div></td>
         </tr>
       `;
     })
@@ -4530,7 +4543,7 @@ function renderSellerOrderDrawer(order = {}) {
           </section>
           <section>
             <h4>Product details</h4>
-            ${(order.items||[]).map(i=>`<p><strong>${escapeHtml(i.title)}</strong><br>SKU ${escapeHtml(i.sku||'-')} · Qty ${i.quantity} · ${rupees(i.pricePaise*i.quantity)}</p>`).join('')}
+            <div class="seller-drawer-items">${(order.items||[]).map(i=>`<article>${sellerOrderItemImage(i)}<p><strong>${escapeHtml(i.title)}</strong><br>SKU ${escapeHtml(i.sku||'-')} · Qty ${i.quantity} · ${rupees(i.pricePaise*i.quantity)}</p></article>`).join('')}</div>
             <p><strong>Customer total: ${rupees(order.customerPaid)}</strong></p>
           </section>
           <section>
@@ -4551,7 +4564,7 @@ function renderSellerOrderDrawer(order = {}) {
             ${order.refundStatus && order.refundStatus !== "none" ? `<p>Refund: ${escapeHtml(order.refundStatus)}${order.refundDueDate ? ` by ${formatDate(order.refundDueDate)}` : ""}</p>` : ""}
           </section>
         </div>
-        <div class="workspace-actions"><button type="button" data-print-invoice="${escapeHtml(order._id||order.orderId)}">View invoice</button>${order.awbNumber?`<button type="button" data-print-label="${escapeHtml(order._id||order.orderId)}">Delivery label</button>`:''}<a href="#sellerSupport" data-seller-nav="support">Delivery support</a></div>
+        <div class="workspace-actions"><button type="button" data-print-invoice="${escapeHtml(order._id||order.orderId)}">View invoice</button><button type="button" data-print-label="${escapeHtml(order._id||order.orderId)}">Print delivery label</button><a href="#sellerSupport" data-seller-nav="support">Delivery support</a></div>
         <div class="seller-order-timeline">
           <h4>Order timeline</h4>
           ${timeline
