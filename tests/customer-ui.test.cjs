@@ -50,7 +50,7 @@ const products = [
 async function tick() {
   for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
 }
-async function setup({ fail = false, signedIn = false, mixedStoreCategories = false } = {}) {
+async function setup({ fail = false, signedIn = false, mixedStoreCategories = false, config = {} } = {}) {
   const dom = new JSDOM(
     fs.readFileSync(path.join(root, "index.html"), "utf8"),
     { url: "https://www.axzen.in/", runScripts: "outside-only" },
@@ -77,7 +77,7 @@ async function setup({ fail = false, signedIn = false, mixedStoreCategories = fa
     if (url === "/api/customer/catalog") {
       if (fail) throw new Error("Offline fixture");
       data = { products };
-    } else if (url === "/api/customer/app-config") data = { config: {} };
+    } else if (url === "/api/customer/app-config") data = { config };
     else if (url === "/api/customer/me")
       data = {
         user: {
@@ -347,4 +347,13 @@ test('store categories collapse case and whitespace and retain both products aft
     await app.go('#categories');
     assert.equal([...d.querySelectorAll('a')].filter(a => a.textContent.trim() === 'food').length, 0);
   } finally { app.close(); }
+});
+
+test("seeded coupon copy does not advertise an unconfigured discount", async () => {
+ const app = await setup({ config: { saleTitle: "Exclusive coupon for you!", saleSubtitle: "Flat 10% Off up to Rs. 100. Already applied on selected products." } });
+ try {
+  const copy = app.w.document.querySelector(".offer-section").textContent;
+  assert.ok(!copy.includes("10%"));
+  assert.match(copy, /Discover offers/);
+ } finally { app.close(); }
 });

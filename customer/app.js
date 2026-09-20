@@ -234,15 +234,19 @@ function offerProducts(offer) {
 }
 function promotions() {
   if (state.config.showOffers === false) return "";
+  // Old seeded marketing copy did not represent a configured coupon.
+  const legacyCopy = state.config.saleTitle === "Exclusive coupon for you!" && state.config.saleSubtitle === "Flat 10% Off up to Rs. 100. Already applied on selected products.";
+  const saleTitle = legacyCopy ? "" : state.config.saleTitle;
+  const saleSubtitle = legacyCopy ? "" : state.config.saleSubtitle;
   const configured = state.config.festivalOffers || [];
   const offers = configured.length
     ? configured
     : [
-        { id: "daily-deals", title: state.config.saleTitle || "Today’s best offers", fallback: true, href: "#deals" },
+        { id: "daily-deals", title: saleTitle || "Today’s best offers", fallback: true, href: "#deals" },
         { id: "new-arrivals", title: "Fresh finds", fallback: true, href: "#shop?sort=newest" },
         { id: "store-offers", title: "Offers from stores", fallback: true, href: "#stores" },
       ];
-  return `<section class="section offer-section">${sectionHead(state.config.saleTitle || "In season. On offer.", state.config.saleSubtitle || "Discover offers from our stores.", "#deals", state.config.saleCta || "Shop offers")}<div class="offer-grid">${offers.map((o) => { const count = offerProducts(o).length; const href = o.href || (count ? `#offer?id=${encodeURIComponent(o.id)}` : "#deals"); const image = safeUrl(o.imageUrl || o.imageUrls?.[0]); return `<a class="offer-card${image ? " has-image" : " offer-placeholder"}" href="${esc(href)}">${image ? `<img src="${esc(image)}" alt="" loading="lazy">` : `<span class="offer-card-icon">${icon("bag")}</span>`}<div><h3>${esc(o.title || "Special offer")}</h3><span>${count ? `Explore ${count} product${count === 1 ? "" : "s"}` : (o.fallback ? "Explore now" : "Products coming soon")} →</span></div></a>`; }).join("")}</div></section>`;
+  return `<section class="section offer-section">${sectionHead(saleTitle || "In season. On offer.", saleSubtitle || "Discover offers from our stores.", "#deals", state.config.saleCta || "Shop offers")}<div class="offer-grid">${offers.map((o) => { const count = offerProducts(o).length; const href = o.href || (count ? `#offer?id=${encodeURIComponent(o.id)}` : "#deals"); const image = safeUrl(o.imageUrl || o.imageUrls?.[0]); return `<a class="offer-card${image ? " has-image" : " offer-placeholder"}" href="${esc(href)}">${image ? `<img src="${esc(image)}" alt="" loading="lazy">` : `<span class="offer-card-icon">${icon("bag")}</span>`}<div><h3>${esc(o.title || "Special offer")}</h3><span>${count ? `Explore ${count} product${count === 1 ? "" : "s"}` : (o.fallback ? "Explore now" : "Products coming soon")} →</span></div></a>`; }).join("")}</div></section>`;
 }
 function featuredStores() {
   const order = (state.config.recommendedSellerIds || []).map(String);
