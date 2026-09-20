@@ -507,12 +507,15 @@ test('superadmin creates no-login stores and controls store and product catalogu
   const root = await User.create({ role: 'superadmin', name: 'Catalogue Owner', phone: '+919000003101', status: 'active' });
   const rootToken = jwt.sign({ id: String(root._id), role: 'superadmin' }, process.env.JWT_SECRET);
   const first = await request('/api/admin/sellers', { access: 'none' }, rootToken);
-  const second = await request('/api/admin/sellers', { access: 'none', businessName: '' }, rootToken);
+  const second = await request('/api/admin/sellers', { access: 'none', businessName: '', phone: '+919000003109' }, rootToken);
   assert.equal(first.status, 201, JSON.stringify(first.body));
   assert.equal(second.status, 201, JSON.stringify(second.body));
   assert.match(first.body.seller.businessName, /^New store /);
   const noLoginOwner = await User.findById(first.body.seller.userId).lean();
   assert.match(noLoginOwner.phone, /^disabled:[a-f0-9]{24}$/);
+  const contactOnlyOwner = await User.findById(second.body.seller.userId).lean();
+  assert.match(contactOnlyOwner.phone, /^disabled:[a-f0-9]{24}$/);
+  assert.equal(second.body.seller.phone, '+919000003109');
   const ordinaryAdmin = await User.create({ role: 'admin', name: 'Ordinary Admin', phone: '+919000003102', status: 'active' });
   const ordinaryToken = jwt.sign({ id: String(ordinaryAdmin._id), role: 'admin' }, process.env.JWT_SECRET);
   assert.equal((await request('/api/admin/sellers', { access: 'none' }, ordinaryToken)).status, 403);

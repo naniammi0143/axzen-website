@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="workspace.css?v=20260913">
+  <link rel="stylesheet" href="workspace.css?v=20260920-1">
 </head>
 <body class="portal-page admin-page">
   <header class="site-header">
@@ -87,6 +87,7 @@
         </a>
         <nav class="admin-menu" aria-label="Admin sections">
           <button class="active" type="button" data-admin-view="dashboard">Dashboard</button>
+          <button type="button" data-admin-view="company">Company Control</button>
           <button type="button" data-admin-view="sellers">Sellers</button>
           <button type="button" data-admin-view="products">Products</button>
           <button type="button" data-admin-view="orders">Orders</button>
@@ -153,6 +154,8 @@
           </div>
         </section>
 
+        <section class="admin-view" data-view-panel="company"></section>
+
         <section class="admin-view" data-view-panel="sellers"></section>
         <section class="admin-view" data-view-panel="products"></section>
         <section class="admin-view" data-view-panel="orders"></section>
@@ -169,7 +172,7 @@
     </section>
   </main>
 
-  <script src="admin-panel.js?v=controls4"></script>
-  <script type="module" src="portal.js?v=admin28"></script>
+  <script src="admin-panel.js?v=20260920-1"></script>
+  <script type="module" src="portal.js?v=20260920-1"></script>
 </body>
 </html>

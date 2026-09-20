@@ -15,6 +15,7 @@
 
   const titles = {
     dashboard: "Dashboard",
+    company: "Company Control",
     sellers: "Seller Management",
     products: "Product Approval",
     orders: "Order Management",
@@ -45,6 +46,7 @@
 
   const viewPermissions = {
     dashboard: "dashboard",
+    company: "company",
     sellers: "sellers",
     products: "products",
     orders: "orders",
@@ -60,7 +62,7 @@
   };
 
   const roleViewAccess = {
-    superadmin: ["dashboard", "sellers", "products", "orders", "payments", "customers", "customerapp", "reviews", "delivery", "helpdesk", "employees", "reports", "audit"],
+    superadmin: ["dashboard", "company", "sellers", "products", "orders", "payments", "customers", "customerapp", "reviews", "delivery", "helpdesk", "employees", "reports", "audit"],
     admin: ["dashboard", "sellers", "products", "orders", "customers", "customerapp", "reviews", "delivery", "helpdesk", "employees", "reports"],
     support: ["dashboard", "orders", "customers", "helpdesk"],
     finance: ["dashboard", "payments", "reports"],
@@ -1408,6 +1410,44 @@
     );
   }
 
+  function renderCompanyControl({ overview = {}, compliance = {} } = {}) {
+    const stats = overview.stats || {};
+    const areas = [
+      ["sellers", "Seller governance", "Onboarding, KYC, activation, store identity and commission controls", stats.pendingSellers || 0, "pending"],
+      ["products", "Catalogue & inventory", "Product approval, pricing, images, stock and low-stock review", stats.lowStockCount || 0, "low stock"],
+      ["orders", "Order operations", "Accept, pack, cancel, invoice and end-to-end order lifecycle", stats.pendingOrders || 0, "open"],
+      ["delivery", "Fulfilment & logistics", "Shipping labels, AWB, courier assignment and delivery tracking", "Live", "operations"],
+      ["payments", "Finance & settlements", "Customer payments, commission, gateway costs and seller payouts", stats.monthlyRevenue?.formatted || "Rs. 0", "month revenue"],
+      ["customers", "Customer operations", "Accounts, support, order history and account safety", stats.totalCustomers || 0, "customers"],
+      ["customerapp", "Growth & storefront", "Homepage offers, featured stores, app content and reviews", "Web + App", "channels"],
+      ["employees", "Workforce & access", "Role-based staff access, status and responsibility assignment", "RBAC", "protected"],
+      ["reports", "Analytics & compliance", "Sales, tax, products, returns, shipments and CSV registers", compliance.rows?.length || 0, "registers"],
+      ["audit", "Security & audit", "Permanent record of sensitive company actions and exports", "Live", "audit trail"],
+    ];
+    qs('[data-view-panel="company"]').innerHTML = `
+      <section class="company-command-centre">
+        <header class="company-command-hero">
+          <div><p class="eyebrow">Axzen corporate command centre</p><h2>Manage Axzen in one place.</h2><p>Manage stores, catalogue, orders, settlements, staff access and storefront content. Review reports and audit records from this dashboard.</p></div>
+          <button type="button" data-company-open="reports" data-report="compliance">Open compliance register</button>
+        </header>
+        <div class="company-health-grid">
+          ${card("Total revenue", stats.totalRevenue?.formatted || "Rs. 0", "Paid marketplace orders")}
+          ${card("Today’s orders", stats.todayOrders || 0, `${stats.pendingOrders || 0} need action`)}
+          ${card("Active sellers", stats.activeSellers || 0, `${stats.pendingSellers || 0} pending review`)}
+          ${card("Delivered", stats.deliveredOrders || 0, "Completed orders")}
+        </div>
+        <div class="company-control-grid">
+          ${areas.map(([view,title,description,value,label])=>`<button type="button" class="company-control-card" data-company-open="${view}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(title)}</strong><p>${escapeHtml(description)}</p><b>${escapeHtml(value)} →</b></button>`).join('')}
+        </div>
+        <article class="admin-panel company-compliance-panel"><div class="panel-heading"><h2>Corporate records readiness</h2><span>${escapeHtml(compliance.cards?.[0]?.value || compliance.rows?.length || 0)} areas</span></div>${table([
+          {label:"Register",render:row=>`<strong>${escapeHtml(row.area)}</strong><small>${escapeHtml(row.source)}</small>`},
+          {label:"What Axzen maintains",render:row=>escapeHtml(row.maintain)},
+          {label:"Owner",render:row=>escapeHtml(row.owner)},
+          {label:"Status",render:row=>statusBadge(row.status)},
+        ],(compliance.rows||[]).slice(0,10))}</article>
+      </section>`;
+  }
+
   async function loadView(view = state.view) {
     state.view = view;
     qs("#adminPageTitle").textContent = titles[view] || "Admin";
@@ -1416,6 +1456,11 @@
 
     try {
       if (view === "dashboard") return await loadDashboard();
+      if (view === "company") {
+        if (state.user?.role !== "superadmin") throw new Error("Company Control requires superadmin access.");
+        const [overview, compliance] = await Promise.all([api("/api/admin/overview"), api("/api/admin/reports/compliance")]);
+        return renderCompanyControl({ overview, compliance });
+      }
       if (view === "payments") {
         return renderPayments(await api(`/api/admin/finance/report?${state.financeQuery || ""}`));
       }
@@ -1560,6 +1605,12 @@
         state.filterQuery = filters;
         await loadView(refreshButton.dataset.refreshView);
         return;
+      }
+
+      const companyOpen = event.target.closest("[data-company-open]");
+      if (companyOpen) {
+        if (companyOpen.dataset.report) state.reportType = companyOpen.dataset.report;
+        return loadView(companyOpen.dataset.companyOpen);
       }
 
       const exportButton = event.target.closest("[data-export]");
@@ -1879,7 +1930,7 @@
       state.token = token;
       state.user = user;
       const permissions = user.admin?.permissions || [];
-      const hasAccess = view => user.role==='superadmin' || (user.admin ? permissions.includes('*') || permissions.includes(viewPermissions[view]) : (roleViewAccess[user.role]||[]).includes(view));
+      const hasAccess = view => view === 'company' ? user.role === 'superadmin' : user.role==='superadmin' || (user.admin ? permissions.includes('*') || permissions.includes(viewPermissions[view]) : (roleViewAccess[user.role]||[]).includes(view));
       qs('#adminRoleLabel').textContent=`${(user.admin?.displayRole||user.role).replaceAll('_',' ')} access`;
       qsa('[data-admin-view]').forEach(button=>button.toggleAttribute('hidden',!hasAccess(button.dataset.adminView)));
       if (user.role === "finance") {
