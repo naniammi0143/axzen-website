@@ -17,6 +17,22 @@ const customerAppConfigSchema = new mongoose.Schema(
     saleCta: { type: String, trim: true, default: "Shop offers" },
     offerImageUrl: { type: String, trim: true, default: "" },
     offerImages: [{ type: String, trim: true }],
+    pageAds: [
+      {
+        id: { type: String, trim: true },
+        title: { type: String, trim: true, default: "Advertisement" },
+        imageUrl: { type: String, trim: true, required: true },
+        linkUrl: { type: String, trim: true, default: "" },
+        page: { type: String, enum: ["all", "home", "category", "store"], default: "home" },
+        placement: { type: String, enum: ["hero", "sidebar", "inline"], default: "hero" },
+        isActive: { type: Boolean, default: true },
+        priority: { type: Number, min: 0, max: 1000, default: 0 },
+        startsAt: { type: Date, default: null },
+        endsAt: { type: Date, default: null },
+        impressions: { type: Number, min: 0, default: 0 },
+        clicks: { type: Number, min: 0, default: 0 },
+      },
+    ],
     festivalOffers: [
       {
         id: { type: String, trim: true },

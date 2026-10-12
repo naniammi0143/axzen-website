@@ -114,7 +114,7 @@ test("seller shipment panel uses real items and keeps booking errors visible", (
     .replace(/export /g, "");
   const module = fs
     .readFileSync("seller-workspace.js", "utf8")
-    .replace(/import .*?;\n/, "")
+    .replace(/import .*?;\r?\n/, "")
     .replace(/export /g, "");
   w.eval(domain + "\nconst esc=escape;\n" + module);
   try {

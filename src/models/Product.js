@@ -30,5 +30,6 @@ const productSchema = new mongoose.Schema(
 
 productSchema.index({ sellerId: 1, sku: 1 }, { unique: true });
 productSchema.index({ status: 1, category: 1 });
+productSchema.index({ status: 1, updatedAt: -1, _id: -1 });
 
 module.exports = mongoose.model("Product", productSchema);

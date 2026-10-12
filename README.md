@@ -130,3 +130,11 @@ Compatibility endpoints currently used by the frontend:
 6. Customer invoice is visible to customer and admin only.
 7. Seller sees payout breakup and delivery label, not customer invoice.
 8. Admin can print invoice and delivery label from Order Management.
+# Performance and page ads
+
+- Customer catalog uses cursor pagination (`limit` + `cursor`) and the storefront loads more products automatically while browsing.
+- Cloudinary product images are delivered with automatic format/quality and responsive width transformations.
+- Public catalog responses include CDN cache headers and `Server-Timing` query/cache metrics.
+- Optional shared caching is enabled when `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are configured. Without them, the API uses a short in-process cache.
+- Admin users with dashboard access can call `GET /api/admin/performance` to measure database ping and catalog query latency.
+- Customer App → Page Ad Manager supports page/placement targeting, priority, start/end scheduling, active status, impressions, clicks, and CTR.

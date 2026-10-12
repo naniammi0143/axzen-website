@@ -1,4 +1,5 @@
 const { publishedProductRatings } = require("../utils/productRatings");
+const cache = require("../utils/cache");
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
 const env = require("../config/env");
@@ -263,6 +264,7 @@ const writeReview = asyncHandler(async (req, res) => {
     );
     await recalculate(productId, session);
   });
+  cache.deletePrefix("catalog:");
   success(res, { review: publicReview(result) });
 });
 const myReviews = asyncHandler(async (req, res) => {
@@ -349,6 +351,7 @@ const moderate = asyncHandler(async (req, res) => {
     );
     result = r;
   });
+  cache.deletePrefix("catalog:");
   success(res, { review: result });
 });
 module.exports = {

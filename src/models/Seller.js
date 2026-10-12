@@ -78,4 +78,6 @@ const sellerSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+sellerSchema.index({ status: 1, isActive: 1 });
+
 module.exports = mongoose.model("Seller", sellerSchema);

@@ -868,6 +868,119 @@ function normalizeFestivalOffer(item = {}, index = 0) {
   };
 }
 
+const pageAdPages = new Set(["all", "home", "category", "store"]);
+const pageAdPlacements = new Set(["hero", "sidebar", "inline"]);
+
+function isHttpUrl(value) {
+  try {
+    return ["http:", "https:"].includes(new URL(String(value || "")).protocol);
+  } catch {
+    return false;
+  }
+}
+
+function isSafeAdLink(value) {
+  const link = String(value || "").trim();
+  return !link || link.startsWith("/") || link.startsWith("#") || isHttpUrl(link);
+}
+
+function normalizePageAd(item = {}, id = "") {
+  const startsAt = item.startsAt ? new Date(item.startsAt) : null;
+  const endsAt = item.endsAt ? new Date(item.endsAt) : null;
+  return {
+    id: String(id || item.id || `ad-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+    title: String(item.title || "Advertisement").trim() || "Advertisement",
+    imageUrl: String(item.imageUrl || "").trim(),
+    linkUrl: String(item.linkUrl || "").trim(),
+    page: pageAdPages.has(item.page) ? item.page : "home",
+    placement: pageAdPlacements.has(item.placement) ? item.placement : "hero",
+    isActive: item.isActive === undefined ? true : item.isActive === true || item.isActive === "true" || item.isActive === "on",
+    priority: Math.max(0, Math.min(1000, Number(item.priority) || 0)),
+    startsAt: startsAt && !Number.isNaN(startsAt.getTime()) ? startsAt : null,
+    endsAt: endsAt && !Number.isNaN(endsAt.getTime()) ? endsAt : null,
+    impressions: Math.max(0, Number(item.impressions) || 0),
+    clicks: Math.max(0, Number(item.clicks) || 0),
+  };
+}
+
+function pageAdValidationError(ad = {}) {
+  if (!isHttpUrl(ad.imageUrl)) return "Ad image must use a valid http or https URL.";
+  if (!isSafeAdLink(ad.linkUrl)) return "Ad click link must be http(s), /path, #section, or empty.";
+  if (ad.startsAt && ad.endsAt && ad.endsAt <= ad.startsAt) return "Ad end time must be after its start time.";
+  return "";
+}
+
+const createPageAd = asyncHandler(async (req, res) => {
+  const ad = normalizePageAd(req.body);
+  const validationError = pageAdValidationError(ad);
+  if (validationError) {
+    res.status(400).json({ ok: false, message: validationError });
+    return;
+  }
+  const config = await CustomerAppConfig.findOneAndUpdate(
+    { key: "default" },
+    { $push: { pageAds: { $each: [ad], $position: 0 } }, $set: { updatedBy: req.user?.id || null } },
+    { new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true }
+  );
+  await audit(req, "customerapp.page-ad.create", "customerapp", config._id, { id: ad.id, page: ad.page, placement: ad.placement });
+  success(res, { config, ad }, 201);
+});
+
+const updatePageAd = asyncHandler(async (req, res) => {
+  const config = await CustomerAppConfig.findOne({ key: "default" });
+  const index = config?.pageAds?.findIndex((item) => String(item.id) === String(req.params.id)) ?? -1;
+  if (!config || index < 0) {
+    res.status(404).json({ ok: false, message: "Ad not found." });
+    return;
+  }
+  const current = config.pageAds[index].toObject ? config.pageAds[index].toObject() : config.pageAds[index];
+  const ad = normalizePageAd({ ...current, ...req.body }, current.id);
+  const validationError = pageAdValidationError(ad);
+  if (validationError) {
+    res.status(400).json({ ok: false, message: validationError });
+    return;
+  }
+  config.pageAds[index] = ad;
+  config.updatedBy = req.user?.id || null;
+  config.markModified("pageAds");
+  await config.save();
+  await audit(req, "customerapp.page-ad.update", "customerapp", config._id, { id: ad.id });
+  success(res, { config, ad });
+});
+
+const deletePageAd = asyncHandler(async (req, res) => {
+  const config = await CustomerAppConfig.findOneAndUpdate(
+    { key: "default", "pageAds.id": req.params.id },
+    { $pull: { pageAds: { id: req.params.id } }, $set: { updatedBy: req.user?.id || null } },
+    { new: true }
+  );
+  if (!config) {
+    res.status(404).json({ ok: false, message: "Ad not found." });
+    return;
+  }
+  await audit(req, "customerapp.page-ad.delete", "customerapp", config._id, { id: req.params.id });
+  success(res, { config });
+});
+
+const trackPageAdEvent = asyncHandler(async (req, res) => {
+  const event = req.body.event === "click" ? "click" : req.body.event === "impression" ? "impression" : "";
+  if (!event) {
+    res.status(400).json({ ok: false, message: "Ad event must be impression or click." });
+    return;
+  }
+  const field = event === "click" ? "pageAds.$.clicks" : "pageAds.$.impressions";
+  const config = await CustomerAppConfig.findOneAndUpdate(
+    { key: "default", "pageAds.id": req.params.id },
+    { $inc: { [field]: 1 } },
+    { new: false }
+  ).select("_id");
+  if (!config) {
+    res.status(404).json({ ok: false, message: "Ad not found." });
+    return;
+  }
+  res.status(204).end();
+});
+
 const createFestivalOffer = asyncHandler(async (req, res) => {
   const offer = normalizeFestivalOffer(req.body);
   const validationError = festivalOfferValidationError(offer);
@@ -1531,6 +1644,28 @@ const listAuditLogs = asyncHandler(async (req, res) => {
   success(res, await paged(AuditLog, {}, req.query));
 });
 
+const performanceDiagnostics = asyncHandler(async (req, res) => {
+  const totalStartedAt = performance.now();
+  const pingStartedAt = performance.now();
+  await mongoose.connection.db.command({ ping: 1 });
+  const databasePingMs = performance.now() - pingStartedAt;
+  const catalogStartedAt = performance.now();
+  await Product.find({ status: { $in: ["active", "approved"] } })
+    .select("_id updatedAt")
+    .sort({ updatedAt: -1, _id: -1 })
+    .limit(40)
+    .lean();
+  const catalogQueryMs = performance.now() - catalogStartedAt;
+  success(res, {
+    databasePingMs: Number(databasePingMs.toFixed(1)),
+    catalogQueryMs: Number(catalogQueryMs.toFixed(1)),
+    totalMs: Number((performance.now() - totalStartedAt).toFixed(1)),
+    sharedCacheConfigured: Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
+    catalogPageSize: 40,
+    measuredAt: new Date().toISOString(),
+  });
+});
+
 module.exports = {
   adminOverview,
   approveProduct,
@@ -1552,6 +1687,7 @@ module.exports = {
   listSettlements,
   orderStatuses,
   paymentCommissionReport,
+  performanceDiagnostics,
   productStatuses,
   publicCustomerAppConfig,
   rejectProduct,
@@ -1571,8 +1707,12 @@ module.exports = {
   uploadCustomerAppAds,
   deleteCustomerAppAd,
   createFestivalOffer,
+  createPageAd,
   updateFestivalOffer,
   deleteFestivalOffer,
+  updatePageAd,
+  deletePageAd,
+  trackPageAdEvent,
   updateDelivery,
   updateEmployee,
   updateOrder,

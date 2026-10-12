@@ -932,6 +932,45 @@
     return [...new Set([...(offer.imageUrls || []), offer.imageUrl].filter(Boolean))].slice(0, 4);
   }
 
+  function pageAdForm(ad = {}) {
+    const localDateTime = (value) => {
+      if (!value) return "";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+      const offset = date.getTimezoneOffset() * 60_000;
+      return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+    };
+    return `
+      <form class="customer-app-form page-ad-editor" data-page-ad-form data-page-ad-id="${escapeHtml(ad.id || "")}">
+        <div class="festival-offer-editor-head">
+          <strong>${ad.id ? "Edit page ad" : "Add page ad"}</strong>
+          <button type="button" data-close-page-ad-form>Close</button>
+        </div>
+        <label>Ad title<input name="title" value="${escapeHtml(ad.title || "Advertisement")}" required></label>
+        <label>Image URL<input name="imageUrl" type="url" value="${escapeHtml(ad.imageUrl || "")}" placeholder="https://.../banner.jpg" required></label>
+        <label>Click link<input name="linkUrl" value="${escapeHtml(ad.linkUrl || "")}" placeholder="https://... or /page"></label>
+        <div class="page-ad-fields">
+          <label>Show on page
+            <select name="page">
+              ${[["home", "Home"], ["category", "Category"], ["store", "Seller store"], ["all", "All pages"]].map(([value, label]) => `<option value="${value}" ${ad.page === value ? "selected" : ""}>${label}</option>`).join("")}
+            </select>
+          </label>
+          <label>Placement
+            <select name="placement">
+              ${[["hero", "Top banner"], ["sidebar", "Side banner"], ["inline", "Above products"]].map(([value, label]) => `<option value="${value}" ${ad.placement === value ? "selected" : ""}>${label}</option>`).join("")}
+            </select>
+          </label>
+          <label>Priority<input name="priority" type="number" min="0" max="1000" value="${escapeHtml(ad.priority || 0)}"><small>Higher priority appears first.</small></label>
+          <label>Starts at<input name="startsAt" type="datetime-local" value="${escapeHtml(localDateTime(ad.startsAt))}"></label>
+          <label>Ends at<input name="endsAt" type="datetime-local" value="${escapeHtml(localDateTime(ad.endsAt))}"></label>
+        </div>
+        <label class="page-ad-active"><input name="isActive" type="checkbox" ${ad.isActive === false ? "" : "checked"}> Active and visible to customers</label>
+        ${ad.imageUrl ? `<img class="page-ad-form-preview" src="${escapeHtml(ad.imageUrl)}" alt="Current ad preview">` : ""}
+        <button type="submit">${ad.id ? "Save ad" : "Publish ad"}</button>
+      </form>
+    `;
+  }
+
   function festivalOfferForm(offer = {}) {
     const images = offerImageList(offer);
     return `
@@ -973,21 +1012,50 @@
   function renderCustomerApp(data) {
     const config = data.config || {};
     const offers = config.festivalOffers || [];
+    const pageAds = config.pageAds || [];
     qs('[data-view-panel="customerapp"]').innerHTML = `
       <section class="customer-app-admin">
         ${customerControls(data)}
         <header class="employee-hero">
           <div>
-            <span class="eyebrow">Offers</span>
-            <h2>Festival and shop offers</h2>
-            <p>Create offers here. Sellers add their items and discount. Customers see those items after tapping the offer image.</p>
+            <span class="eyebrow">Customer content</span>
+            <h2>Page ads and festival offers</h2>
+            <p>Paste an image link, choose its page and placement, and the same image appears for customers.</p>
           </div>
           <div class="employee-count-card">
-            <span>Active offers</span>
-            <strong>${escapeHtml(offers.length || 0)}</strong>
-            <small>Shown on customer home</small>
+            <span>Live content</span>
+            <strong>${escapeHtml(pageAds.filter((ad) => ad.isActive !== false).length + offers.length)}</strong>
+            <small>${pageAds.length} ads · ${offers.length} offers</small>
           </div>
         </header>
+        <article class="admin-panel">
+          <div class="panel-heading">
+            <div><h2>Page ad manager</h2><p>Use a direct JPG, PNG, WebP, GIF or hosted image URL.</p></div>
+            <button type="button" data-create-page-ad>Add Ad</button>
+          </div>
+          <div data-page-ad-form-host></div>
+          <div class="page-ad-admin-grid">
+            ${
+              pageAds.length
+                ? pageAds.map((ad) => `
+                    <article class="page-ad-admin-card ${ad.isActive === false ? "is-inactive" : ""}">
+                      <img src="${escapeHtml(ad.imageUrl)}" alt="${escapeHtml(ad.title || "Advertisement")}" loading="lazy">
+                      <div>
+                        <h3>${escapeHtml(ad.title || "Advertisement")}</h3>
+                        <p>${escapeHtml(ad.page || "home")} · ${escapeHtml(ad.placement || "hero")} · Priority ${escapeHtml(ad.priority || 0)} · ${ad.isActive === false ? "Hidden" : "Active"}</p>
+                        <p><strong>${escapeHtml(ad.impressions || 0)}</strong> views · <strong>${escapeHtml(ad.clicks || 0)}</strong> clicks · <strong>${Number(ad.impressions) ? ((Number(ad.clicks || 0) / Number(ad.impressions)) * 100).toFixed(1) : "0.0"}%</strong> CTR</p>
+                        <small title="${escapeHtml(ad.imageUrl)}">${escapeHtml(ad.imageUrl)}</small>
+                      </div>
+                      <div class="offer-dash-actions">
+                        <button type="button" data-edit-page-ad="${escapeHtml(ad.id)}">Edit</button>
+                        <button type="button" data-delete-page-ad="${escapeHtml(ad.id)}">Delete</button>
+                      </div>
+                    </article>
+                  `).join("")
+                : "<p>No page ads yet. Click Add Ad and paste an image link.</p>"
+            }
+          </div>
+        </article>
         <article class="admin-panel">
           <div class="panel-heading">
             <h2>Offers dashboard</h2>
@@ -1024,6 +1092,7 @@
       </section>
     `;
     state.adminOffers = offers;
+    state.adminPageAds = pageAds;
   }
 
   function renderDelivery(data) {
@@ -1638,6 +1707,45 @@
         return;
       }
 
+      const createPageAd = event.target.closest("[data-create-page-ad]");
+      if (createPageAd) {
+        event.preventDefault();
+        const host = document.querySelector("[data-page-ad-form-host]");
+        if (host) host.innerHTML = pageAdForm();
+        return;
+      }
+
+      const editPageAd = event.target.closest("[data-edit-page-ad]");
+      if (editPageAd) {
+        event.preventDefault();
+        const ad = (state.adminPageAds || []).find((item) => String(item.id) === String(editPageAd.dataset.editPageAd));
+        const host = document.querySelector("[data-page-ad-form-host]");
+        if (host) host.innerHTML = pageAdForm(ad || {});
+        return;
+      }
+
+      const closePageAdForm = event.target.closest("[data-close-page-ad-form]");
+      if (closePageAdForm) {
+        event.preventDefault();
+        const host = document.querySelector("[data-page-ad-form-host]");
+        if (host) host.innerHTML = "";
+        return;
+      }
+
+      const deletePageAd = event.target.closest("[data-delete-page-ad]");
+      if (deletePageAd) {
+        event.preventDefault();
+        if (!window.confirm("Delete this page ad?")) return;
+        try {
+          await api(`/api/admin/customer-app/page-ads/${encodeURIComponent(deletePageAd.dataset.deletePageAd)}`, { method: "DELETE" });
+          toast("Page ad deleted.");
+          await loadView("customerapp");
+        } catch (error) {
+          toast(error.message, true);
+        }
+        return;
+      }
+
       const editOffer = event.target.closest("[data-edit-offer]");
       if (editOffer) {
         event.preventDefault();
@@ -1874,6 +1982,33 @@
           if (offerId) await api(`/api/admin/customer-app/offers/${encodeURIComponent(offerId)}`, { method: "PATCH", body: JSON.stringify(payload) });
           else await api("/api/admin/customer-app/offers", { method: "POST", body: JSON.stringify(payload) });
           toast(offerId ? "Offer updated." : "Offer created.");
+          await loadView("customerapp");
+        } catch (error) {
+          toast(error.message, true);
+        }
+        return;
+      }
+
+      const pageAdFormElement = event.target.closest("[data-page-ad-form]");
+      if (pageAdFormElement) {
+        event.preventDefault();
+        const formData = new FormData(pageAdFormElement);
+        const payload = {
+          title: String(formData.get("title") || "").trim(),
+          imageUrl: String(formData.get("imageUrl") || "").trim(),
+          linkUrl: String(formData.get("linkUrl") || "").trim(),
+          page: String(formData.get("page") || "home"),
+          placement: String(formData.get("placement") || "hero"),
+          isActive: formData.get("isActive") === "on",
+          priority: Number(formData.get("priority") || 0),
+          startsAt: formData.get("startsAt") ? new Date(formData.get("startsAt")).toISOString() : null,
+          endsAt: formData.get("endsAt") ? new Date(formData.get("endsAt")).toISOString() : null,
+        };
+        try {
+          const adId = pageAdFormElement.dataset.pageAdId;
+          if (adId) await api(`/api/admin/customer-app/page-ads/${encodeURIComponent(adId)}`, { method: "PATCH", body: JSON.stringify(payload) });
+          else await api("/api/admin/customer-app/page-ads", { method: "POST", body: JSON.stringify(payload) });
+          toast(adId ? "Page ad updated." : "Page ad published.");
           await loadView("customerapp");
         } catch (error) {
           toast(error.message, true);

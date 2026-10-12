@@ -2,6 +2,7 @@ const path = require("path");
 const cors = require("cors");
 const express = require("express");
 const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const env = require("./config/env");
 const adminRoutes = require("./routes/adminRoutes");
 const authRoutes = require("./routes/authRoutes");
@@ -24,7 +25,7 @@ const {
 } = require("./controllers/orderController");
 const { createSellerProduct, listProducts, listSellerProducts, updateSellerInventory, parseSellerCatalogue } = require("./controllers/productController");
 const { getPublicSeller, getPublicSellerCategories, getPublicSellerProducts, getPublicSellerReviews, listSellerFestivalOffers, joinSellerFestivalOffer } = require("./controllers/sellerController");
-const { financeSummary, publicCustomerAppConfig } = require("./controllers/adminController");
+const { financeSummary, publicCustomerAppConfig, trackPageAdEvent } = require("./controllers/adminController");
 const { verifyWhatsappWebhook, receiveWhatsappWebhook } = require("./controllers/whatsappController");
 const {
   followSeller,
@@ -42,6 +43,7 @@ const { multipartForm } = require("./middleware/multipartUpload");
 const app = express();
 app.set("trust proxy", 1);
 const rootDir = path.join(__dirname, "..");
+const adEventLimiter = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false });
 
 app.use(
   helmet({
@@ -114,7 +116,11 @@ app.get(
 
 // Compatibility routes used by the current frontend while the UI is being split into portals.
 app.get("/api/customer/catalog", listProducts);
-app.get("/api/customer/app-config", publicCustomerAppConfig);
+app.get("/api/customer/app-config", (req, res, next) => {
+  res.set("Cache-Control", "private, max-age=0, must-revalidate");
+  publicCustomerAppConfig(req, res, next);
+});
+app.post("/api/customer/ads/:id/event", adEventLimiter, trackPageAdEvent);
 app.get("/api/customer/sellers/:sellerId", getPublicSeller);
 app.get("/api/customer/sellers/:sellerId/products", getPublicSellerProducts);
 app.get("/api/customer/sellers/:sellerId/categories", getPublicSellerCategories);

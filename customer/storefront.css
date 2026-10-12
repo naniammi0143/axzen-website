@@ -2678,3 +2678,15 @@ dialog::backdrop {
 .brand img.axzen-wordmark { width:132px; height:auto; display:block; }
 .footer-brand img.axzen-wordmark { width:148px; height:auto; display:block; }
 @media (max-width:700px) { .brand img.axzen-wordmark { width:112px; height:auto; } }
+
+.page-ad { position:relative; margin:20px 0; overflow:hidden; border-radius:18px; background:#eef3f6; box-shadow:0 8px 28px #102a4314; }
+.page-ad > small { position:absolute; z-index:1; top:8px; right:8px; padding:3px 7px; border-radius:999px; background:#102a43b8; color:#fff; font-size:9px; letter-spacing:.06em; text-transform:uppercase; }
+.page-ad a, .page-ad > div { display:block; }
+.page-ad img { display:block; width:100%; height:auto; max-height:360px; object-fit:cover; }
+.page-ad-sidebar { width:min(360px,100%); margin-left:auto; }
+.page-ad-inline { margin:32px auto; }
+@media (max-width:700px) {
+  .page-ad { margin:12px 0; border-radius:12px; }
+  .page-ad img { max-height:220px; }
+  .page-ad-sidebar { width:100%; }
+}

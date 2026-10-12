@@ -79,6 +79,9 @@ const state = {
   orders: [],
   checkout: null,
   shown: 24,
+  nextCursor: "",
+  hasMore: false,
+  catalogLoadingMore: false,
   loginReturn: null,
 };
 let toastTimer,
@@ -100,7 +103,7 @@ function toast(message) {
 }
 async function api(
   path,
-  { method = "GET", body, auth = true, headers = {} } = {},
+  { method = "GET", body, auth = true, headers = {}, cache = "no-store" } = {},
 ) {
   const response = await fetch(API + path, {
     method,
@@ -112,7 +115,7 @@ async function api(
       ...headers,
     },
     body: body ? JSON.stringify(body) : undefined,
-    cache: "no-store",
+    cache,
     signal: AbortSignal.timeout(20000),
   });
   const result = await response
@@ -177,10 +180,33 @@ function product(id) {
   return state.products.find((p) => productKey(p) === String(id));
 }
 function photo(p, extra = "") {
-  const src = safeUrl(p.image || p.images?.[0] || "");
+  const src = safeUrl(p.thumbnail || p.image || p.images?.[0] || "");
   return src
     ? `<img src="${esc(src)}" alt="${esc(p.title)}" loading="lazy" ${extra}>`
     : `<span class="image-empty" role="img" aria-label="Product image unavailable">${icon("box")}</span>`;
+}
+function activePageAds(page, placement) {
+  const now = Date.now();
+  return (state.config.pageAds || [])
+    .filter((ad) => {
+      const starts = ad.startsAt ? Date.parse(ad.startsAt) : 0;
+      const ends = ad.endsAt ? Date.parse(ad.endsAt) : Infinity;
+      return ad.isActive !== false && (!starts || starts <= now) && (!ends || ends >= now) &&
+        (ad.page === "all" || ad.page === page) && ad.placement === placement && safeUrl(ad.imageUrl);
+    })
+    .sort((a, b) => (Number(b.priority) || 0) - (Number(a.priority) || 0));
+}
+function pageAd(page, placement) {
+  const ad = activePageAds(page, placement)[0];
+  if (!ad) return "";
+  const image = `<img src="${esc(safeUrl(ad.imageUrl))}" alt="${esc(ad.title || "Advertisement")}" loading="${placement === "hero" ? "eager" : "lazy"}">`;
+  const content = ad.linkUrl
+    ? `<a href="${esc(safeUrl(ad.linkUrl))}" target="_blank" rel="noopener noreferrer" data-page-ad-id="${esc(ad.id)}">${image}</a>`
+    : `<div data-page-ad-id="${esc(ad.id)}">${image}</div>`;
+  return `<aside class="page-ad page-ad-${placement}" aria-label="Advertisement"><small>Sponsored</small>${content}</aside>`;
+}
+function withPageAds(page, content) {
+  return pageAd(page, "hero") + pageAd(page, "sidebar") + content + pageAd(page, "inline");
 }
 function rating(p) {
   const n = Number(p.ratingCount) || 0;
@@ -622,7 +648,7 @@ async function render() {
   }
   switch (page) {
     case "home":
-      main.innerHTML = home();
+      main.innerHTML = withPageAds("home", home());
       break;
     case "categories":
       main.innerHTML = pageTitle('Shop by category', 'Everyday essentials and something new.') + (state.catalog === 'error' ? catalogError() : `<div class="category-hub">${categories().map(c => `<a href="#shop?category=${encodeURIComponent(c)}"><span>${categoryPhoto(c)}</span><strong>${esc(c)}</strong><small>${state.products.filter(p => p.category?.toLowerCase() === c.toLowerCase()).length} products</small></a>`).join('')}</div>`);
@@ -630,7 +656,10 @@ async function render() {
     case "shop":
     case "products":
     case "deals":
-      main.innerHTML = shop(params, page === "deals");
+      main.innerHTML = withPageAds(
+        params.get("category") ? "category" : "all",
+        shop(params, page === "deals"),
+      );
       break;
     case "offer": {
       const offer = (state.config.festivalOffers || []).find(
@@ -713,7 +742,7 @@ async function render() {
           ...state.products.filter((p) => !incoming.has(productKey(p))),
           ...data.products,
         ];
-        main.innerHTML = storeProfile(data, reviewData.reviews, params);
+        main.innerHTML = withPageAds("store", storeProfile(data, reviewData.reviews, params));
         document.title = data.seller.name + " | Axzen";
       } catch (error) {
         if (v !== viewNumber) return;
@@ -836,14 +865,16 @@ async function loadCatalog() {
   render();
   try {
     const [catalog, config] = await Promise.all([
-      api("/api/customer/catalog", { auth: false }),
-      api("/api/customer/app-config", { auth: false }).catch(() => ({
+      api("/api/customer/catalog", { auth: false, cache: "default" }),
+      api("/api/customer/app-config", { auth: false, cache: "default" }).catch(() => ({
         config: {},
       })),
     ]);
     if (!Array.isArray(catalog.products))
       throw new Error("Invalid catalog response.");
     state.products = normalizeCategories(catalog.products);
+    state.nextCursor = catalog.nextCursor || "";
+    state.hasMore = Boolean(catalog.hasMore && state.nextCursor);
     state.config = config.config || {};
     state.catalog = "ready";
     state.cart = reconcileCart(state.cart, state.products);
@@ -862,6 +893,24 @@ async function loadCatalog() {
     state.catalog = "error";
     state.error = e.message;
     render();
+  }
+}
+async function loadMoreCatalog() {
+  if (!state.hasMore || !state.nextCursor || state.catalogLoadingMore) return;
+  state.catalogLoadingMore = true;
+  try {
+    const catalog = await api(
+      `/api/customer/catalog?limit=40&cursor=${encodeURIComponent(state.nextCursor)}`,
+      { auth: false, cache: "default" },
+    );
+    const incoming = normalizeCategories(catalog.products || []);
+    const products = new Map(state.products.map((p) => [productKey(p), p]));
+    incoming.forEach((p) => products.set(productKey(p), p));
+    state.products = [...products.values()];
+    state.nextCursor = catalog.nextCursor || "";
+    state.hasMore = Boolean(catalog.hasMore && state.nextCursor);
+  } finally {
+    state.catalogLoadingMore = false;
   }
 }
 function saveCart(strict = false) {
@@ -1097,7 +1146,42 @@ function formError(form, error) {
     n.textContent = error.message || String(error);
   } else toast(error.message);
 }
+const recordedAdImpressions = new Set();
+function recordAdEvent(id, event) {
+  if (!id) return;
+  fetch(`${API}/api/customer/ads/${encodeURIComponent(id)}/event`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ event }),
+    keepalive: true,
+  }).catch(() => {});
+}
+const pageAdObserver = typeof globalThis.IntersectionObserver === "function"
+  ? new IntersectionObserver((entries) => entries.forEach((entry) => {
+    if (!entry.isIntersecting) return;
+    const id = entry.target.dataset.pageAdId;
+    if (!recordedAdImpressions.has(id)) {
+      recordedAdImpressions.add(id);
+      recordAdEvent(id, "impression");
+    }
+    pageAdObserver.unobserve(entry.target);
+  }), { threshold: 0.4 })
+  : { observe() {}, unobserve() {} };
+function enhanceCatalogView() {
+  document.querySelectorAll("[data-page-ad-id]:not([data-ad-observed])").forEach((node) => {
+    node.dataset.adObserved = "true";
+    pageAdObserver.observe(node);
+  });
+  const { page } = route();
+  if (!["shop", "products", "deals"].includes(page) || !state.hasMore) return;
+  const section = document.querySelector(".catalog-layout > section");
+  if (section && !section.querySelector('[data-action="more"]'))
+    section.insertAdjacentHTML("beforeend", '<div class="load-more"><button class="outline" data-action="more">Show more products</button></div>');
+}
+new MutationObserver(enhanceCatalogView).observe($("#main"), { childList: true, subtree: true });
 document.addEventListener("click", async (e) => {
+  const adLink = e.target.closest("a[data-page-ad-id]");
+  if (adLink) recordAdEvent(adLink.dataset.pageAdId, "click");
   const button = e.target.closest("[data-action]");
   if (!button) return;
   const action = button.dataset.action,
@@ -1181,6 +1265,8 @@ document.addEventListener("click", async (e) => {
         break;
       case "more":
         state.shown += 24;
+        if (state.hasMore && state.shown >= state.products.length - 8)
+          await loadMoreCatalog();
         render();
         break;
       case "image": {

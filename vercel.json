@@ -119,6 +119,12 @@
       ]
     },
     {
+      "source": "/assets/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800, stale-while-revalidate=2592000" }]
+    },
+    { "source": "/(.*).js", "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600, stale-while-revalidate=86400" }] },
+    { "source": "/(.*).css", "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600, stale-while-revalidate=86400" }] },
+    {
       "source": "/api/(.*)",
       "headers": [
         {
@@ -126,6 +132,10 @@
           "value": "no-store"
         }
       ]
+    },
+    {
+      "source": "/api/customer/catalog",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=5, s-maxage=60, stale-while-revalidate=300" }]
     }
   ]
 }

@@ -9,8 +9,33 @@ const { success } = require("../utils/apiResponse");
 const { uploadProductImages } = require("../utils/cloudinary");
 const { formatRupees, toPaise } = require("../utils/money");
 const { convertCatalogueFiles, grokConfigured } = require("../utils/grokCatalogue");
+const cache = require("../utils/cache");
 
 const allowedProductImageTypes = new Set(["image/jpeg", "image/png"]);
+
+function encodeCursor(product) {
+  if (!product) return "";
+  return Buffer.from(JSON.stringify({ updatedAt: product.updatedAt, id: product._id })).toString("base64url");
+}
+
+function decodeCursor(value) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(String(value), "base64url").toString("utf8"));
+    const updatedAt = new Date(parsed.updatedAt);
+    if (!parsed.id || Number.isNaN(updatedAt.getTime())) return null;
+    return { updatedAt, id: parsed.id };
+  } catch {
+    return null;
+  }
+}
+
+function optimizedCloudinaryUrl(value, width = 720) {
+  const url = String(value || "");
+  if (!/res\.cloudinary\.com\/.+\/image\/upload\//i.test(url)) return url;
+  if (/\/image\/upload\/(?:[^/]+,)*f_auto/i.test(url)) return url;
+  return url.replace("/image/upload/", `/image/upload/f_auto,q_auto,c_limit,w_${width},dpr_auto/`);
+}
 
 function normalizeFiles(value) {
   if (!value) return [];
@@ -39,30 +64,58 @@ function validateProductImages(files) {
 }
 
 const listProducts = asyncHandler(async (req, res) => {
-  const demoUsers = await require('../models/User').find({firebaseUid:'local-test-seller'}).select('_id').lean();
-  const active = await Seller.find({userId:{$nin:demoUsers.map(u=>u._id)},isActive:true,status:'active',approvalStatus:'approved',kycStatus:'approved'}).select('_id').lean();
-  const products = await Product.find({sellerId:{$in:active.map(s=>s._id)}, status:{$in:['active','approved']}}).sort({createdAt:-1}).limit(500).lean();
-  const config = await CustomerAppConfig.findOne({key:'default'}).select('festivalOffers').lean();
-  const ratings = await publishedProductRatings(products.map(p => p._id));
-  const offers = discounts(config?.festivalOffers);
+  const requestedLimit = Number.parseInt(req.query.limit, 10);
+  const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 40, 1), 100);
+  const cursor = decodeCursor(req.query.cursor);
+  const cacheKey = `catalog:v3:${limit}:${req.query.cursor || "first"}`;
+  const cached = await cache.getJson(cacheKey);
+  if (cached) {
+    res.set("Cache-Control", "public, max-age=5, s-maxage=60, stale-while-revalidate=300");
+    res.set("Server-Timing", "catalog-cache;dur=0");
+    success(res, { ...cached, cached: true });
+    return;
+  }
 
+  const startedAt = performance.now();
+  const [demoUsers, active, config] = await Promise.all([
+    require("../models/User").find({ firebaseUid: "local-test-seller" }).select("_id").lean(),
+    Seller.find({ isActive: true, status: "active", approvalStatus: "approved", kycStatus: "approved" }).select("_id userId").lean(),
+    CustomerAppConfig.findOne({ key: "default" }).select("festivalOffers").lean(),
+  ]);
+  const demoUserIds = new Set(demoUsers.map((user) => String(user._id)));
+  const activeSellerIds = active.filter((seller) => !demoUserIds.has(String(seller.userId))).map((seller) => seller._id);
+  const filter = { sellerId: { $in: activeSellerIds }, status: { $in: ["active", "approved"] } };
+  if (cursor) {
+    filter.$or = [
+      { updatedAt: { $lt: cursor.updatedAt } },
+      { updatedAt: cursor.updatedAt, _id: { $lt: cursor.id } },
+    ];
+  }
+  const rows = await Product.find(filter)
+    .select("sku title category sellerId sellerName description mrpPaise pricePaise unitLabel ratingAverage ratingCount stock images createdAt updatedAt")
+    .sort({ updatedAt: -1, _id: -1 })
+    .limit(limit + 1)
+    .lean();
+  const hasMore = rows.length > limit;
+  const products = rows.slice(0, limit);
+  const [ratings] = await Promise.all([publishedProductRatings(products.map((product) => product._id))]);
+  const offers = discounts(config?.festivalOffers);
   const sellerIds = [...new Set(products.map((product) => String(product.sellerId)).filter(Boolean))];
-  const sellers = sellerIds.length
-    ? await Seller.find({ _id: { $in: sellerIds }, isActive: true, status: "active" })
-        .select("_id businessName category city fullName businessType email phone createdAt codEnabled onlinePaymentEnabled freeDeliveryEnabled freeDeliveryMinOrderPaise storeDetails")
-        .lean()
-    : [];
-  const sellerSettings = new Map(sellers.map((seller) => [String(seller._id), seller]));
-  const followerRows = sellerIds.length
-    ? await Follow.aggregate([
-        { $match: { sellerId: { $in: sellers.map((seller) => seller._id) } } },
-        { $group: { _id: "$sellerId", followers: { $sum: 1 } } },
+  const [sellers, followerRows] = sellerIds.length
+    ? await Promise.all([
+        Seller.find({ _id: { $in: sellerIds }, isActive: true, status: "active" })
+          .select("_id businessName category city fullName businessType email phone createdAt codEnabled onlinePaymentEnabled freeDeliveryEnabled freeDeliveryMinOrderPaise storeDetails")
+          .lean(),
+        Follow.aggregate([
+          { $match: { sellerId: { $in: products.map((product) => product.sellerId).filter(Boolean) } } },
+          { $group: { _id: "$sellerId", followers: { $sum: 1 } } },
+        ]),
       ])
-    : [];
+    : [[], []];
+  const sellerSettings = new Map(sellers.map((seller) => [String(seller._id), seller]));
   const followerCounts = new Map(followerRows.map((row) => [String(row._id), row.followers]));
 
-  success(res, {
-    products: products.filter((product) => sellerSettings.has(String(product.sellerId))).map((product) => {
+  const publicProducts = products.filter((product) => sellerSettings.has(String(product.sellerId))).map((product) => {
       const settings = sellerSettings.get(String(product.sellerId)) || {};
       return {
         id: product._id,
@@ -78,12 +131,13 @@ const listProducts = asyncHandler(async (req, res) => {
         pricePaise: Math.round(product.pricePaise*(100-(offers.get(String(product._id)) || 0))/100),
         createdAt: product.createdAt,
         verifiedSeller: true,
-        price: formatRupees(product.pricePaise),
+        price: formatRupees(Math.round(product.pricePaise * (100 - (offers.get(String(product._id)) || 0)) / 100)),
         unitLabel: product.unitLabel || "1 pc",
         ...(ratings.get(String(product._id)) || { ratingAverage: 0, ratingCount: 0 }),
         stock: product.stock,
         images: product.images || [],
-        image: product.images?.[0] || "",
+        image: optimizedCloudinaryUrl(product.images?.[0] || "", 720),
+        thumbnail: optimizedCloudinaryUrl(product.images?.[0] || "", 480),
         sellerCategory: settings.category || "General",
         sellerCity: settings.city || "",
         sellerFullName: settings.fullName || "",
@@ -98,8 +152,16 @@ const listProducts = asyncHandler(async (req, res) => {
         freeDeliveryEnabled: settings.freeDeliveryEnabled === true,
         freeDeliveryMinOrderPaise: Number(settings.freeDeliveryMinOrderPaise) || 0,
       };
-    }),
-  });
+    });
+  const payload = {
+    products: publicProducts,
+    hasMore,
+    nextCursor: hasMore ? encodeCursor(products[products.length - 1]) : "",
+  };
+  await cache.setJson(cacheKey, payload, 60);
+  res.set("Cache-Control", "public, max-age=5, s-maxage=60, stale-while-revalidate=300");
+  res.set("Server-Timing", `catalog-db;dur=${(performance.now() - startedAt).toFixed(1)}`);
+  success(res, payload);
 });
 
 const listSellerProducts = asyncHandler(async (req, res) => {
@@ -237,4 +299,5 @@ module.exports = {
   listSellerProducts,
   updateSellerInventory,
   parseSellerCatalogue,
+  _catalogInternals: { encodeCursor, decodeCursor, optimizedCloudinaryUrl },
 };

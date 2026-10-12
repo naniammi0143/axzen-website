@@ -15,18 +15,31 @@ import {
   const liveOrigin = "https://www.axzen.in";
   const native =
     document.documentElement.classList.contains("ax-native-app") || Boolean(window.Capacitor?.isNativePlatform?.());
-  const localPreview =
-    /^(localhost|127\.0\.0\.1)$/i.test(location.hostname) && !["3000", ""].includes(String(location.port || "80"));
+  const localPreview = /^(localhost|127\.0\.0\.1)$/i.test(location.hostname);
   if ((!native && !localPreview) || window.__axzenNativeBridge) return;
   const originalFetch = window.fetch.bind(window);
   window.__axzenNativeBridge = true;
-  window.fetch = (input, init) => {
-    if (typeof input === "string" && input.startsWith("/api/")) {
+  window.fetch = async (input, init) => {
+    if (typeof input !== "string" || !input.startsWith("/api/")) {
+      return originalFetch(input, init);
+    }
+    if (localPreview && location.port !== "3000") {
+      try {
+        const localResponse = await originalFetch(`http://localhost:3000${input}`, init);
+        if (localResponse.ok || ![404, 502, 503].includes(localResponse.status)) return localResponse;
+      } catch {
+        // Fall through to live API when local Node server is offline.
+      }
       return originalFetch(liveOrigin + input, init);
     }
+    if (native) return originalFetch(liveOrigin + input, init);
     return originalFetch(input, init);
   };
 })();
+
+function isLocalHostPreview() {
+  return /^(localhost|127\.0\.0\.1)$/i.test(location.hostname);
+}
 
 function isNativeApp() {
   return Boolean(window.Capacitor?.isNativePlatform?.() || document.documentElement.classList.contains("ax-native-app"));
@@ -85,6 +98,11 @@ let sellerOrderPollTimer = null;
 let sellerSocket = null;
 let sellerNotificationAudio = null;
 let customerAppConfig = {};
+let catalogNextCursor = "";
+let catalogHasMore = false;
+let catalogPageLoading = false;
+let storefrontRenderLimit = 8;
+let catalogScrollObserver = null;
 let storeRailTimer = null;
 let customerNotificationTimer = null;
 let sellerFollowerCount = 0;
@@ -660,7 +678,7 @@ function productSoldMeta(product = {}) {
 }
 
 function productImage(product = {}) {
-  return product.image || product.images?.[0] || "";
+  return product.thumbnail || product.image || product.images?.[0] || "";
 }
 
 function productImgTag(src, alt, extra = "") {
@@ -1944,6 +1962,8 @@ function openCustomerBrowse() {
   closeCustomerTrackOrderView({ clearHash: true });
   closeCustomerCartOverlay();
   document.body.classList.add("ax-shop-mode");
+  storefrontRenderLimit = Math.max(storefrontRenderLimit, 24);
+  renderStorefrontProducts(storefrontProductsCache);
   setCustomerSubpageMode(false);
   setAppNavActive("home");
   history.replaceState({ customerRoute: "browse", value: "1" }, "", `${location.pathname}${location.search}#products`);
@@ -2395,7 +2415,55 @@ function renderCustomerCategories(products = storefrontProductsCache) {
 function renderStorefrontProducts(products = storefrontProductsCache) {
   const grid = document.querySelector("[data-customer-main] .commerce-products") || document.querySelector(".commerce-products");
   if (!grid) return;
-  grid.innerHTML = products.length ? products.slice(0, 8).map(renderStorefrontProduct).join("") : `<p class="order-invoice-empty">No products found.</p>`;
+  document.querySelector("[data-home-inline-ad]")?.remove();
+  const inlineAd = pageAdMarkup("home", "inline", "ax-page-ad-inline");
+  if (inlineAd && grid.closest(".ax-featured-grid")) grid.insertAdjacentHTML("beforebegin", `<div data-home-inline-ad>${inlineAd}</div>`);
+  const browseMode = document.body.classList.contains("ax-shop-mode");
+  const visibleLimit = browseMode ? storefrontRenderLimit : 8;
+  grid.innerHTML = products.length ? products.slice(0, visibleLimit).map(renderStorefrontProduct).join("") : `<p class="order-invoice-empty">No products found.</p>`;
+  grid.parentElement?.querySelector("[data-catalog-sentinel]")?.remove();
+  if (browseMode && (products.length > visibleLimit || catalogHasMore)) {
+    grid.insertAdjacentHTML("afterend", `<button class="catalog-load-more" type="button" data-catalog-sentinel>${catalogPageLoading ? "Loading more products..." : "Load more products"}</button>`);
+    observeCatalogSentinel();
+  }
+}
+
+function observeCatalogSentinel() {
+  catalogScrollObserver?.disconnect();
+  const sentinel = document.querySelector("[data-catalog-sentinel]");
+  if (!sentinel || !("IntersectionObserver" in window)) return;
+  catalogScrollObserver = new IntersectionObserver((entries) => {
+    if (entries.some((entry) => entry.isIntersecting)) loadMoreCatalogProducts();
+  }, { rootMargin: "500px 0px" });
+  catalogScrollObserver.observe(sentinel);
+}
+
+async function loadMoreCatalogProducts() {
+  if (catalogPageLoading || !document.body.classList.contains("ax-shop-mode")) return;
+  if (storefrontRenderLimit < storefrontProductsCache.length) {
+    storefrontRenderLimit += 24;
+    renderStorefrontProducts(storefrontProductsCache);
+    return;
+  }
+  if (!catalogHasMore || !catalogNextCursor) return;
+  catalogPageLoading = true;
+  renderStorefrontProducts(storefrontProductsCache);
+  try {
+    const page = await fetchCatalogPayload(catalogNextCursor);
+    if (!page?.products?.length) {
+      catalogHasMore = false;
+      return;
+    }
+    mergeStorefrontProducts(page.products.map((product, index) => decorateCatalogProduct(product, storefrontProductsCache.length + index)));
+    catalogNextCursor = page.nextCursor || "";
+    catalogHasMore = page.hasMore === true && Boolean(catalogNextCursor);
+    storefrontRenderLimit += 24;
+  } catch (error) {
+    console.warn(error.message || "Unable to load more products.");
+  } finally {
+    catalogPageLoading = false;
+    renderStorefrontProducts(storefrontProductsCache);
+  }
 }
 
 function resetCustomerMain() {
@@ -2433,6 +2501,74 @@ function closeCustomerProductModal() {
 
 function festivalOffers() {
   return Array.isArray(customerAppConfig.festivalOffers) ? customerAppConfig.festivalOffers : [];
+}
+
+function pageAdsFor(page, placement) {
+  const now = Date.now();
+  return (Array.isArray(customerAppConfig.pageAds) ? customerAppConfig.pageAds : [])
+    .filter((ad) => {
+      const startsAt = ad?.startsAt ? new Date(ad.startsAt).getTime() : 0;
+      const endsAt = ad?.endsAt ? new Date(ad.endsAt).getTime() : 0;
+      return ad && ad.isActive !== false && (ad.page === "all" || ad.page === page) && ad.placement === placement && ad.imageUrl && (!startsAt || startsAt <= now) && (!endsAt || endsAt > now);
+    })
+    .sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0));
+}
+
+function safePageAdLink(value = "") {
+  const link = String(value || "").trim();
+  return /^(https?:\/\/|\/|#)/i.test(link) ? link : "";
+}
+
+function pageAdMarkup(page, placement, className = "") {
+  const ad = pageAdsFor(page, placement)[0];
+  if (!ad) return "";
+  const link = safePageAdLink(ad.linkUrl);
+  const content = `<img src="${escapeHtml(ad.imageUrl)}" alt="${escapeHtml(ad.title || "Advertisement")}" loading="${placement === "hero" ? "eager" : "lazy"}" decoding="async">`;
+  return link
+    ? `<a class="ax-page-ad ${escapeHtml(className)}" data-page-ad-id="${escapeHtml(ad.id || "")}" href="${escapeHtml(link)}" ${/^https?:\/\//i.test(link) ? 'target="_blank" rel="noopener noreferrer"' : ""}>${content}</a>`
+    : `<div class="ax-page-ad ${escapeHtml(className)}" data-page-ad-id="${escapeHtml(ad.id || "")}">${content}</div>`;
+}
+
+const viewedPageAds = new Set();
+
+function trackPageAd(adId, event) {
+  if (!adId) return;
+  fetch(`/api/customer/ads/${encodeURIComponent(adId)}/event`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ event }),
+    keepalive: true,
+  }).catch(() => {});
+}
+
+function observePageAds() {
+  const nodes = [...document.querySelectorAll("[data-page-ad-id]")].filter((node) => !node.dataset.adObserved);
+  if (!nodes.length) return;
+  if (!("IntersectionObserver" in window)) {
+    nodes.forEach((node) => {
+      node.dataset.adObserved = "true";
+      if (!viewedPageAds.has(node.dataset.pageAdId)) {
+        viewedPageAds.add(node.dataset.pageAdId);
+        trackPageAd(node.dataset.pageAdId, "impression");
+      }
+    });
+    return;
+  }
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting || entry.intersectionRatio < 0.35) return;
+      const id = entry.target.dataset.pageAdId;
+      if (!viewedPageAds.has(id)) {
+        viewedPageAds.add(id);
+        trackPageAd(id, "impression");
+      }
+      observer.unobserve(entry.target);
+    });
+  }, { threshold: [0.35] });
+  nodes.forEach((node) => {
+    node.dataset.adObserved = "true";
+    observer.observe(node);
+  });
 }
 
 function offerImageList(offer = {}) {
@@ -2598,7 +2734,8 @@ function renderCustomerSaleBanner() {
   const banner = document.querySelector(".customer-sale-banner");
   if (!banner) return;
   const ads = offerAdImages();
-  const adSlides = offerAdSlides();
+  const pageAdSlides = pageAdsFor("home", "hero").map((ad) => ({ ...ad, pageAd: true }));
+  const adSlides = pageAdSlides.length ? pageAdSlides : offerAdSlides();
   if (adSlides.length) {
     banner.classList.add("ax-hero", "ax-offer-box");
     banner.innerHTML = `
@@ -2606,8 +2743,8 @@ function renderCustomerSaleBanner() {
         <div class="ax-offer-track" data-offer-track>
           ${adSlides
             .map(
-              (slide, index) => `<article class="ax-offer-slide" data-offer-slide ${String(slide.id || "").startsWith("legacy-") ? "" : `data-open-offer="${escapeHtml(slide.id || "")}"`} ${slide.linkUrl ? `data-offer-link="${escapeHtml(slide.linkUrl)}"` : ""}>
-                <img src="${escapeHtml(slide.imageUrl)}" alt="${escapeHtml(slide.title || `Shop offer ${index + 1}`)}">
+              (slide, index) => `<article class="ax-offer-slide" data-offer-slide ${slide.pageAd ? `data-page-ad-id="${escapeHtml(slide.id || "")}"` : ""} ${slide.pageAd || String(slide.id || "").startsWith("legacy-") ? "" : `data-open-offer="${escapeHtml(slide.id || "")}"`} ${slide.pageAd && safePageAdLink(slide.linkUrl) ? `data-page-ad-link="${escapeHtml(safePageAdLink(slide.linkUrl))}"` : slide.linkUrl ? `data-offer-link="${escapeHtml(slide.linkUrl)}"` : ""}>
+                <img src="${escapeHtml(slide.imageUrl)}" alt="${escapeHtml(slide.title || `Shop offer ${index + 1}`)}" loading="${index ? "lazy" : "eager"}" decoding="async" ${index ? "" : 'fetchpriority="high"'}>
               </article>`
             )
             .join("")}
@@ -2615,6 +2752,7 @@ function renderCustomerSaleBanner() {
       </div>
     `;
     startOfferSlider(banner);
+    observePageAds();
     return;
   }
   const featured = storefrontProductsCache[0] || {};
@@ -2665,6 +2803,13 @@ function renderCustomerSaleBanner() {
 function renderHomeSideBanner(products = storefrontProductsCache) {
   const banner = document.querySelector("[data-home-side-banner]");
   if (!banner) return;
+  const configuredAd = pageAdMarkup("home", "sidebar", "ax-page-ad-side");
+  if (configuredAd) {
+    banner.innerHTML = configuredAd;
+    banner.classList.add("has-page-ad");
+    return;
+  }
+  banner.classList.remove("has-page-ad");
   const pick = [...products].sort((a, b) => Number(b.pricePaise || 0) - Number(a.pricePaise || 0))[0] || products[0];
   if (!pick) return;
   banner.innerHTML = `
@@ -2915,6 +3060,7 @@ async function openCustomerSellerPage(sellerId, options = {}) {
         <strong data-store-title>Seller Store</strong>
         <button type="button" class="ax-vstore-iconbtn" data-share-seller="${escapeHtml(seller.id)}" aria-label="Share store">${storeLineIcon("nodes")}</button>
       </div>
+      ${pageAdMarkup("store", "hero", "ax-page-ad-hero")}
       <div class="ax-vstore-hero">
         <div class="ax-vstore-profile">
           <div class="ax-vstore-avatar">${avatar}</div>
@@ -2951,6 +3097,7 @@ async function openCustomerSellerPage(sellerId, options = {}) {
       </nav>
       <div class="ax-vstore-body">
           <div data-store-panel="home">
+            ${pageAdMarkup("store", "inline", "ax-page-ad-inline")}
             <section class="ax-vstore-featured">
               <div class="ax-vstore-head"><h3>Featured Products</h3><button type="button" data-seller-store-tab="all">View all ${storeLineIcon("chevron")}</button></div>
               <div class="ax-vstore-products">${featuredProducts.length ? featuredProducts.map((product) => renderStoreAppProductCard(product)).join("") : `<p class="order-invoice-empty">This store has no products yet.</p>`}</div>
@@ -3043,6 +3190,7 @@ async function openCustomerSellerPage(sellerId, options = {}) {
       </div>
     </section>
   `;
+  observePageAds();
   const page = target.querySelector(".ax-vstore");
   page?.classList.add("ax-vstore-enter");
   if (initialTab !== "home") activateSellerStoreTab(page, initialTab, { animate: false });
@@ -3107,6 +3255,7 @@ async function openCustomerFollowsView(options = {}) {
       </div>
     </section>
   `;
+  observePageAds();
   target.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -3119,6 +3268,7 @@ function openCustomerCategoryPage(category, options = {}) {
   target.innerHTML = `
     <section class="customer-seller-page customer-category-page">
       <nav class="customer-breadcrumb"><button type="button" data-reset-customer-home>Home</button><span>></span><strong>${escapeHtml(category)}</strong></nav>
+      ${pageAdMarkup("category", "hero", "ax-page-ad-hero")}
       <header class="customer-category-page-hero">
         <div>
           <p class="eyebrow">Category</p>
@@ -3127,6 +3277,7 @@ function openCustomerCategoryPage(category, options = {}) {
         </div>
         <button type="button" data-reset-customer-home>Back to home</button>
       </header>
+      ${pageAdMarkup("category", "inline", "ax-page-ad-inline")}
       <div class="commerce-products">${products.map(renderStorefrontProduct).join("")}</div>
     </section>
   `;
@@ -3566,12 +3717,21 @@ async function readJsonSafe(response) {
   }
 }
 
-async function fetchCatalogPayload() {
-  const urls = ["/api/customer/catalog?limit=500"];
-  if (!/axzen\.in$/i.test(location.hostname)) urls.push("https://www.axzen.in/api/customer/catalog?limit=500");
+async function fetchCatalogPayload(cursor = "") {
+  if (!cursor && window.__axzenCatalogPromise) {
+    const bootResult = await window.__axzenCatalogPromise.catch(() => null);
+    if (bootResult?.products?.length) return bootResult;
+  }
+  if (!cursor && Array.isArray(window.__axzenBootCatalog) && window.__axzenBootCatalog.length) {
+    return { products: window.__axzenBootCatalog, nextCursor: window.__axzenBootNextCursor || "", hasMore: window.__axzenBootHasMore === true };
+  }
+  const query = new URLSearchParams({ limit: "40" });
+  if (cursor) query.set("cursor", cursor);
+  const urls = [`/api/customer/catalog?${query}`];
+  if (!/axzen\.in$/i.test(location.hostname)) urls.push(`https://www.axzen.in/api/customer/catalog?${query}`);
   for (const url of urls) {
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
       const result = await readJsonSafe(response);
       if (response.ok && Array.isArray(result.products) && result.products.length) return result;
     } catch (error) {
@@ -3586,7 +3746,7 @@ async function fetchAppConfigPayload() {
   if (!/axzen\.in$/i.test(location.hostname)) urls.push("https://www.axzen.in/api/customer/app-config");
   for (const url of urls) {
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
       const result = await readJsonSafe(response);
       if (response.ok) return result.config || {};
     } catch {
@@ -3604,6 +3764,8 @@ async function loadStorefrontCatalog() {
     const [config, catalog] = await Promise.all([fetchAppConfigPayload(), fetchCatalogPayload()]);
     customerAppConfig = config || {};
     if (!catalog?.products?.length) throw new Error("Catalog is empty.");
+    catalogNextCursor = catalog.nextCursor || "";
+    catalogHasMore = catalog.hasMore === true && Boolean(catalogNextCursor);
     applyStorefrontCatalog(catalog.products);
     restoreCustomerRoute();
   } catch (error) {
@@ -5192,18 +5354,71 @@ async function createPhoneSession(role, phone, firebaseToken) {
 }
 
 async function createPasswordSession(role, phone, password) {
-  const response = await fetch("/api/auth/password-login", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ role, phone, password }),
-  });
-  const result = await response.json();
-  if (!response.ok) {
-    throw new Error(result.message || "Unable to login with password.");
+  try {
+    const response = await fetch("/api/auth/password-login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ role, phone, password }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(result.message || "Unable to login with password.");
+    }
+    await applyAuthSession(result);
+    return;
+  } catch (error) {
+    if (isLocalHostPreview() && role === "seller" && String(password || "").length >= 8) {
+      openLocalSellerPasswordPreview(phone);
+      return;
+    }
+    throw error;
   }
-  await applyAuthSession(result);
+}
+
+function openLocalSellerPasswordPreview(phone) {
+  const payload = {
+    user: {
+      id: "local-seller",
+      name: "Local Seller",
+      phone,
+      role: "seller",
+      seller: {
+        id: "local-seller",
+        businessName: "Local Preview Store",
+        approvalStatus: "approved",
+        kycStatus: "approved",
+        isActive: true,
+        status: "active",
+        phone,
+      },
+    },
+    dashboard: {
+      title: "Local seller workspace",
+      summary: "Password login opened locally for preview. API sync needs the live/server connection.",
+      metrics: [
+        ["Products", "Preview"],
+        ["Orders", "0"],
+        ["Offers", "0"],
+        ["Status", "Local"],
+      ],
+      panels: [
+        {
+          title: "Local preview",
+          items: [
+            ["Password login", "Opened without OTP"],
+            ["Catalogue", "Upload Catalogue ready in Products"],
+          ],
+        },
+      ],
+    },
+  };
+  localStorage.setItem("axzenToken", "local-preview-token");
+  localStorage.setItem("axzenRole", "seller");
+  localStorage.setItem("axzenPhone", phone);
+  localStorage.setItem("axzenSellerStatus", JSON.stringify(payload.user.seller));
+  renderDashboard(payload);
 }
 
 phoneForms.forEach((form) => {
@@ -5585,6 +5800,12 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (event.target.closest("[data-catalog-sentinel]")) {
+    event.preventDefault();
+    loadMoreCatalogProducts();
+    return;
+  }
+
   const appNav = event.target.closest("[data-app-nav]");
   if (appNav && appNav.closest(".ax-app-nav, .ax-account-overlay")) {
     event.preventDefault();
@@ -5875,11 +6096,22 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const linkedPageAd = event.target.closest("a[data-page-ad-id]");
+  if (linkedPageAd) trackPageAd(linkedPageAd.dataset.pageAdId, "click");
+
   const openOffer = event.target.closest("[data-open-offer]");
   if (openOffer) {
     event.preventDefault();
     const opened = openFestivalOffer(openOffer.dataset.openOffer);
     if (!opened && openOffer.dataset.offerLink) window.location.href = openOffer.dataset.offerLink;
+    return;
+  }
+
+  const pageAd = event.target.closest("[data-page-ad-link]");
+  if (pageAd) {
+    const link = safePageAdLink(pageAd.dataset.pageAdLink);
+    trackPageAd(pageAd.dataset.pageAdId, "click");
+    if (link) window.location.href = link;
     return;
   }
 

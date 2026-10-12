@@ -18,14 +18,18 @@ const {
   listSellers,
   listSettlements,
   paymentCommissionReport,
+  performanceDiagnostics,
   rejectProduct,
   rejectSeller,
   updateCustomerAppConfig,
   uploadCustomerAppAds,
   deleteCustomerAppAd,
   createFestivalOffer,
+  createPageAd,
   updateFestivalOffer,
   deleteFestivalOffer,
+  updatePageAd,
+  deletePageAd,
   reportCustomers,
   reportCompliance,
   reportPayments,
@@ -56,6 +60,7 @@ router.get('/reviews',authorizeAdminAccess('customerapp'),require('../controller
 router.patch('/reviews/:id',authorizeAdminAccess('customerapp'),require('../controllers/storeController').moderate);
 
 router.get("/overview", authorizeAdminAccess("dashboard"), adminOverview);
+router.get("/performance", authorizeAdminAccess("dashboard"), performanceDiagnostics);
 
 router.get("/sellers/:id/documents/:documentId",authorizeAdminAccess("sellers"),require("../controllers/sellerController").downloadKycDocument);
 router.post("/sellers", authorize("admin", "superadmin"), authorizeAdminAccess("sellers"), require("../controllers/sellerAccessController").createStore);
@@ -83,6 +88,9 @@ router.get("/customer-app", authorizeAdminAccess("customerapp"), getCustomerAppC
 router.patch("/customer-app", authorizeAdminAccess("customerapp"), updateCustomerAppConfig);
 router.post("/customer-app/ads", authorizeAdminAccess("customerapp"), multipartForm({ maxBytes: 40 * 1024 * 1024 }), uploadCustomerAppAds);
 router.delete("/customer-app/ads", authorizeAdminAccess("customerapp"), deleteCustomerAppAd);
+router.post("/customer-app/page-ads", authorizeAdminAccess("customerapp"), createPageAd);
+router.patch("/customer-app/page-ads/:id", authorizeAdminAccess("customerapp"), updatePageAd);
+router.delete("/customer-app/page-ads/:id", authorizeAdminAccess("customerapp"), deletePageAd);
 router.post("/customer-app/offers", authorizeAdminAccess("customerapp"), createFestivalOffer);
 router.patch("/customer-app/offers/:id", authorizeAdminAccess("customerapp"), updateFestivalOffer);
 router.delete("/customer-app/offers/:id", authorizeAdminAccess("customerapp"), deleteFestivalOffer);

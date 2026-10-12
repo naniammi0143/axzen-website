@@ -20,7 +20,7 @@
     const existing = document.querySelector("[data-customer-product-modal]");
     if (existing) existing.remove();
     const title = product.title || "Product";
-    const image = product.image || product.images?.[0] || "";
+    const image = product.thumbnail || product.image || product.images?.[0] || "";
     const price = product.price || "";
     document.body.insertAdjacentHTML(
       "beforeend",
@@ -54,13 +54,13 @@
   });
 })();
 
-(async function bootCustomerCatalog() {
+window.__axzenCatalogPromise = (async function bootCustomerCatalog() {
   const grid = document.querySelector("[data-customer-main] .commerce-products, .commerce-products");
-  if (!grid) return;
+  if (!grid) return null;
 
-  const urls = ["/api/customer/catalog?limit=500"];
+  const urls = ["/api/customer/catalog?limit=40"];
   if (!/axzen\.in$/i.test(location.hostname)) {
-    urls.push("https://www.axzen.in/api/customer/catalog?limit=500");
+    urls.push("https://www.axzen.in/api/customer/catalog?limit=40");
   }
 
   const escape = (value) =>
@@ -72,19 +72,21 @@
 
   for (const url of urls) {
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
       const result = await response.json();
       if (!response.ok || !Array.isArray(result.products) || !result.products.length) continue;
       window.__axzenBootCatalog = result.products;
-      if (grid.querySelector("[data-product-card]")) return;
+      window.__axzenBootNextCursor = result.nextCursor || "";
+      window.__axzenBootHasMore = result.hasMore === true;
+      if (grid.querySelector("[data-product-card]")) return result;
       grid.innerHTML = result.products
         .slice(0, 8)
-        .map((product) => {
+        .map((product, index) => {
           const title = product.title || "Product";
-          const image = product.image || product.images?.[0] || "";
+          const image = product.thumbnail || product.image || product.images?.[0] || "";
           const price = product.price || "";
           return `<article class="commerce-product ax-product-card" data-product-card="${escape(product.id)}" style="cursor:pointer">
-            <div class="commerce-product-media">${image ? `<img class="commerce-product-image commerce-product-photo" src="${escape(image)}" alt="${escape(title)}">` : `<div class="commerce-product-image">${escape(product.category || "Product")}</div>`}</div>
+            <div class="commerce-product-media">${image ? `<img class="commerce-product-image commerce-product-photo" src="${escape(image)}" alt="${escape(title)}" loading="${index < 4 ? "eager" : "lazy"}" decoding="async" ${index < 2 ? 'fetchpriority="high"' : ""}>` : `<div class="commerce-product-image">${escape(product.category || "Product")}</div>`}</div>
             <div class="commerce-product-body">
               <p class="commerce-product-category">${escape(product.category || "")}</p>
               <h3>${escape(title)}</h3>
@@ -93,9 +95,10 @@
           </article>`;
         })
         .join("");
-      return;
+      return result;
     } catch {
       // Try the next catalog origin.
     }
   }
+  return null;
 })();
