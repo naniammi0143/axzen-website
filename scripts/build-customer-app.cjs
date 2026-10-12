@@ -15,9 +15,10 @@ async function build() {
   if (firebasePath) {
     const data = JSON.parse(fs.readFileSync(firebasePath, 'utf8'));
     if (data.project_info?.project_id !== 'axzen-infotech' || !data.client?.some(c => c.client_info?.android_client_info?.package_name === config.appId)) {
-      throw new Error('Firebase config must match axzen-infotech / in.axzen.customer.');
+      throw new Error(`Firebase config must match axzen-infotech / ${config.appId}.`);
     }
-    config.includePlugins.push('@capacitor-firebase/authentication');
+    if (!config.includePlugins.includes('@capacitor-firebase/authentication'))
+      config.includePlugins.push('@capacitor-firebase/authentication');
   }
   // Keep the checked-in default unchanged after generating the local project.
   const original = fs.readFileSync('capacitor.config.json');

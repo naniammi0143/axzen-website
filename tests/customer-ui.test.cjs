@@ -154,6 +154,26 @@ test("catalog uses real data, normalizes categories and hides invented ratings",
     app.close();
   }
 });
+test("customer login offers OTP and password, and account exposes password setup", async () => {
+  const guest = await setup();
+  try {
+    await guest.go("#account");
+    guest.w.document.querySelector('[data-action="login"]').click();
+    await tick();
+    guest.w.document.querySelector('[data-action="use-password"]').click();
+    assert.ok(guest.w.document.querySelector("#customer-password-login-form"));
+  } finally {
+    guest.close();
+  }
+  const signedIn = await setup({ signedIn: true });
+  try {
+    await signedIn.go("#account");
+    signedIn.w.document.querySelector('[data-action="set-password"]').click();
+    assert.ok(signedIn.w.document.querySelector("#customer-password-form"));
+  } finally {
+    signedIn.close();
+  }
+});
 test("home keeps polished offer boxes visible when no offers are configured", async () => {
   const app = await setup();
   try {

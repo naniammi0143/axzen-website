@@ -5332,27 +5332,6 @@ async function acceptPortalSession(result) {
   }
 }
 
-async function createPhoneSession(role, phone, firebaseToken) {
-  const response = await fetch("/api/auth/phone-login", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      role,
-      phone,
-      firebaseToken,
-    }),
-  });
-  const result = await response.json();
-
-  if (!response.ok) {
-    throw new Error(result.message || "Unable to create login session.");
-  }
-
-  await applyAuthSession(result);
-}
-
 async function createPasswordSession(role, phone, password) {
   try {
     const response = await fetch("/api/auth/password-login", {
@@ -5366,7 +5345,7 @@ async function createPasswordSession(role, phone, password) {
     if (!response.ok) {
       throw new Error(result.message || "Unable to login with password.");
     }
-    await applyAuthSession(result);
+    await acceptPortalSession(result);
     return;
   } catch (error) {
     if (isLocalHostPreview() && role === "seller" && String(password || "").length >= 8) {

@@ -549,7 +549,7 @@ function accountMenu(active) {
     )
     .join(
       "",
-    )}<button data-action="logout">${icon("logout")}Sign out</button></nav>`;
+    )}<button data-action="set-password">${icon("shield")}Set password</button><button data-action="logout">${icon("logout")}Sign out</button></nav>`;
 }
 function account() {
   return `${pageTitle(`Hello, ${state.user.name?.split(" ")[0] || "there"}.`, "Your shopping, in one place.")}<div class="account-layout">${accountMenu("account")}<div><div class="account-grid">${[
@@ -986,6 +986,23 @@ function login() {
     "Welcome to Axzen",
     `<p class="dialog-copy">Your next favourite find is waiting. Sign in with a one-time code.</p><form class="login-form" id="phone-form"><label class="field">Mobile number<input name="phone" type="tel" inputmode="tel" autocomplete="tel-national" required pattern="[6-9][0-9]{9}" maxlength="10" placeholder="10-digit Indian mobile number"></label><button class="primary">Send OTP</button><div class="form-error" role="alert"></div></form><div id="axzen-customer-recaptcha"></div><p class="dialog-copy">We use your number to secure your account. <a href="/privacy.html">Privacy policy</a></p>`,
   );
+  $("#dialog .dialog-copy")?.insertAdjacentHTML(
+    "afterend",
+    '<div class="login-methods"><button type="button" class="text-button" data-action="login">Mobile OTP</button><button type="button" class="text-button" data-action="use-password">Use password</button></div>',
+  );
+}
+function passwordLoginDialog() {
+  state.loginReturn = location.hash || "#account";
+  showDialog(
+    "Sign in with password",
+    '<p class="dialog-copy">Use the password you set after verifying your mobile number.</p><form class="login-form" id="customer-password-login-form"><label class="field">Mobile number<input name="phone" type="tel" inputmode="tel" autocomplete="tel-national" required pattern="[6-9][0-9]{9}" maxlength="10" placeholder="10-digit Indian mobile number"></label><label class="field">Password<input name="password" type="password" autocomplete="current-password" minlength="10" maxlength="128" required></label><button class="primary">Sign in</button><button type="button" class="text-button" data-action="login">Use mobile OTP</button><div class="form-error" role="alert"></div></form>',
+  );
+}
+function passwordSetupDialog() {
+  showDialog(
+    "Set your password",
+    '<p class="dialog-copy">Use 10–128 characters. If you signed in with OTP in the last 10 minutes, your current password is not required.</p><form class="login-form" id="customer-password-form"><label class="field">Current password (if changing)<input name="currentPassword" type="password" autocomplete="current-password" maxlength="128"></label><label class="field">New password<input name="password" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label><label class="field">Confirm new password<input name="confirmPassword" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label><button class="primary">Save password</button><div class="form-error" role="alert"></div></form>',
+  );
 }
 async function loadFirebase() {
   if (firebaseApi) return firebaseApi;
@@ -1005,6 +1022,9 @@ async function finishLogin(firebaseToken) {
     auth: false,
     body: { role: "customer", firebaseToken },
   });
+  await acceptCustomerSession(r);
+}
+async function acceptCustomerSession(r) {
   state.token = r.token;
   storage.set("axzen.customer.session", { token: r.token });
   const guestCart = storage.get("axzen.guest.cart", []),
@@ -1223,6 +1243,12 @@ document.addEventListener("click", async (e) => {
         break;
       case "login":
         login();
+        break;
+      case "use-password":
+        passwordLoginDialog();
+        break;
+      case "set-password":
+        passwordSetupDialog();
         break;
       case "logout": {
         state.user = null;
@@ -1453,6 +1479,28 @@ document.addEventListener("submit", async (e) => {
         }
         const credential = await confirmation.confirm(data.otp);
         await finishLogin(await credential.user.getIdToken());
+        break;
+      }
+      case "customer-password-login-form": {
+        const r = await api("/api/auth/customer-password-login", {
+          method: "POST",
+          auth: false,
+          body: { phone: `+91${data.phone}`, password: data.password },
+        });
+        await acceptCustomerSession(r);
+        break;
+      }
+      case "customer-password-form": {
+        if (data.password !== data.confirmPassword)
+          throw new Error("The new passwords do not match.");
+        const r = await api("/api/auth/customer-password", {
+          method: "PUT",
+          body: { password: data.password, currentPassword: data.currentPassword || undefined },
+        });
+        state.token = r.token;
+        storage.set("axzen.customer.session", { token: r.token });
+        $("#dialog").close();
+        toast(r.message || "Password saved");
         break;
       }
       case "profile-form": {

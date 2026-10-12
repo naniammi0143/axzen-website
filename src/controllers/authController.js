@@ -21,7 +21,7 @@ function signToken(user, auth = {}) {
       name: user.name,
     },
     env.jwtSecret,
-    { expiresIn: user.mustChangePassword ? "10m" : "8h" }
+    { expiresIn: user.mustChangePassword ? "10m" : user.role === "customer" ? "30d" : "8h" }
   );
 }
 

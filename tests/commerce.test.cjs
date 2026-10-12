@@ -111,6 +111,39 @@ test("public OTP cannot create admin or superadmin accounts", async () => {
   }
   assert.equal(await User.countDocuments({ role: "superadmin" }), 0);
 });
+test("customer can set a password after fresh OTP and keep a 30-day password session", async () => {
+  const account = await User.create({
+    name: "Password Customer",
+    role: "customer",
+    phone: "+919000000099",
+    status: "active",
+  });
+  const otpToken = jwt.sign(
+    { id: String(account._id), role: "customer", authMethod: "otp", authTime: Math.floor(Date.now() / 1000), sessionVersion: 0 },
+    process.env.JWT_SECRET,
+  );
+  const saved = await request(
+    "/api/auth/customer-password",
+    { password: "Customer-Pass-2026" },
+    otpToken,
+    "PUT",
+  );
+  assert.equal(saved.status, 200);
+  const login = await request(
+    "/api/auth/customer-password-login",
+    { phone: "9000000099", password: "Customer-Pass-2026" },
+    "",
+  );
+  assert.equal(login.status, 200);
+  assert.equal(login.body.user.role, "customer");
+  const claims = jwt.verify(login.body.token, process.env.JWT_SECRET);
+  assert.ok(claims.exp - claims.iat >= 29 * 24 * 60 * 60);
+  assert.equal((await request(
+    "/api/auth/customer-password-login",
+    { phone: "9000000099", password: "wrong-password" },
+    "",
+  )).status, 401);
+});
 test("blocked users cannot use existing tokens", async () => {
   await User.updateOne({ _id: customer._id }, { status: "blocked" });
   assert.equal((await request("/api/customer/me")).status, 401);

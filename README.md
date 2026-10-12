@@ -137,4 +137,7 @@ Compatibility endpoints currently used by the frontend:
 - Public catalog responses include CDN cache headers and `Server-Timing` query/cache metrics.
 - Optional shared caching is enabled when `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are configured. Without them, the API uses a short in-process cache.
 - Admin users with dashboard access can call `GET /api/admin/performance` to measure database ping and catalog query latency.
+- Customer app authentication supports Firebase phone OTP and phone-number/password login after the customer sets a password from an OTP-verified session.
+- Customer sessions last 30 days; seller and admin session durations are unchanged.
+- Build Android with `AXZEN_ANDROID_FIREBASE_CONFIG` pointing to the matching `google-services.json`, then run `npm run android:prepare`. The package is `in.axzen.shop` and the build includes the native Firebase phone-auth plugin.
 - Customer App → Page Ad Manager supports page/placement targeting, priority, start/end scheduling, active status, impressions, clicks, and CTR.

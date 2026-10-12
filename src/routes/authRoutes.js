@@ -32,4 +32,7 @@ router.put('/seller-password', authLimiter, authenticate, authorize('seller'), a
 const adminAccess = require('../controllers/adminAccessController');
 router.post('/admin-password-login', authLimiter, adminAccess.passwordLogin);
 router.put('/admin-password', authLimiter, authenticate, authorize('admin','superadmin'), adminAccess.changePassword);
+const customerAccess = require('../controllers/customerAccessController');
+router.post('/customer-password-login', authLimiter, customerAccess.passwordLogin);
+router.put('/customer-password', authLimiter, authenticate, authorize('customer'), customerAccess.setPassword);
 module.exports = router;
