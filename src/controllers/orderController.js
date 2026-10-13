@@ -14,7 +14,7 @@ const { buildInvoiceHtml } = require("../utils/invoice");
 const { calculateOrderFinance, formatRupees, getPaymentChargePercent, getSellerCommission, toPaise } = require("../utils/money");
 const { createRazorpayOrder, hasRazorpayCredentials, razorpayConfig, verifyRazorpaySignature } = require("../utils/razorpay");
 const { emitSellerNewOrder } = require("../utils/realtime");
-const { createShiprocketShipment } = require("../utils/shiprocket");
+const { configured: shiprocketConfigured, createShiprocketShipment, trackShiprocketAwb } = require("../utils/shiprocket");
 
 const adminRoles = ["admin", "superadmin", "support", "finance", "delivery_manager"];
 
@@ -84,11 +84,17 @@ function sellerOrderView(order) {
     shipmentStatus: order.shipmentStatus || order.deliveryStatus || "created",
     deliveryStatus: order.deliveryStatus || "created",
     providerShipmentId: order.providerShipmentId || "",
+    providerOrderId: order.providerOrderId || "",
+    courierCompanyId: order.courierCompanyId || null,
     shipmentBookingState: order.shipmentBookingState || "none",
     shipmentBookingError: order.shipmentBookingError || "",
     awbNumber: order.awbNumber || "",
     courierName: order.courierName || "",
     trackingUrl: order.trackingUrl || "",
+    shippingLabelUrl: order.shippingLabelUrl || "",
+    pickupScheduledAt: order.pickupScheduledAt || null,
+    trackingLastSyncedAt: order.trackingLastSyncedAt || null,
+    trackingActivities: order.trackingActivities || [],
     pickupAgentName: order.pickupAgentName || "",
     pickupAgentPhone: order.pickupAgentPhone || "",
     transactionId: order.transactionId || "",
@@ -182,15 +188,19 @@ const packAndShipSellerOrder = asyncHandler(async (req,res) => {
     if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value > (field === 'weight' ? 100 : 300)) return res.status(400).json({ok:false,message:'Enter actual parcel dimensions (cm) and weight (kg).'});
     packageDetails[field]=value;
   }
-  if (!(process.env.SHIPROCKET_TOKEN || (process.env.SHIPROCKET_EMAIL && process.env.SHIPROCKET_PASSWORD))) return res.status(503).json({ok:false,message:'Courier booking is not configured. Packing is saved. Contact delivery support to arrange pickup.'});
+  if (!shiprocketConfigured()) return res.status(503).json({ok:false,message:'Courier booking is not configured. Packing is saved. Contact delivery support to arrange pickup.'});
   if(!seller.shippingPickupLocation) return res.status(503).json({ok:false,message:'Delivery support must connect this store’s registered Shiprocket pickup location. Packing is saved.'});
   const locked=await Order.findOneAndUpdate({_id:order._id,status:'packed',shipmentBookingState:{$nin:['booking','booked','needs_review']},providerShipmentId:'',awbNumber:''},{$set:{shipmentBookingState:'booking',packageDetails}},{new:true});
   if (!locked) return res.status(409).json({ok:false,message:'Booking already started. Refresh or contact support to reconcile it before retrying.'});
   try {
     const shipment=await createShiprocketShipment({order:locked,seller,customerAddress:order.shippingAddress || {}});
     locked.providerShipmentId=shipment.shipmentId;
+    locked.providerOrderId=shipment.providerOrderId || '';
+    locked.courierCompanyId=shipment.courierCompanyId || null;
     locked.awbNumber=shipment.awbNumber || '';locked.courierName=shipment.courierName || '';
     locked.trackingUrl=shipment.trackingUrl || '';locked.shipmentStatus=shipment.shipmentStatus;
+    locked.shippingLabelUrl=shipment.shippingLabelUrl || '';
+    locked.pickupScheduledAt=shipment.pickupScheduledAt || null;
     locked.deliveryStatus=shipment.shipmentStatus;locked.shipmentBookingState='booked';locked.shipmentBookingError='';
     pushTimeline(locked,'packed',shipment.awbNumber ? 'Courier booking confirmed. Awaiting actual pickup.' : 'Shipment registered. Delivery operations must assign courier and pickup.');
     await mongoose.connection.transaction(async session=>{
@@ -200,7 +210,16 @@ const packAndShipSellerOrder = asyncHandler(async (req,res) => {
     locked.$session(null);
     success(res,{order:sellerOrderView(locked.toObject())});
   } catch(error) {
-    await Order.updateOne({_id:order._id,shipmentBookingState:'booking'},{$set:{shipmentBookingState:'needs_review',shipmentBookingError:'Booking could not be confirmed. Support must check the courier account before retrying.'}});
+    const partial=error.shiprocketState || {};
+    await Order.updateOne({_id:order._id,shipmentBookingState:'booking'},{$set:{
+      shipmentBookingState:'needs_review',shipmentBookingError:'Booking could not be fully confirmed. Support must reconcile it in Shiprocket before retrying.',
+      ...(partial.providerOrderId ? {providerOrderId:partial.providerOrderId} : {}),
+      ...(partial.shipmentId ? {providerShipmentId:partial.shipmentId} : {}),
+      ...(partial.courierCompanyId ? {courierCompanyId:partial.courierCompanyId} : {}),
+      ...(partial.awbNumber ? {awbNumber:partial.awbNumber} : {}),
+      ...(partial.courierName ? {courierName:partial.courierName} : {}),
+      ...(partial.trackingUrl ? {trackingUrl:partial.trackingUrl} : {}),
+    }});
     throw error;
   }
 });
@@ -244,7 +263,20 @@ async function applyShipmentStatus(order, status, reason = '') {
 
 const syncSellerShipmentStatus = asyncHandler(async (req, res) => {
   const { order } = await getSellerOrder(req);
-  return res.status(409).json({ok:false,message:"Shipment status is updated by the courier. Contact support if tracking is delayed."});
+  if (!order.awbNumber) return res.status(409).json({ok:false,message:"AWB is not assigned yet."});
+  const tracking=await trackShiprocketAwb(order.awbNumber);
+  if (!tracking.track_status) return res.status(409).json({ok:false,message:tracking.error || "Tracking is not available yet."});
+  const shipment=Array.isArray(tracking.shipment_track) ? tracking.shipment_track[0] : null;
+  const activities=(Array.isArray(tracking.shipment_track_activities) ? tracking.shipment_track_activities : []).slice(0,50).map(item=>({
+    date:String(item.date || '').slice(0,40),status:String(item.status || item['sr-status-label'] || '').slice(0,80),activity:String(item.activity || '').slice(0,500),location:String(item.location || '').slice(0,200),
+  }));
+  const currentStatus=shipment?.current_status || activities[0]?.status || '';
+  let updated=await applyShipmentStatus(order,currentStatus,activities[0]?.activity || 'Shiprocket tracking sync.');
+  updated.trackingLastSyncedAt=new Date();updated.trackingActivities=activities;
+  if(tracking.track_url)updated.trackingUrl=tracking.track_url;
+  if(shipment?.courier_name)updated.courierName=shipment.courier_name;
+  await updated.save();
+  success(res,{order:sellerOrderView(updated.toObject()),tracking:{currentStatus,estimatedDelivery:tracking.etd || null,activities}});
 });
 
 const shiprocketStatusWebhook = asyncHandler(async (req, res) => {
@@ -262,7 +294,7 @@ const shiprocketStatusWebhook = asyncHandler(async (req, res) => {
   if ((orderId && typeof orderId !== "string") || (awb && typeof awb !== "string") || (!orderId && !awb)) return res.status(400).json({ok:false,message:"A valid order ID or AWB is required."});
   if (typeof (req.body.current_status || req.body.status) !== "string") return res.status(400).json({ok:false,message:"Shipment status is required."});
   const order = await Order.findOne({
-    $or: [orderId ? { orderId } : null, awb ? { awbNumber: awb } : null].filter(Boolean),
+    $or: [orderId ? { orderId: String(orderId) } : null, orderId ? { providerOrderId: String(orderId) } : null, awb ? { awbNumber: awb } : null].filter(Boolean),
   });
   if (!order) {
     res.status(404).json({ ok: false, message: "Order not found for shipment update." });

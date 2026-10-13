@@ -4840,9 +4840,12 @@ function renderSellerOrderDrawer(order = {}) {
             <p>Status: ${escapeHtml(order.shipmentStatus || order.deliveryStatus || "created")}</p>
             <p>Courier: ${escapeHtml(order.courierName || "-")}</p>
             <p>AWB: ${escapeHtml(order.awbNumber || "-")}</p>
+            ${order.pickupScheduledAt ? `<p>Pickup scheduled: ${formatDate(order.pickupScheduledAt)}</p>` : ""}
+            ${order.trackingLastSyncedAt ? `<p>Tracking synced: ${formatDate(order.trackingLastSyncedAt)}</p>` : ""}
             ${order.pickupAgentName ? `<p>Agent: ${escapeHtml(order.pickupAgentName)}</p>` : ""}
             ${order.pickupAgentPhone ? `<p>Agent phone: ${escapeHtml(order.pickupAgentPhone)}</p>` : ""}
             ${order.trackingUrl ? `<a href="${escapeHtml(order.trackingUrl)}" target="_blank" rel="noopener noreferrer">Open tracking</a>` : ""}
+            ${order.shippingLabelUrl && /^https:\/\//i.test(order.shippingLabelUrl) ? `<a href="${escapeHtml(order.shippingLabelUrl)}" target="_blank" rel="noopener noreferrer">Shiprocket label</a>` : ""}
             ${order.cancelReason ? `<p>Cancel reason: ${escapeHtml(order.cancelReason)}</p>` : ""}
             ${order.returnReason ? `<p>Return reason: ${escapeHtml(order.returnReason)}</p>` : ""}
             ${order.refundStatus && order.refundStatus !== "none" ? `<p>Refund: ${escapeHtml(order.refundStatus)}${order.refundDueDate ? ` by ${formatDate(order.refundDueDate)}` : ""}</p>` : ""}
@@ -6473,8 +6476,20 @@ document.addEventListener("click", async (event) => {
     const orderId = orderAction.dataset.orderId;
     const order = sellerOrdersCache.find((entry) => String(entry._id || entry.orderId) === String(orderId));
     if (action === "track") {
-      if (order?.trackingUrl && /^https:\/\//i.test(order.trackingUrl)) window.open(order.trackingUrl, "_blank", "noopener,noreferrer");
-      else showSellerOrdersToast("Tracking URL is not available yet.", true);
+      orderAction.disabled = true;
+      orderAction.textContent = "Syncing...";
+      try {
+        const token = localStorage.getItem("axzenToken");
+        const response = await fetch(`/api/seller/orders/${encodeURIComponent(orderId)}/sync-shipment`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || "Unable to sync Shiprocket tracking.");
+        showSellerOrdersToast(`Tracking updated: ${result.tracking?.currentStatus || "Available"}`);
+        await loadRoleOrders("seller");
+      } catch (error) {
+        showSellerOrdersToast(error.message || "Unable to sync Shiprocket tracking.", true);
+        orderAction.disabled = false;
+        orderAction.textContent = "Track shipment";
+      }
       return;
     }
     if (action === "agent") {

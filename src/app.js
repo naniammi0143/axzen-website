@@ -23,6 +23,7 @@ const {
   packAndShipSellerOrder,
   packSellerOrder,
   rejectSellerOrder,
+  syncSellerShipmentStatus,
 } = require("./controllers/orderController");
 const { createSellerProduct, listProducts, listSellerProducts, updateSellerInventory, parseSellerCatalogue } = require("./controllers/productController");
 const { getPublicSeller, getPublicSellerCategories, getPublicSellerProducts, getPublicSellerReviews, listSellerFestivalOffers, joinSellerFestivalOffer } = require("./controllers/sellerController");
@@ -145,6 +146,7 @@ app.post("/api/seller/orders/:id/accept", authenticate, authorize("seller"), acc
 app.post("/api/seller/orders/:id/reject", authenticate, authorize("seller"), rejectSellerOrder);
 app.post("/api/seller/orders/:id/pack", authenticate, authorize("seller"), packSellerOrder);
 app.post("/api/seller/orders/:id/pack-and-ship", authenticate, authorize("seller"), packAndShipSellerOrder);
+app.post("/api/seller/orders/:id/sync-shipment", authenticate, authorize("seller"), syncSellerShipmentStatus);
 app.get("/api/seller/offers", authenticate, authorize("seller"), listSellerFestivalOffers);
 app.post("/api/seller/offers/:id/join", authenticate, authorize("seller"), joinSellerFestivalOffer);
 app.get("/api/seller/products", authenticate, authorize("seller"), listSellerProducts);
