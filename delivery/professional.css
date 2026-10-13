@@ -552,6 +552,47 @@ textarea:focus-visible {
   background: #fff8ef;
 }
 
+.app-version-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 14px 0;
+  padding: 15px 16px;
+  border: 1px solid #e8e8eb;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #f8f8f9, #fff);
+}
+
+.app-version-card small,
+.app-version-card strong {
+  display: block;
+}
+
+.app-version-card small {
+  margin-bottom: 5px;
+  color: #858b96;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .11em;
+}
+
+.app-version-card strong {
+  color: #2e3440;
+  font-size: 15px;
+}
+
+.app-version-card > span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #e7f7ef;
+  color: #08734b;
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
 .bottom-nav {
   left: 12px;
   right: 12px;
@@ -652,10 +693,15 @@ dialog::backdrop {
   .task-meta div,
   .profile-stats article,
   .availability-card,
+  .app-version-card,
   .field input,
   .field textarea {
     border-color: #383c46;
     background: #252831;
+    color: #f6f6f7;
+  }
+
+  .app-version-card strong {
     color: #f6f6f7;
   }
 

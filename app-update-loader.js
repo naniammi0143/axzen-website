@@ -43,6 +43,9 @@ export async function startAppUpdate({ appType, native = false, fallback }) {
   let release = null;
   try { release = await fetchRelease(); }
   catch { release = await cachedRelease(); }
+  globalThis.AxzenAppRelease = release
+    ? { appType, version: release.version, source: "ota", sha256: release.sha256 }
+    : { appType, version: "Bundled", source: "bundled" };
   if (!release) return fallback();
   try { await runRelease(release); }
   catch {
