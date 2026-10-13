@@ -426,6 +426,9 @@ test('delivery partner sees only assigned tasks and records sequential doorstep 
   const order=await workflowOrder('AGENT-DELIVERY-1','packed');
 
   assert.equal((await request('/api/delivery-boy/tasks?scope=active',null,agentToken)).body.tasks.length,0);
+  assert.equal((await request('/api/delivery-boy/me/availability',{availability:'off_duty'},agentToken,'PATCH')).status,200);
+  assert.equal((await request(`/api/admin/deliveries/${order.orderId}/agent`,{agentId:String(agent._id)},managerToken,'PATCH')).status,400);
+  assert.equal((await request('/api/delivery-boy/me/availability',{availability:'available'},agentToken,'PATCH')).status,200);
   const assigned=await request(`/api/admin/deliveries/${order.orderId}/agent`,{agentId:String(agent._id)},managerToken,'PATCH');
   assert.equal(assigned.status,200,JSON.stringify(assigned.body));
   assert.equal(String((await Order.findById(order._id)).deliveryAgentId),String(agent._id));
@@ -547,6 +550,10 @@ test('superadmin creates delivery credentials and delivery partner can sign in w
   assert.equal(login.body.user.role, 'delivery_agent');
   assert.equal(login.body.user.passwordHash, undefined);
   assert.equal((await request('/api/delivery-boy/me', null, login.body.token)).status, 200);
+  const partners = await request('/api/admin/delivery-partners', null, rootToken);
+  assert.equal(partners.status, 200, JSON.stringify(partners.body));
+  assert.ok(partners.body.items.some(partner => partner.username === input.username));
+  assert.equal(partners.body.summary.total >= 1, true);
   assert.equal((await request('/api/admin/employees', { ...input, phone: '+919000003013' }, rootToken)).status, 409);
 });
 

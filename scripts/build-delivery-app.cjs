@@ -18,6 +18,7 @@ async function build() {
   );
   fs.copyFileSync(path.join(root, "delivery", "app.css"), path.join(output, "app.css"));
   fs.copyFileSync(path.join(root, "delivery", "login.css"), path.join(output, "login.css"));
+  fs.copyFileSync(path.join(root, "delivery", "enhancements.css"), path.join(output, "enhancements.css"));
   await require("esbuild").build({
     absWorkingDir: root,
     entryPoints: ["delivery/native-entry.js"],

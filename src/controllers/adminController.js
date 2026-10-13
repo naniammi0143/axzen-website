@@ -1290,6 +1290,7 @@ const createEmployee = asyncHandler(async (req, res) => {
     credentials.username = username;
     credentials.passwordHash = await hashPassword(req.body.password);
     credentials.mustChangePassword = false;
+    credentials.deliveryAvailability = "available";
   }
   const employee = await User.create({
     name: String(req.body.name).trim(),

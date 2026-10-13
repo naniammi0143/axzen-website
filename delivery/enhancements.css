@@ -1,0 +1,165 @@
+.summary {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.summary article {
+  position: relative;
+  overflow: hidden;
+}
+
+.summary article::after {
+  content: "";
+  position: absolute;
+  width: 52px;
+  height: 52px;
+  right: -18px;
+  bottom: -22px;
+  border-radius: 50%;
+  background: #e9f1f8;
+}
+
+.summary .cod-summary {
+  background: #fff8ec;
+  border-color: #f5dfb9;
+}
+
+.summary .cod-summary strong {
+  color: #925108;
+  font-size: 18px;
+}
+
+.filter-chips {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.filter-chips button {
+  flex: 0 0 auto;
+  border: 1px solid #dce4ec;
+  border-radius: 999px;
+  padding: 9px 13px;
+  background: #fff;
+  color: #65758b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.filter-chips button.active {
+  border-color: #102a43;
+  background: #102a43;
+  color: #fff;
+}
+
+.route-progress {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 11px 16px 0;
+}
+
+.route-progress i {
+  height: 4px;
+  border-radius: 99px;
+  background: #dce4ec;
+}
+
+.route-progress i.done {
+  background: #ef632f;
+}
+
+.profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 22px;
+}
+
+.profile-identity .brand-mark {
+  flex: 0 0 62px;
+}
+
+.profile-identity h2,
+.profile-identity p {
+  margin: 0;
+}
+
+.availability-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 15px;
+  border-radius: 15px;
+  background: #f4f8fb;
+  border: 1px solid #e0e8ef;
+}
+
+.availability-card small {
+  display: block;
+  max-width: 210px;
+  margin-top: 3px;
+  color: #65758b;
+  line-height: 1.35;
+}
+
+.availability-card button {
+  width: auto;
+  white-space: nowrap;
+}
+
+.profile-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.profile-stats article {
+  padding: 14px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #e2e8ef;
+}
+
+.profile-stats span,
+.profile-stats strong {
+  display: block;
+}
+
+.profile-stats span {
+  color: #65758b;
+  font-size: 12px;
+}
+
+.profile-stats strong {
+  margin-top: 4px;
+  font-size: 24px;
+}
+
+.safety-note {
+  margin: 14px 0;
+  padding: 15px;
+  border-radius: 14px;
+  background: #fff8ec;
+  color: #70420d;
+}
+
+.safety-note p {
+  margin: 6px 0 0;
+  color: #815b2e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.logout-full {
+  width: 100%;
+}
+
+@media (min-width: 700px) {
+  .summary {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}

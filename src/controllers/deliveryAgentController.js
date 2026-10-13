@@ -76,8 +76,12 @@ function publicTask(order) {
     },
     paymentMethod: order.paymentMethod || "",
     paymentStatus: order.paymentStatus || "pending",
+    codAmount:
+      order.paymentMethod === "cod"
+        ? Number(order.customerPaid) || Number(order.finance?.totalPaise) || 0
+        : 0,
     amountToCollect:
-      order.paymentMethod === "cod" && order.paymentStatus !== "paid"
+      order.paymentMethod === "cod" && order.paymentStatus !== "paid" && activeStatuses.includes(order.status)
         ? Number(order.customerPaid) || Number(order.finance?.totalPaise) || 0
         : 0,
     awbNumber: order.awbNumber || "",
@@ -104,13 +108,34 @@ const listTasks = asyncHandler(async (req, res) => {
 });
 
 const getProfile = asyncHandler(async (req, res) => {
-  const [user, assigned, delivered] = await Promise.all([
-    User.findOne({ _id: req.user.id, role: "delivery_agent" }).select("name phone status").lean(),
+  const [user, assigned, delivered, returned, codRows] = await Promise.all([
+    User.findOne({ _id: req.user.id, role: "delivery_agent" }).select("name phone username status deliveryAvailability createdAt").lean(),
     Order.countDocuments({ deliveryAgentId: req.user.id, status: { $in: activeStatuses } }),
     Order.countDocuments({ deliveryAgentId: req.user.id, status: "delivered" }),
+    Order.countDocuments({ deliveryAgentId: req.user.id, status: "returned" }),
+    Order.find({ deliveryAgentId: req.user.id, status: { $in: activeStatuses }, paymentMethod: "cod", paymentStatus: { $ne: "paid" } })
+      .select("customerPaid finance")
+      .lean(),
   ]);
   if (!user) throw invalid("Delivery partner account not found.", 404);
-  success(res, { user, summary: { assigned, delivered } });
+  const codToCollect = codRows.reduce((sum, order) => sum + (Number(order.customerPaid) || Number(order.finance?.totalPaise) || 0), 0);
+  success(res, { user, summary: { assigned, delivered, returned, codToCollect } });
+});
+
+const updateAvailability = asyncHandler(async (req, res) => {
+  const availability = String(req.body.availability || "");
+  if (!["available", "off_duty"].includes(availability)) throw invalid("Choose available or off duty.");
+  if (availability === "off_duty") {
+    const active = await Order.exists({ deliveryAgentId: req.user.id, status: { $in: activeStatuses } });
+    if (active) throw invalid("Complete or reassign active deliveries before going off duty.", 409);
+  }
+  const user = await User.findOneAndUpdate(
+    { _id: req.user.id, role: "delivery_agent", status: "active" },
+    { $set: { deliveryAvailability: availability } },
+    { new: true },
+  ).select("name phone username status deliveryAvailability");
+  if (!user) throw invalid("Delivery partner account is not active.", 403);
+  success(res, { user });
 });
 
 const updateTaskStatus = asyncHandler(async (req, res) => {
@@ -129,22 +154,70 @@ const updateTaskStatus = asyncHandler(async (req, res) => {
     next,
     { actor: req.user, note, courier: true, tracking },
   );
+  if (next === "out_for_delivery") {
+    await User.updateOne({ _id: req.user.id }, { $set: { deliveryAvailability: "on_delivery" } });
+  } else if (["delivered", "returned"].includes(next)) {
+    const remaining = await Order.exists({ deliveryAgentId: req.user.id, status: "out_for_delivery" });
+    if (!remaining) await User.updateOne({ _id: req.user.id }, { $set: { deliveryAvailability: "available" } });
+  }
   success(res, { task: publicTask(order.toObject()) });
 });
 
 const listAgents = asyncHandler(async (_req, res) => {
-  const agents = await User.find({ role: "delivery_agent", status: "active" })
-    .select("name phone status")
+  const agents = await User.find({ role: "delivery_agent", status: "active", deliveryAvailability: { $ne: "off_duty" } })
+    .select("name phone status deliveryAvailability")
     .sort({ name: 1 })
     .lean();
   success(res, { agents });
+});
+
+const listPartnerDashboard = asyncHandler(async (_req, res) => {
+  const partners = await User.find({ role: "delivery_agent" })
+    .select("name phone email username status deliveryAvailability createdAt")
+    .sort({ createdAt: -1 })
+    .lean();
+  const partnerIds = partners.map((partner) => partner._id);
+  const rows = partnerIds.length
+    ? await Order.aggregate([
+        { $match: { deliveryAgentId: { $in: partnerIds } } },
+        { $group: {
+          _id: "$deliveryAgentId",
+          total: { $sum: 1 },
+          active: { $sum: { $cond: [{ $in: ["$status", activeStatuses] }, 1, 0] } },
+          delivered: { $sum: { $cond: [{ $eq: ["$status", "delivered"] }, 1, 0] } },
+          returned: { $sum: { $cond: [{ $eq: ["$status", "returned"] }, 1, 0] } },
+          codToCollect: { $sum: { $cond: [
+            { $and: [{ $in: ["$status", activeStatuses] }, { $eq: ["$paymentMethod", "cod"] }, { $ne: ["$paymentStatus", "paid"] }] },
+            { $ifNull: ["$customerPaid", { $ifNull: ["$finance.totalPaise", 0] }] },
+            0,
+          ] } },
+        } },
+      ])
+    : [];
+  const metrics = new Map(rows.map((row) => [String(row._id), row]));
+  const items = partners.map((partner) => ({
+    ...partner,
+    metrics: metrics.get(String(partner._id)) || { total: 0, active: 0, delivered: 0, returned: 0, codToCollect: 0 },
+  }));
+  success(res, {
+    summary: {
+      total: partners.length,
+      active: partners.filter((partner) => partner.status === "active").length,
+      available: partners.filter((partner) => partner.status === "active" && !["off_duty", "on_delivery"].includes(partner.deliveryAvailability)).length,
+      onDelivery: partners.filter((partner) => partner.deliveryAvailability === "on_delivery").length,
+      assigned: rows.reduce((sum, row) => sum + row.active, 0),
+      delivered: rows.reduce((sum, row) => sum + row.delivered, 0),
+      codToCollect: rows.reduce((sum, row) => sum + row.codToCollect, 0),
+    },
+    items,
+  });
 });
 
 const assignTask = asyncHandler(async (req, res) => {
   const orderId = text(req.params.orderId || "", 100, "order ID");
   const agentId = String(req.body.agentId || "");
   const agent = mongoose.isValidObjectId(agentId)
-    ? await User.findOne({ _id: agentId, role: "delivery_agent", status: "active" }).lean()
+    ? await User.findOne({ _id: agentId, role: "delivery_agent", status: "active", deliveryAvailability: { $ne: "off_duty" } }).lean()
     : null;
   if (!agent) throw invalid("Choose an active delivery partner.");
   const order = await Order.findOneAndUpdate(
@@ -192,4 +265,4 @@ const assignTask = asyncHandler(async (req, res) => {
   success(res, { order: publicTask(order.toObject()), agent });
 });
 
-module.exports = { assignTask, getProfile, listAgents, listTasks, passwordLogin, updateTaskStatus };
+module.exports = { assignTask, getProfile, listAgents, listPartnerDashboard, listTasks, passwordLogin, updateAvailability, updateTaskStatus };

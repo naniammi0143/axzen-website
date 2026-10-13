@@ -52,7 +52,7 @@ const {
 } = require("../controllers/adminController");
 const { authenticate, authorize, authorizeAdminAccess } = require("../middleware/auth");
 const { multipartForm } = require("../middleware/multipartUpload");
-const { assignTask, listAgents } = require("../controllers/deliveryAgentController");
+const { assignTask, listAgents, listPartnerDashboard } = require("../controllers/deliveryAgentController");
 
 const router = express.Router();
 
@@ -107,6 +107,7 @@ router.get("/deliveries", authorizeAdminAccess("delivery"), listDeliveries);
 router.patch("/deliveries/:orderId", authorizeAdminAccess("delivery"), updateDelivery);
 router.get("/delivery-agents", authorizeAdminAccess("delivery"), listAgents);
 router.patch("/deliveries/:orderId/agent", authorizeAdminAccess("delivery"), assignTask);
+router.get("/delivery-partners", authorize("superadmin"), listPartnerDashboard);
 
 router.get("/employees", authorizeAdminAccess("employees"), listEmployees);
 router.post("/employees", authorizeAdminAccess("employees"), createEmployee);

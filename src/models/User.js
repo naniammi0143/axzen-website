@@ -45,6 +45,11 @@ const userSchema = new mongoose.Schema(
       enum: ["active", "blocked", "pending"],
       default: "active",
     },
+    deliveryAvailability: {
+      type: String,
+      enum: ["available", "off_duty", "on_delivery"],
+      default: "available",
+    },
   },
   { timestamps: true }
 );

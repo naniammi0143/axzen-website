@@ -24,6 +24,7 @@
     customerapp: "Customer storefront",
     reviews: "Customer reviews",
     delivery: "Delivery Management",
+    deliverypartners: "Delivery Partners",
     helpdesk: "Helpdesk",
     employees: "Employee Roles",
     reports: "Reports",
@@ -39,6 +40,7 @@
     customerapp: "/api/admin/customer-app",
     reviews: "/api/admin/reviews",
     delivery: "/api/admin/deliveries",
+    deliverypartners: "/api/admin/delivery-partners",
     helpdesk: "/api/admin/helpdesk",
     employees: "/api/admin/employees",
     audit: "/api/admin/audit-logs",
@@ -55,6 +57,7 @@
     customerapp: "customerapp",
     reviews: "customerapp",
     delivery: "delivery",
+    deliverypartners: "employees",
     helpdesk: "customers",
     employees: "employees",
     reports: "reports",
@@ -62,7 +65,7 @@
   };
 
   const roleViewAccess = {
-    superadmin: ["dashboard", "company", "sellers", "products", "orders", "payments", "customers", "customerapp", "reviews", "delivery", "helpdesk", "employees", "reports", "audit"],
+    superadmin: ["dashboard", "company", "sellers", "products", "orders", "payments", "customers", "customerapp", "reviews", "delivery", "deliverypartners", "helpdesk", "employees", "reports", "audit"],
     admin: ["dashboard", "sellers", "products", "orders", "customers", "customerapp", "reviews", "delivery", "helpdesk", "employees", "reports"],
     support: ["dashboard", "orders", "customers", "helpdesk"],
     finance: ["dashboard", "payments", "reports"],
@@ -1101,6 +1104,60 @@
     qs('[data-view-panel="delivery"]').innerHTML=panel('Courier operations',`<p>Assign an active delivery partner, then track pickup, transit, delivery and returns. Partners see only their assigned tasks.</p>${table([{label:'Order',render:r=>escapeHtml(r.orderId)},{label:'Courier',render:r=>escapeHtml(r.courierName||'Not assigned')},{label:'Delivery partner',render:r=>r.deliveryAgentName?`<strong>${escapeHtml(r.deliveryAgentName)}</strong><small>${escapeHtml(r.deliveryAgentPhone||'')}</small>`:'Not assigned'},{label:'Tracking',render:r=>escapeHtml(r.awbNumber||'Awaiting booking')},{label:'Status',render:r=>statusBadge(r.status)}],data.items,r=>['packed','shipped','out_for_delivery','delivered','ready_to_ship','waiting_for_pickup'].includes(r.status)?`<div class="workspace-actions"><select aria-label="Delivery partner" data-delivery-agent="${escapeHtml(r.orderId)}"><option value="">Choose partner</option>${state.deliveryAgents.map(a=>`<option value="${escapeHtml(a._id)}" ${String(r.deliveryAgentId||'')===String(a._id)?'selected':''}>${escapeHtml(a.name)} · ${escapeHtml(a.phone)}</option>`).join('')}</select><button data-action="delivery-assign" data-id="${escapeHtml(r.orderId)}">Assign</button><button data-edit-delivery="${escapeHtml(r.orderId)}">Courier update</button></div>`:'')}`);
   }
 
+  function renderDeliveryPartners(data) {
+    const summary = data.summary || {};
+    state.deliveryPartnerRows = data.items || [];
+    qs('[data-view-panel="deliverypartners"]').innerHTML = `
+      <section class="employee-page">
+        <header class="employee-hero">
+          <div><span class="eyebrow">Last-mile workforce</span><h2>Delivery Partner Control</h2><p>Create secure app access, monitor availability, workload, COD exposure and delivery performance.</p></div>
+          <div class="employee-count-card"><span>Total partners</span><strong>${escapeHtml(summary.total || 0)}</strong><small>${escapeHtml(summary.available || 0)} available now</small></div>
+        </header>
+        <section class="admin-stats">
+          ${card("Active partners", summary.active || 0, "Enabled accounts")}
+          ${card("Available now", summary.available || 0, "Ready for assignment")}
+          ${card("On delivery", summary.onDelivery || 0, "Doorstep in progress")}
+          ${card("Active tasks", summary.assigned || 0, "Assigned workload")}
+          ${card("Delivered", summary.delivered || 0, "Completed total")}
+          ${card("COD to collect", rupees(summary.codToCollect || 0), "Open COD exposure")}
+        </section>
+        <section class="employee-layout">
+          <article class="admin-panel employee-create-panel">
+            <div class="panel-heading"><h2>Add Delivery Partner</h2><small>Super Admin only</small></div>
+            <form class="employee-form" data-partner-create>
+              <label>Full name<input name="name" required maxlength="100" placeholder="Delivery partner name"></label>
+              <label>Phone with country code<input name="phone" required placeholder="+91 98765 43210"></label>
+              <label>Email (optional)<input name="email" type="email" placeholder="partner@axzen.in"></label>
+              <label>Login username<input name="username" required minlength="4" maxlength="50" autocomplete="off" placeholder="ravi.delivery"></label>
+              <label>Login password<input name="password" type="password" required minlength="10" maxlength="128" autocomplete="new-password" placeholder="Minimum 10 characters"></label>
+              <input type="hidden" name="displayRole" value="Delivery Partner">
+              <button type="submit">Create Partner Access</button>
+            </form>
+          </article>
+          <article class="admin-panel employee-role-panel">
+            <div class="panel-heading"><h2>Partner app capabilities</h2><small>Operational access only</small></div>
+            <div class="employee-role-grid">
+              <article><strong>Assigned orders only</strong><small>No seller, customer, finance or admin access.</small></article>
+              <article><strong>Pickup and doorstep flow</strong><small>Confirm pickup, start delivery, delivered or returned with notes.</small></article>
+              <article><strong>Customer actions</strong><small>Call customer, open map, view address, items and COD amount.</small></article>
+              <article><strong>Duty availability</strong><small>Partners can go off duty only after active tasks are completed or reassigned.</small></article>
+            </div>
+          </article>
+        </section>
+        <article class="admin-panel employee-list-panel">
+          <div class="panel-heading"><h2>Delivery partner performance</h2><small>Credentials, workload and outcomes</small></div>
+          ${table([
+            { label: "Partner", render: row => `<strong>${escapeHtml(row.name)}</strong><small>@${escapeHtml(row.username || "-")} · ${escapeHtml(row.phone || "-")}</small>` },
+            { label: "Availability", render: row => `${statusBadge(row.deliveryAvailability || "available")}<small>${escapeHtml(row.status)}</small>` },
+            { label: "Workload", render: row => `<strong>${escapeHtml(row.metrics?.active || 0)} active</strong><small>${escapeHtml(row.metrics?.total || 0)} total assigned</small>` },
+            { label: "Performance", render: row => `<strong>${escapeHtml(row.metrics?.delivered || 0)} delivered</strong><small>${escapeHtml(row.metrics?.returned || 0)} returned</small>` },
+            { label: "COD open", render: row => `<strong>${rupees(row.metrics?.codToCollect || 0)}</strong>` },
+            { label: "Created", render: row => new Date(row.createdAt).toLocaleDateString() },
+          ], data.items || [], (row, index) => `<button data-action="partner-edit" data-index="${index}">Credentials</button><button data-action="employee-toggle" data-id="${row._id}" data-status="${row.status === "blocked" ? "active" : "blocked"}">${row.status === "blocked" ? "Activate" : "Block"}</button>`)}
+        </article>
+      </section>`;
+  }
+
   function renderHelpdesk(data) {
     state.helpdeskRows = data.tickets || data.items || [];
     qs('[data-view-panel="helpdesk"]').innerHTML = panel(
@@ -1543,7 +1600,7 @@
         return renderReports(await api(`/api/admin/reports/${state.reportType}${query}`));
       }
       const data = await listView(view, state.filterQuery || "");
-      const renderers = { sellers: renderSellers, products: renderProducts, orders: renderOrders, customers: renderCustomers, customerapp: renderCustomerApp, reviews: renderReviews, delivery: renderDelivery, helpdesk: renderHelpdesk, employees: renderEmployees, audit: renderAudit };
+      const renderers = { sellers: renderSellers, products: renderProducts, orders: renderOrders, customers: renderCustomers, customerapp: renderCustomerApp, reviews: renderReviews, delivery: renderDelivery, deliverypartners: renderDeliveryPartners, helpdesk: renderHelpdesk, employees: renderEmployees, audit: renderAudit };
       renderers[view]?.(data);
     } catch (error) {
       qs(`[data-view-panel="${view}"]`).innerHTML = panel(titles[view], emptyState(error.message));
@@ -1839,6 +1896,11 @@
         return patch(`/api/admin/employees/${id}`, { displayRole: select?.value });
       }
       if (action === "employee-edit") return openEmployeeEdit(target.dataset.index);
+      if (action === "partner-edit") {
+        state.employeeRows = state.deliveryPartnerRows || [];
+        state.employeeRoles = ["Delivery Partner"];
+        return openEmployeeEdit(target.dataset.index);
+      }
       if (action === "employee-toggle") return patch(`/api/admin/employees/${id}`, { status: target.dataset.status });
       if (action === "employee-block") return patch(`/api/admin/employees/${id}`, { status: "blocked" });
       if (action === "delivery-assign") {
@@ -1907,6 +1969,20 @@
           await api(path,{method:'PATCH',body:JSON.stringify(body)});closeTopReportDrawer();await loadView();toast('Courier update saved.');
         }
       }catch(e){msg.textContent=e.message;}finally{button.disabled=false;}return;}
+      const partnerForm = event.target.closest("[data-partner-create]");
+      if (partnerForm) {
+        event.preventDefault();
+        const button = partnerForm.querySelector('button[type="submit"]');
+        button.disabled = true;
+        try {
+          await api("/api/admin/employees", { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(partnerForm).entries())) });
+          toast("Delivery Partner access created.");
+          partnerForm.reset();
+          await loadView("deliverypartners");
+        } catch (error) { toast(error.message, true); }
+        finally { button.disabled = false; }
+        return;
+      }
       const employeeForm = event.target.closest("[data-employee-create]");
       if (employeeForm) {
         event.preventDefault();
@@ -1915,7 +1991,7 @@
           await api("/api/admin/employees", { method: "POST", body: JSON.stringify(payload) });
           toast("Employee added successfully.");
           employeeForm.reset();
-          await loadView("employees");
+          await loadView(state.view === "deliverypartners" ? "deliverypartners" : "employees");
         } catch (error) {
           toast(error.message, true);
         }
@@ -1931,7 +2007,7 @@
           await api(`/api/admin/employees/${employeeEditForm.dataset.employeeEdit}`, { method: "PATCH", body: JSON.stringify(payload) });
           toast("Employee updated successfully.");
           closeTopReportDrawer();
-          await loadView("employees");
+          await loadView(state.view === "deliverypartners" ? "deliverypartners" : "employees");
         } catch (error) {
           toast(error.message, true);
         }
