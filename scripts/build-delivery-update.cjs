@@ -13,7 +13,7 @@ const timestamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
 const version = versionArg?.slice(10) || `${appType}-${timestamp}`;
 const notes = notesArg?.slice(8) || `${appType} app update`;
 const apps = {
-  delivery: { entry: "delivery/app.js", css: ["delivery/app.css", "delivery/login.css", "delivery/enhancements.css"], label: "Delivery" },
+  delivery: { entry: "delivery/app.js", css: ["delivery/app.css", "delivery/login.css", "delivery/enhancements.css", "delivery/professional.css"], label: "Delivery" },
   customer: { entry: "customer/app.js", css: ["customer/storefront.css", "customer/marketplace.css"], label: "Customer" },
   seller: { entry: "portal.js", css: ["style.css", "workspace.css"], label: "Seller" },
 };
