@@ -6,6 +6,7 @@ process.chdir(root);
 function run(...args) { cp.execFileSync(process.execPath, args, { stdio: 'inherit' }); }
 async function build() {
   run('scripts/prepare-mobile.cjs');
+  fs.writeFileSync('mobile-www/index.html', fs.readFileSync('mobile-www/index.html', 'utf8').replace('/customer/update-loader.js', '/customer/app.js'));
   await require('esbuild').build({
     entryPoints: ['customer/native-entry.js'], bundle: true, format: 'esm', target: 'chrome109',
     outfile: 'mobile-www/customer/app.js', external: ['https://*'], minify: true

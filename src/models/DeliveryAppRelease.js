@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 
 const deliveryAppReleaseSchema = new mongoose.Schema(
   {
+    appType: { type: String, enum: ["customer", "seller", "delivery"], default: "delivery", index: true },
     version: { type: String, required: true, trim: true, maxlength: 40, unique: true },
     notes: { type: String, trim: true, maxlength: 500, default: "" },
     javascript: { type: String, required: true, select: false },
@@ -14,6 +15,6 @@ const deliveryAppReleaseSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-deliveryAppReleaseSchema.index({ createdAt: -1 });
+deliveryAppReleaseSchema.index({ appType: 1, createdAt: -1 });
 
 module.exports = mongoose.model("DeliveryAppRelease", deliveryAppReleaseSchema);

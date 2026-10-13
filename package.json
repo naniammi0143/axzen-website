@@ -13,7 +13,8 @@
     "test:integration": "node --test tests/commerce.test.cjs",
     "android:prepare": "node scripts/build-customer-app.cjs",
     "delivery:android:prepare": "node scripts/build-delivery-app.cjs",
-    "delivery:update-package": "node scripts/build-delivery-update.cjs"
+    "delivery:update-package": "node scripts/build-delivery-update.cjs --app=delivery",
+    "app:update-package": "node scripts/build-delivery-update.cjs"
   },
   "dependencies": {
     "@capacitor-firebase/authentication": "8.5.1",

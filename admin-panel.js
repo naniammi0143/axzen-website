@@ -11,6 +11,7 @@
     helpdeskRows: [],
     employeeRows: [],
     employeeRoles: [],
+    appUpdateType: "delivery",
   };
 
   const titles = {
@@ -25,7 +26,7 @@
     reviews: "Customer reviews",
     delivery: "Delivery Management",
     deliverypartners: "Delivery Partners",
-    deliveryupdates: "Delivery App Updates",
+    deliveryupdates: "App Updates",
     helpdesk: "Helpdesk",
     employees: "Employee Roles",
     reports: "Reports",
@@ -1162,18 +1163,20 @@
   }
 
   function renderDeliveryUpdates(data) {
-    const releases = data.releases || [];
+    state.appReleaseRows = data.releases || [];
+    const releases = state.appReleaseRows.filter((release) => (release.appType || "delivery") === state.appUpdateType);
     const active = releases.find((release) => release.active);
     qs('[data-view-panel="deliveryupdates"]').innerHTML = `
       <section class="employee-page">
         <header class="employee-hero">
-          <div><span class="eyebrow">Over-the-air delivery</span><h2>Delivery App Updates</h2><p>Upload a validated ZIP to update Delivery Partner app screens without rebuilding or reinstalling the APK.</p></div>
+          <div><span class="eyebrow">Over-the-air delivery</span><h2>App Updates</h2><p>Select Customer, Seller or Delivery and publish a validated ZIP without rebuilding or reinstalling the app.</p></div>
           <div class="employee-count-card"><span>Live version</span><strong>${escapeHtml(active?.version || "Bundled")}</strong><small>${active ? `Published ${escapeHtml(dateValue(active.createdAt))}` : "No OTA release active"}</small></div>
         </header>
         <section class="employee-layout">
           <article class="admin-panel employee-create-panel">
             <div class="panel-heading"><h2>Publish update ZIP</h2><small>Super Admin only</small></div>
             <form class="employee-form" data-delivery-update-upload>
+              <label>Choose app<select name="appType" data-app-update-type required>${[["customer","Customer App"],["seller","Seller App"],["delivery","Delivery Partner App"]].map(([value,label])=>`<option value="${value}" ${state.appUpdateType===value?"selected":""}>${label}</option>`).join("")}</select></label>
               <label>Update package<input name="update" type="file" accept=".zip,application/zip" required></label>
               <p class="form-hint">ZIP must contain exactly <strong>delivery-update.json</strong>, <strong>app.js</strong> and <strong>app.css</strong>. Maximum compressed size: 4MB.</p>
               <button type="submit">Validate and Publish</button>
@@ -1194,6 +1197,7 @@
           <div class="panel-heading"><h2>Release history</h2><small>Activate an older version to roll back instantly</small></div>
           ${table([
             { label: "Version", render: row => `<strong>${escapeHtml(row.version)}</strong><small>${escapeHtml(row.notes || "No release notes")}</small>` },
+            { label: "App", render: row => `<strong>${escapeHtml((row.appType || "delivery").replace(/^./, char => char.toUpperCase()))}</strong>` },
             { label: "Status", render: row => statusBadge(row.active ? "live" : "inactive") },
             { label: "Size", render: row => `${(Number(row.sizeBytes || 0) / 1024).toFixed(1)} KB` },
             { label: "Integrity", render: row => `<small title="${escapeHtml(row.sha256)}">SHA-256 ${escapeHtml(String(row.sha256 || "").slice(0, 12))}…</small>` },
@@ -1673,6 +1677,11 @@
       state.searchTimer = window.setTimeout(() => loadView(), 350);
     });
     document.addEventListener("change", async (event) => {
+      if (event.target.matches("[data-app-update-type]")) {
+        state.appUpdateType = event.target.value;
+        renderDeliveryUpdates({ releases: state.appReleaseRows || [] });
+        return;
+      }
       if (event.target.matches('[data-store-access]')) {
         const form = event.target.closest('form'), field = form.querySelector('[data-store-password-field]'), input = field.querySelector('input');
         const enabled = event.target.value === 'password';
@@ -2046,7 +2055,7 @@
         button.disabled = true;
         message.textContent = "Validating and publishing update…";
         try {
-          const body = new FormData(); body.append("update", file);
+          const body = new FormData(); body.append("appType", updateForm.elements.appType.value); body.append("update", file);
           const response = await fetch("/api/admin/delivery-app/releases", { method: "POST", headers: { Authorization: `Bearer ${state.token}` }, body });
           const result = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(result.message || "Unable to publish update.");

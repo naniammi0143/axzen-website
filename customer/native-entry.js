@@ -50,4 +50,4 @@ window.AxzenNative = {
     return stop;
   }
 };
-await import('./app.js');
+await import('./update-loader.js');

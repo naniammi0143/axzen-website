@@ -582,6 +582,24 @@ test('superadmin publishes a validated delivery app ZIP and devices receive the 
   assert.equal(current.version, '0.2.0');
   assert.equal(current.javascript, 'globalThis.__deliveryUpdateFixture = true;');
   assert.equal(current.sha256, uploaded.release.sha256);
+  for (const appType of ['customer', 'seller']) {
+    const appZip = new AdmZip();
+    appZip.addFile('delivery-update.json', Buffer.from(JSON.stringify({ appType, version: `${appType}-0.2.0`, notes: `${appType} fixture` })));
+    appZip.addFile('app.js', Buffer.from(`globalThis.__${appType}UpdateFixture = true;`));
+    appZip.addFile('app.css', Buffer.from(`.${appType}-fixture{color:green}`));
+    const appForm = new FormData();
+    appForm.append('appType', appType);
+    appForm.append('update', new Blob([appZip.toBuffer()], { type: 'application/zip' }), `${appType}-update.zip`);
+    const response = await fetch(base + '/api/admin/delivery-app/releases', { method: 'POST', headers: { Authorization: `Bearer ${rootToken}` }, body: appForm });
+    const body = await response.json();
+    assert.equal(response.status, 201, JSON.stringify(body));
+    assert.equal(body.release.appType, appType);
+    const channelResponse = await fetch(base + `/api/app-releases/${appType}`);
+    const channel = await channelResponse.json();
+    assert.equal(channel.appType, appType);
+    assert.equal(channel.version, `${appType}-0.2.0`);
+  }
+  assert.equal((await (await fetch(base + '/api/app-releases/delivery')).json()).version, '0.2.0');
 });
 
 test('admin creates stores with OTP/password access without granting public or staff access', async () => {

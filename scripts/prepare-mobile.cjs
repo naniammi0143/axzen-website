@@ -8,6 +8,7 @@ fs.rmSync(output, { recursive: true, force: true });
 fs.mkdirSync(output, { recursive: true });
 for (const name of [
   "index.html",
+  "app-update-loader.js",
   "firebase-config.js",
   "privacy.html",
   "terms.html",

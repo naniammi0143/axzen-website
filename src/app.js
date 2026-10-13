@@ -71,6 +71,7 @@ app.use("/uploads", (req, res) => {
 });
 app.use('/api', (req,res,next)=>{res.setHeader('Cache-Control','no-store');next();});
 app.get("/api/delivery-app/release", currentRelease);
+app.get("/api/app-releases/:appType", currentRelease);
 app.use('/assets', express.static(path.join(rootDir,'assets'), {maxAge:'1d'}));
 app.use((req,res,next)=>{
   // Publish only browser assets at the root; never serve server source, configuration or uploads.
