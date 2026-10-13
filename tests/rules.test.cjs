@@ -177,6 +177,9 @@ test("public asset serving excludes backend code and private files without needi
       "/",
       "/customer/app.js",
       "/customer/storefront.css",
+      "/delivery",
+      "/delivery/app.js",
+      "/delivery/app.css",
       "/seller",
       "/admin",
     ])

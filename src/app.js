@@ -12,6 +12,7 @@ const orderRoutes = require("./routes/orderRoutes");
 const productRoutes = require("./routes/productRoutes");
 const sellerRoutes = require("./routes/sellerRoutes");
 const wishlistRoutes = require("./routes/wishlistRoutes");
+const deliveryAgentRoutes = require("./routes/deliveryAgentRoutes");
 const { createSellerTicket, listAdminTickets, listSellerTickets, updateAdminTicket } = require("./controllers/supportController");
 const { getDashboard } = require("./controllers/dashboardController");
 const { saveCart } = require("./controllers/cartController");
@@ -72,7 +73,7 @@ app.use('/assets', express.static(path.join(rootDir,'assets'), {maxAge:'1d'}));
 app.use((req,res,next)=>{
   // Publish only browser assets at the root; never serve server source, configuration or uploads.
   const forbidden = new Set(["/server.js", "/package.json", "/package-lock.json", "/vercel.json"]);
-  if (!forbidden.has(req.path) && (/^\/[a-z0-9-]+\.(?:css|js|html|webmanifest)$/i.test(req.path) || /^\/customer\/[a-z0-9-]+\.(?:js|css)$/i.test(req.path))) {
+  if (!forbidden.has(req.path) && (/^\/[a-z0-9-]+\.(?:css|js|html|webmanifest)$/i.test(req.path) || /^\/(?:customer|delivery)\/[a-z0-9-]+\.(?:js|css)$/i.test(req.path))) {
     res.setHeader('Cache-Control','no-cache');
     return res.sendFile(path.join(rootDir,req.path),error=>{if(error)next();});
   }
@@ -107,6 +108,7 @@ app.use("/api/payments", orderRoutes);
 app.use("/api/settlements", adminRoutes);
 app.use("/api/delivery", orderRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/delivery-boy", deliveryAgentRoutes);
 app.get(
   "/api/dashboard/:role",
   authenticate,
@@ -161,6 +163,7 @@ function resolvePage(req) {
   if (route === "/seller/register" || (host === "seller.axzen.in" && route === "/register")) return "seller-register.html";
   if (route === "/admin" || host === "admin.axzen.in") return "admin.html";
   if (route === "/seller" || route === "/seller/orders" || host === "seller.axzen.in") return "seller.html";
+  if (route === "/delivery" || route === "/delivery/" || host === "delivery.axzen.in") return "delivery/index.html";
   if (host === "api.axzen.in") return null;
   return "index.html";
 }

@@ -1097,7 +1097,8 @@
 
   function renderDelivery(data) {
     state.deliveryRows=data.items||[];
-    qs('[data-view-panel="delivery"]').innerHTML=panel('Courier operations',`<p>Use Orders to add courier details after packing. Track pickup, transit, delivery and returns here.</p>${table([{label:'Order',render:r=>escapeHtml(r.orderId)},{label:'Courier',render:r=>escapeHtml(r.courierName||'Not assigned')},{label:'Tracking',render:r=>escapeHtml(r.awbNumber||'Awaiting booking')},{label:'Status',render:r=>statusBadge(r.status)}],data.items,r=>['packed','shipped','out_for_delivery','delivered','ready_to_ship','waiting_for_pickup'].includes(r.status)?`<button data-edit-delivery="${escapeHtml(r.orderId)}">Confirmed courier update</button>`:'')}`);
+    state.deliveryAgents=data.agents||[];
+    qs('[data-view-panel="delivery"]').innerHTML=panel('Courier operations',`<p>Assign an active delivery partner, then track pickup, transit, delivery and returns. Partners see only their assigned tasks.</p>${table([{label:'Order',render:r=>escapeHtml(r.orderId)},{label:'Courier',render:r=>escapeHtml(r.courierName||'Not assigned')},{label:'Delivery partner',render:r=>r.deliveryAgentName?`<strong>${escapeHtml(r.deliveryAgentName)}</strong><small>${escapeHtml(r.deliveryAgentPhone||'')}</small>`:'Not assigned'},{label:'Tracking',render:r=>escapeHtml(r.awbNumber||'Awaiting booking')},{label:'Status',render:r=>statusBadge(r.status)}],data.items,r=>['packed','shipped','out_for_delivery','delivered','ready_to_ship','waiting_for_pickup'].includes(r.status)?`<div class="workspace-actions"><select aria-label="Delivery partner" data-delivery-agent="${escapeHtml(r.orderId)}"><option value="">Choose partner</option>${state.deliveryAgents.map(a=>`<option value="${escapeHtml(a._id)}" ${String(r.deliveryAgentId||'')===String(a._id)?'selected':''}>${escapeHtml(a.name)} · ${escapeHtml(a.phone)}</option>`).join('')}</select><button data-action="delivery-assign" data-id="${escapeHtml(r.orderId)}">Assign</button><button data-edit-delivery="${escapeHtml(r.orderId)}">Courier update</button></div>`:'')}`);
   }
 
   function renderHelpdesk(data) {
@@ -1183,7 +1184,7 @@
           <div>
             <span class="eyebrow">Employee Access Control</span>
             <h2>Employees, roles and activities</h2>
-            <p>Create staff accounts with their OTP login phone, assign roles, and control access. No password is needed.</p>
+            <p>Create staff accounts, assign roles, and control access. Delivery Partners can sign in with OTP or an admin-created username and password.</p>
           </div>
           <div class="employee-count-card">
             <span>Total employees</span>
@@ -1196,7 +1197,7 @@
           <article class="admin-panel employee-create-panel">
             <div class="panel-heading">
               <h2>Add employee</h2>
-              <small>Password is stored securely</small>
+              <small>Delivery credentials are stored securely</small>
             </div>
             <form class="employee-form" data-employee-create>
               <label>Name<input name="name" required placeholder="Employee full name"></label>
@@ -1207,6 +1208,8 @@
                   ${roleNames.map((role) => `<option value="${escapeHtml(role)}">${escapeHtml(role)}</option>`).join("")}
                 </select>
               </label>
+              <label>Delivery username<input name="username" autocomplete="off" placeholder="Required for Delivery Partner"></label>
+              <label>Delivery password<input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" placeholder="Required for Delivery Partner"></label>
               <button type="submit">Add Employee</button>
             </form>
           </article>
@@ -1242,7 +1245,7 @@
           </div>
           ${table(
             [
-              { label: "Employee", render: (row) => `<strong>${escapeHtml(row.name)}</strong><small>${escapeHtml([row.phone, row.email].filter(Boolean).join(" / "))}</small>` },
+              { label: "Employee", render: (row) => `<strong>${escapeHtml(row.name)}</strong><small>${escapeHtml([row.phone, row.email, row.username ? `User: ${row.username}` : ""].filter(Boolean).join(" / "))}</small>` },
               { label: "Professional Role", render: (row) => `<strong>${escapeHtml(row.displayRole)}</strong><small>${escapeHtml(row.role)} system role</small>` },
               { label: "Access", render: (row) => `<div class="employee-chip-row">${(row.permissions || []).map((permission) => `<span>${escapeHtml(permission === "*" ? "All access" : permission)}</span>`).join("")}</div>` },
               { label: "Activities", render: (row) => `<small>${escapeHtml((row.activityNotes || []).join(", ") || "-")}</small>` },
@@ -1448,6 +1451,8 @@
       <form class="employee-form employee-edit-form" data-employee-edit="${escapeHtml(employee._id)}">
         <label>Name<input name="name" required value="${escapeHtml(employee.name)}"></label>
         <label>Email<input name="email" type="email" value="${escapeHtml(employee.email || "")}"></label>
+        <label>Delivery username<input name="username" autocomplete="off" value="${escapeHtml(employee.username || "")}" placeholder="Required for Delivery Partner"></label>
+        <label>New delivery password<input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" placeholder="Leave blank to keep current password"></label>
         <label>Role
           <select name="displayRole" required>
             ${roleNames.map((role) => `<option value="${escapeHtml(role)}" ${role === employee.displayRole ? "selected" : ""}>${escapeHtml(role)}</option>`).join("")}
@@ -1836,6 +1841,16 @@
       if (action === "employee-edit") return openEmployeeEdit(target.dataset.index);
       if (action === "employee-toggle") return patch(`/api/admin/employees/${id}`, { status: target.dataset.status });
       if (action === "employee-block") return patch(`/api/admin/employees/${id}`, { status: "blocked" });
+      if (action === "delivery-assign") {
+        const agentId = qs(`[data-delivery-agent="${CSS.escape(id)}"]`)?.value;
+        if (!agentId) return toast("Choose a delivery partner.", true);
+        try {
+          await api(`/api/admin/deliveries/${encodeURIComponent(id)}/agent`, { method: "PATCH", body: JSON.stringify({ agentId }) });
+          toast("Delivery partner assigned.");
+          await loadView("delivery");
+        } catch (error) { toast(error.message, true); }
+        return;
+      }
     });
 
     document.addEventListener("submit", async (event) => {

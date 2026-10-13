@@ -14,11 +14,19 @@ const authLimiter = rateLimit({
   keyGenerator: (req) => ipKeyGenerator(req.ip),
 });
 
+const deliveryAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+});
+
 router.post(
   "/phone-login",
   authLimiter,
   [
-    body("role").isIn(["customer", "seller", "admin", "superadmin", "support", "finance", "delivery_manager"]),
+    body("role").isIn(["customer", "seller", "admin", "superadmin", "support", "finance", "delivery_manager", "delivery_agent"]),
     body("firebaseToken").isString().notEmpty(),
   ],
   validate,
@@ -35,4 +43,6 @@ router.put('/admin-password', authLimiter, authenticate, authorize('admin','supe
 const customerAccess = require('../controllers/customerAccessController');
 router.post('/customer-password-login', authLimiter, customerAccess.passwordLogin);
 router.put('/customer-password', authLimiter, authenticate, authorize('customer'), customerAccess.setPassword);
+const deliveryAccess = require('../controllers/deliveryAgentController');
+router.post('/delivery-password-login', deliveryAuthLimiter, deliveryAccess.passwordLogin);
 module.exports = router;

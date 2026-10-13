@@ -414,6 +414,40 @@ test('courier operations are permission scoped, sequential and cannot mark payme
   assert.equal((await request(`/api/admin/orders/${o._id}`,{paymentStatus:'paid',note:'Not provider verified'},supportToken,'PATCH')).status,400);
 });
 
+test('delivery partner sees only assigned tasks and records sequential doorstep updates', async () => {
+  const Admin = require('../src/models/AdminUser');
+  const manager = await User.create({name:'Dispatch manager',phone:'+919000001105',role:'delivery_manager',status:'active'});
+  const agent = await User.create({name:'Ravi Delivery',phone:'+919000001106',role:'delivery_agent',status:'active'});
+  const outsider = await User.create({name:'Other Partner',phone:'+919000001107',role:'delivery_agent',status:'active'});
+  await Admin.create({userId:manager._id,displayRole:'Shipping Executive',permissions:['delivery','orders']});
+  const managerToken=jwt.sign({id:String(manager._id),role:'delivery_manager'},process.env.JWT_SECRET);
+  const agentToken=jwt.sign({id:String(agent._id),role:'delivery_agent'},process.env.JWT_SECRET);
+  const outsiderToken=jwt.sign({id:String(outsider._id),role:'delivery_agent'},process.env.JWT_SECRET);
+  const order=await workflowOrder('AGENT-DELIVERY-1','packed');
+
+  assert.equal((await request('/api/delivery-boy/tasks?scope=active',null,agentToken)).body.tasks.length,0);
+  const assigned=await request(`/api/admin/deliveries/${order.orderId}/agent`,{agentId:String(agent._id)},managerToken,'PATCH');
+  assert.equal(assigned.status,200,JSON.stringify(assigned.body));
+  assert.equal(String((await Order.findById(order._id)).deliveryAgentId),String(agent._id));
+  assert.equal((await request('/api/delivery-boy/tasks?scope=active',null,outsiderToken)).body.tasks.length,0);
+  const tasks=await request('/api/delivery-boy/tasks?scope=active',null,agentToken);
+  assert.equal(tasks.status,200);
+  assert.equal(tasks.body.tasks[0].orderId,order.orderId);
+  assert.equal(tasks.body.tasks[0].amountToCollect,20000);
+  assert.equal(tasks.body.tasks[0].finance,undefined);
+
+  const path=`/api/delivery-boy/tasks/${order._id}/status`;
+  assert.equal((await request(path,{status:'shipped',awbNumber:'AXZEN-AGENT-1',courierName:'Axzen Delivery',note:'Parcel collected'},outsiderToken,'PATCH')).status,404);
+  assert.equal((await request(path,{status:'shipped',awbNumber:'AXZEN-AGENT-1',courierName:'Axzen Delivery',note:'Parcel collected'},agentToken,'PATCH')).status,200);
+  assert.equal((await request(path,{status:'out_for_delivery',note:'Leaving for customer'},agentToken,'PATCH')).status,200);
+  assert.equal((await request(path,{status:'delivered',note:''},agentToken,'PATCH')).status,400);
+  assert.equal((await request(path,{status:'delivered',note:'Received by customer'},agentToken,'PATCH')).status,200);
+  const delivered=await Order.findById(order._id);
+  assert.equal(delivered.status,'delivered');
+  assert.equal(delivered.paymentStatus,'pending','delivery evidence cannot reconcile COD cash');
+  assert.equal((await request('/api/delivery-boy/tasks?scope=history',null,agentToken)).body.tasks[0].orderId,order.orderId);
+});
+
 test('store reviews require a delivered purchase, update real ratings, support owner replies and audited moderation',async()=>{
   const Review=require('../src/models/Review');
   async function assertPublicRating(average, count) {
@@ -486,6 +520,34 @@ test('staff creation uses an OTP phone without passwords and remains superadmin-
   assert.equal(result.body.employee.passwordHash, undefined);
   assert.equal(result.body.employee.role, 'admin');
   assert.equal((await User.findById(result.body.employee._id).select('+passwordHash')).passwordHash, '');
+});
+
+test('superadmin creates delivery credentials and delivery partner can sign in with username and password', async () => {
+  const root = await User.create({ role: 'superadmin', name: 'Delivery Owner', phone: '+919000003011', status: 'active' });
+  const rootToken = jwt.sign({ id: String(root._id), role: 'superadmin' }, process.env.JWT_SECRET);
+  const input = {
+    name: 'Ravi Delivery',
+    phone: '+91 90000 03012',
+    displayRole: 'Delivery Partner',
+    username: 'ravi.delivery',
+    password: 'Delivery-2026!',
+  };
+  assert.equal((await request('/api/admin/employees', { ...input, username: '' }, rootToken)).status, 400);
+  assert.equal((await request('/api/admin/employees', { ...input, password: 'short' }, rootToken)).status, 400);
+  const created = await request('/api/admin/employees', input, rootToken);
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  assert.equal(created.body.employee.role, 'delivery_agent');
+  assert.equal(created.body.employee.username, input.username);
+  assert.equal(created.body.employee.passwordHash, undefined);
+  const stored = await User.findById(created.body.employee._id).select('+passwordHash');
+  assert.match(stored.passwordHash, /^scrypt-v1\$/);
+  assert.equal((await request('/api/auth/delivery-password-login', { username: input.username, password: 'wrong-password' }, '')).status, 401);
+  const login = await request('/api/auth/delivery-password-login', { username: input.username, password: input.password }, '');
+  assert.equal(login.status, 200, JSON.stringify(login.body));
+  assert.equal(login.body.user.role, 'delivery_agent');
+  assert.equal(login.body.user.passwordHash, undefined);
+  assert.equal((await request('/api/delivery-boy/me', null, login.body.token)).status, 200);
+  assert.equal((await request('/api/admin/employees', { ...input, phone: '+919000003013' }, rootToken)).status, 409);
 });
 
 test('admin creates stores with OTP/password access without granting public or staff access', async () => {

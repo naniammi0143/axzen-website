@@ -54,6 +54,8 @@ const orderSchema = new mongoose.Schema(
     shipmentStatus: { type: String, trim: true, default: "" },
     pickupAgentName: { type: String, trim: true, default: "" },
     pickupAgentPhone: { type: String, trim: true, default: "" },
+    deliveryAgentId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    deliveryAgentAssignedAt: { type: Date, default: null },
     finance: { type: Object, required: true },
     shippingAddress: { type: Object, default: null },
     timeline: [
@@ -69,5 +71,6 @@ const orderSchema = new mongoose.Schema(
 
 orderSchema.index({ customerId: 1, createdAt: -1 });
 orderSchema.index({ sellerId: 1, createdAt: -1 });
+orderSchema.index({ deliveryAgentId: 1, status: 1, createdAt: -1 });
 
 module.exports = mongoose.model("Order", orderSchema);

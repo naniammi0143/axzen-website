@@ -16,7 +16,7 @@ const { notifyFollowersForProduct } = require("./notificationController");
 const { grokConfigured, removeBackgroundFromUrl } = require("../utils/grokBackground");
 const { uploadImageBuffer, uploadProductImages } = require("../utils/cloudinary");
 const { text: cleanText, httpsUrl } = require("../utils/storeRules");
-const { loginPhone } = require("../utils/passwords");
+const { loginPhone, hashPassword, validPassword } = require("../utils/passwords");
 
 const orderStatuses = ["pending", "confirmed", "packed", "shipped", "out_for_delivery", "delivered", "cancelled", "returned"];
 const productStatuses = ["pending_approval", "approved", "active", "rejected", "blocked", "inactive"];
@@ -61,12 +61,22 @@ const employeeRoles = {
     permissions: ["dashboard", "delivery", "orders"],
     activityNotes: ["Shipment tracking", "Delivery labels", "Courier updates"],
   },
+  "Delivery Partner": {
+    systemRole: "delivery_agent",
+    permissions: [],
+    activityNotes: ["Assigned deliveries only", "Pickup and doorstep status updates", "No admin or finance access"],
+  },
   "Customer App Executive": {
     systemRole: "support",
     permissions: ["dashboard", "customerapp", "products", "customers"],
     activityNotes: ["Customer app content", "Offer banner updates", "Recommended seller display"],
   },
 };
+
+function deliveryUsername(value) {
+  const username = String(value || "").trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9._-]{3,49}$/.test(username) ? username : "";
+}
 
 function startOfToday() {
   const date = new Date();
@@ -1211,7 +1221,11 @@ const updateOrderPayoutStatus = asyncHandler(async (req, res) => {
 const listDeliveries = asyncHandler(async (req, res) => {
   const filter = {};
   if (req.query.status) filter.status = req.query.status;
-  success(res, await paged(Delivery, filter, req.query));
+  const [pageData, agents] = await Promise.all([
+    paged(Delivery, filter, req.query),
+    User.find({ role: "delivery_agent", status: "active" }).select("name phone").sort({ name: 1 }).lean(),
+  ]);
+  success(res, { ...pageData, agents });
 });
 
 const updateDelivery = asyncHandler(async (req,res) => {
@@ -1222,7 +1236,7 @@ const updateDelivery = asyncHandler(async (req,res) => {
 });
 
 const listEmployees = asyncHandler(async (req, res) => {
-  const roles = ["admin", "superadmin", "support", "finance", "delivery_manager"];
+  const roles = ["admin", "superadmin", "support", "finance", "delivery_manager", "delivery_agent"];
   const filter = { role: { $in: roles } };
   const search = textRegex(req.query.search);
   if (search) filter.$or = [{ name: search }, { phone: search }, { email: search }, { role: search }];
@@ -1261,12 +1275,29 @@ const createEmployee = asyncHandler(async (req, res) => {
     return res.status(400).json({ ok: false, message: "Enter the phone with country code, for example +91 followed by the mobile number." });
   }
   const email = req.body.email ? String(req.body.email).trim().toLowerCase() : undefined;
+  const credentials = {};
+  if (roleConfig.systemRole === "delivery_agent") {
+    const username = deliveryUsername(req.body.username);
+    if (!username) {
+      return res.status(400).json({ ok: false, message: "Delivery Partner username must be 4-50 letters, numbers, dots, underscores or hyphens." });
+    }
+    if (!validPassword(req.body.password)) {
+      return res.status(400).json({ ok: false, message: "Delivery Partner password must be 10-128 characters." });
+    }
+    if (await User.exists({ username })) {
+      return res.status(409).json({ ok: false, message: "That delivery username is already in use." });
+    }
+    credentials.username = username;
+    credentials.passwordHash = await hashPassword(req.body.password);
+    credentials.mustChangePassword = false;
+  }
   const employee = await User.create({
     name: String(req.body.name).trim(),
     phone,
     email,
     role: roleConfig.systemRole,
     status: req.body.status || "active",
+    ...credentials,
   });
 
   const profile = await AdminUser.create({
@@ -1285,6 +1316,11 @@ const createEmployee = asyncHandler(async (req, res) => {
 
 const updateEmployee = asyncHandler(async (req, res) => {
   if (req.user.role !== "superadmin") return res.status(403).json({ok:false,message:"Only the superadmin can manage staff access."});
+  const existing = await User.findById(req.params.id).select("+passwordHash");
+  if (!existing) {
+    res.status(404).json({ ok: false, message: "Employee not found." });
+    return;
+  }
   const update = {};
   let roleConfig = null;
   if (req.body.displayRole) {
@@ -1298,11 +1334,30 @@ const updateEmployee = asyncHandler(async (req, res) => {
   if (["active", "blocked", "pending"].includes(req.body.status)) update.status = req.body.status;
   if (req.body.name) update.name = req.body.name;
   if (req.body.email !== undefined) update.email = req.body.email ? String(req.body.email).trim().toLowerCase() : undefined;
-  const employee = await User.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
-  if (!employee) {
-    res.status(404).json({ ok: false, message: "Employee not found." });
-    return;
+  const nextRole = roleConfig?.systemRole || existing.role;
+  if (nextRole === "delivery_agent") {
+    if (req.body.username !== undefined) {
+      const username = deliveryUsername(req.body.username);
+      if (!username) return res.status(400).json({ ok: false, message: "Delivery Partner username must be 4-50 letters, numbers, dots, underscores or hyphens." });
+      if (await User.exists({ username, _id: { $ne: existing._id } }))
+        return res.status(409).json({ ok: false, message: "That delivery username is already in use." });
+      update.username = username;
+    } else if (!existing.username) {
+      return res.status(400).json({ ok: false, message: "Set a username for the Delivery Partner." });
+    }
+    if (req.body.password !== undefined && req.body.password !== "") {
+      if (!validPassword(req.body.password))
+        return res.status(400).json({ ok: false, message: "Delivery Partner password must be 10-128 characters." });
+      update.passwordHash = await hashPassword(req.body.password);
+      update.mustChangePassword = false;
+      update.passwordFailedAttempts = 0;
+      update.passwordLockedUntil = null;
+      update.sessionVersion = (existing.sessionVersion || 0) + 1;
+    } else if (!existing.passwordHash) {
+      return res.status(400).json({ ok: false, message: "Set a password for the Delivery Partner." });
+    }
   }
+  const employee = await User.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
   const profileUpdate = { $setOnInsert: { userId: req.params.id } };
   if (roleConfig) {
     profileUpdate.$set = { displayRole: req.body.displayRole, permissions: roleConfig.permissions, activityNotes: roleConfig.activityNotes };

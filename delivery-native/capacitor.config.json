@@ -1,0 +1,26 @@
+{
+  "appId": "in.axzen.delivery",
+  "appName": "Axzen Delivery",
+  "webDir": "../delivery-www",
+  "backgroundColor": "#102A43",
+  "server": {
+    "androidScheme": "https",
+    "hostname": "localhost"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false,
+    "minWebViewVersion": 109
+  },
+  "includePlugins": [
+    "@capacitor/app",
+    "@capacitor/browser",
+    "@capacitor-firebase/authentication"
+  ],
+  "plugins": {
+    "FirebaseAuthentication": {
+      "providers": ["phone"],
+      "skipNativeAuth": false
+    }
+  }
+}

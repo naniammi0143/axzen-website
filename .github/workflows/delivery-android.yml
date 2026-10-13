@@ -1,0 +1,65 @@
+name: Delivery Partner Android APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'delivery/**'
+      - 'delivery-native/**'
+      - 'src/controllers/deliveryAgentController.js'
+      - 'src/routes/deliveryAgentRoutes.js'
+      - 'scripts/build-delivery-app.cjs'
+      - 'package*.json'
+      - '.github/workflows/delivery-android.yml'
+permissions:
+  contents: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - name: Prepare delivery Android app
+        env:
+          FIREBASE_ANDROID_JSON: ${{ secrets.AXZEN_DELIVERY_FIREBASE_JSON }}
+        run: |
+          if [ -n "$FIREBASE_ANDROID_JSON" ]; then
+            printf '%s' "$FIREBASE_ANDROID_JSON" > "$RUNNER_TEMP/axzen-delivery-google-services.json"
+            export AXZEN_DELIVERY_FIREBASE_CONFIG="$RUNNER_TEMP/axzen-delivery-google-services.json"
+          fi
+          npm run delivery:android:prepare
+      - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Build and lint delivery APK
+        working-directory: delivery-native/android
+        run: ./gradlew --no-daemon assembleDebug lintDebug
+      - name: Verify APK
+        run: |
+          mkdir -p delivery-apk-output
+          cp delivery-native/android/app/build/outputs/apk/debug/app-debug.apk delivery-apk-output/axzen-delivery-0.1-beta.apk
+          cp delivery-native/android/axzen-delivery-build-info.json delivery-apk-output/build-info.json
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs delivery-apk-output/axzen-delivery-0.1-beta.apk > delivery-apk-output/signature.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging delivery-apk-output/axzen-delivery-0.1-beta.apk > delivery-apk-output/package.txt
+          cd delivery-apk-output
+          sha256sum axzen-delivery-0.1-beta.apk > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: axzen-delivery-apk
+          path: delivery-apk-output/
+          if-no-files-found: error
+          retention-days: 30

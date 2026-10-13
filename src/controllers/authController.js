@@ -7,7 +7,7 @@ const env = require("../config/env");
 const asyncHandler = require("../utils/asyncHandler");
 const { success } = require("../utils/apiResponse");
 
-const adminRoles = ["admin", "superadmin", "support", "finance", "delivery_manager"];
+const adminRoles = ["admin", "superadmin", "support", "finance", "delivery_manager", "delivery_agent"];
 
 function signToken(user, auth = {}) {
   return jwt.sign(
@@ -59,6 +59,8 @@ async function ensureRoleProfile(user) {
                 ? "Finance Executive"
                 : user.role === "support"
                   ? "Support Executive"
+                  : user.role === "delivery_agent"
+                    ? "Delivery Partner"
                   : user.role === "delivery_manager"
                     ? "Shipping Executive"
                     : "Operations Manager",
@@ -69,6 +71,8 @@ async function ensureRoleProfile(user) {
                 ? ["finance", "reports"]
                 : user.role === "support"
                   ? ["customers", "orders"]
+                  : user.role === "delivery_agent"
+                    ? []
                   : user.role === "delivery_manager"
                     ? ["delivery", "orders"]
                     : ["sellers", "products", "orders"],

@@ -1,0 +1,25 @@
+.login-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin: 16px 0;
+  padding: 4px;
+  border-radius: 12px;
+  background: #edf2f6;
+}
+
+.login-tabs button {
+  border: 0;
+  border-radius: 9px;
+  padding: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.login-tabs button.active {
+  background: #fff;
+  color: var(--navy);
+  box-shadow: 0 2px 8px #102a4314;
+}

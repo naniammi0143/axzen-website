@@ -8,6 +8,8 @@ uploads/
 .env.local
 .env*.local
 mobile-www/
+delivery-www/
+delivery-native/android/
 
 android/
 apk-output/
