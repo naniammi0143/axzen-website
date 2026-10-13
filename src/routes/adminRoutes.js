@@ -53,6 +53,7 @@ const {
 const { authenticate, authorize, authorizeAdminAccess } = require("../middleware/auth");
 const { multipartForm } = require("../middleware/multipartUpload");
 const { assignTask, listAgents, listPartnerDashboard } = require("../controllers/deliveryAgentController");
+const { activateRelease, listReleases, uploadRelease } = require("../controllers/deliveryAppReleaseController");
 
 const router = express.Router();
 
@@ -108,6 +109,19 @@ router.patch("/deliveries/:orderId", authorizeAdminAccess("delivery"), updateDel
 router.get("/delivery-agents", authorizeAdminAccess("delivery"), listAgents);
 router.patch("/deliveries/:orderId/agent", authorizeAdminAccess("delivery"), assignTask);
 router.get("/delivery-partners", authorize("superadmin"), listPartnerDashboard);
+router.get("/delivery-app/releases", authorize("superadmin"), listReleases);
+router.post(
+  "/delivery-app/releases",
+  authorize("superadmin"),
+  multipartForm({
+    maxBytes: 4 * 1024 * 1024,
+    maxFileBytes: 4 * 1024 * 1024,
+    allowedMimeTypes: ["application/zip", "application/x-zip-compressed", "application/octet-stream"],
+    fileTypeMessage: "Only ZIP update packages are allowed.",
+  }),
+  uploadRelease,
+);
+router.patch("/delivery-app/releases/:id/activate", authorize("superadmin"), activateRelease);
 
 router.get("/employees", authorizeAdminAccess("employees"), listEmployees);
 router.post("/employees", authorizeAdminAccess("employees"), createEmployee);

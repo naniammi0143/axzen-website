@@ -14,7 +14,7 @@ async function build() {
   fs.mkdirSync(output, { recursive: true });
   fs.writeFileSync(
     path.join(output, "index.html"),
-    fs.readFileSync(path.join(root, "delivery", "index.html"), "utf8").replaceAll("/delivery/", "./"),
+    fs.readFileSync(path.join(root, "delivery", "index.html"), "utf8").replaceAll("/delivery/", "./").replace("./update-loader.js", "./app.js"),
   );
   fs.copyFileSync(path.join(root, "delivery", "app.css"), path.join(output, "app.css"));
   fs.copyFileSync(path.join(root, "delivery", "login.css"), path.join(output, "login.css"));

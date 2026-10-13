@@ -10,6 +10,8 @@ uploads/
 mobile-www/
 delivery-www/
 delivery-native/android/
+delivery-update-build/
+release-output/
 
 android/
 apk-output/

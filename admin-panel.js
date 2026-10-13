@@ -25,6 +25,7 @@
     reviews: "Customer reviews",
     delivery: "Delivery Management",
     deliverypartners: "Delivery Partners",
+    deliveryupdates: "Delivery App Updates",
     helpdesk: "Helpdesk",
     employees: "Employee Roles",
     reports: "Reports",
@@ -41,6 +42,7 @@
     reviews: "/api/admin/reviews",
     delivery: "/api/admin/deliveries",
     deliverypartners: "/api/admin/delivery-partners",
+    deliveryupdates: "/api/admin/delivery-app/releases",
     helpdesk: "/api/admin/helpdesk",
     employees: "/api/admin/employees",
     audit: "/api/admin/audit-logs",
@@ -58,6 +60,7 @@
     reviews: "customerapp",
     delivery: "delivery",
     deliverypartners: "employees",
+    deliveryupdates: "employees",
     helpdesk: "customers",
     employees: "employees",
     reports: "reports",
@@ -65,7 +68,7 @@
   };
 
   const roleViewAccess = {
-    superadmin: ["dashboard", "company", "sellers", "products", "orders", "payments", "customers", "customerapp", "reviews", "delivery", "deliverypartners", "helpdesk", "employees", "reports", "audit"],
+    superadmin: ["dashboard", "company", "sellers", "products", "orders", "payments", "customers", "customerapp", "reviews", "delivery", "deliverypartners", "deliveryupdates", "helpdesk", "employees", "reports", "audit"],
     admin: ["dashboard", "sellers", "products", "orders", "customers", "customerapp", "reviews", "delivery", "helpdesk", "employees", "reports"],
     support: ["dashboard", "orders", "customers", "helpdesk"],
     finance: ["dashboard", "payments", "reports"],
@@ -1158,6 +1161,48 @@
       </section>`;
   }
 
+  function renderDeliveryUpdates(data) {
+    const releases = data.releases || [];
+    const active = releases.find((release) => release.active);
+    qs('[data-view-panel="deliveryupdates"]').innerHTML = `
+      <section class="employee-page">
+        <header class="employee-hero">
+          <div><span class="eyebrow">Over-the-air delivery</span><h2>Delivery App Updates</h2><p>Upload a validated ZIP to update Delivery Partner app screens without rebuilding or reinstalling the APK.</p></div>
+          <div class="employee-count-card"><span>Live version</span><strong>${escapeHtml(active?.version || "Bundled")}</strong><small>${active ? `Published ${escapeHtml(dateValue(active.createdAt))}` : "No OTA release active"}</small></div>
+        </header>
+        <section class="employee-layout">
+          <article class="admin-panel employee-create-panel">
+            <div class="panel-heading"><h2>Publish update ZIP</h2><small>Super Admin only</small></div>
+            <form class="employee-form" data-delivery-update-upload>
+              <label>Update package<input name="update" type="file" accept=".zip,application/zip" required></label>
+              <p class="form-hint">ZIP must contain exactly <strong>delivery-update.json</strong>, <strong>app.js</strong> and <strong>app.css</strong>. Maximum compressed size: 4MB.</p>
+              <button type="submit">Validate and Publish</button>
+              <p data-update-message role="status"></p>
+            </form>
+          </article>
+          <article class="admin-panel employee-role-panel">
+            <div class="panel-heading"><h2>Safe update behaviour</h2><small>Automatic fallback</small></div>
+            <div class="employee-role-grid">
+              <article><strong>Validated package</strong><small>Unknown paths, oversized files, duplicates and malformed manifests are rejected.</small></article>
+              <article><strong>Integrity checked</strong><small>The APK verifies the release SHA-256 before running it.</small></article>
+              <article><strong>Offline support</strong><small>The last verified update is cached on the device.</small></article>
+              <article><strong>Bundled fallback</strong><small>A broken release is skipped and the installed APK version opens automatically.</small></article>
+            </div>
+          </article>
+        </section>
+        <article class="admin-panel employee-list-panel">
+          <div class="panel-heading"><h2>Release history</h2><small>Activate an older version to roll back instantly</small></div>
+          ${table([
+            { label: "Version", render: row => `<strong>${escapeHtml(row.version)}</strong><small>${escapeHtml(row.notes || "No release notes")}</small>` },
+            { label: "Status", render: row => statusBadge(row.active ? "live" : "inactive") },
+            { label: "Size", render: row => `${(Number(row.sizeBytes || 0) / 1024).toFixed(1)} KB` },
+            { label: "Integrity", render: row => `<small title="${escapeHtml(row.sha256)}">SHA-256 ${escapeHtml(String(row.sha256 || "").slice(0, 12))}…</small>` },
+            { label: "Published", render: row => escapeHtml(dateValue(row.createdAt)) },
+          ], releases, row => row.active ? "Live on partner devices" : `<button data-action="delivery-release-activate" data-id="${row._id}">Activate / Roll back</button>`)}
+        </article>
+      </section>`;
+  }
+
   function renderHelpdesk(data) {
     state.helpdeskRows = data.tickets || data.items || [];
     qs('[data-view-panel="helpdesk"]').innerHTML = panel(
@@ -1600,7 +1645,7 @@
         return renderReports(await api(`/api/admin/reports/${state.reportType}${query}`));
       }
       const data = await listView(view, state.filterQuery || "");
-      const renderers = { sellers: renderSellers, products: renderProducts, orders: renderOrders, customers: renderCustomers, customerapp: renderCustomerApp, reviews: renderReviews, delivery: renderDelivery, deliverypartners: renderDeliveryPartners, helpdesk: renderHelpdesk, employees: renderEmployees, audit: renderAudit };
+      const renderers = { sellers: renderSellers, products: renderProducts, orders: renderOrders, customers: renderCustomers, customerapp: renderCustomerApp, reviews: renderReviews, delivery: renderDelivery, deliverypartners: renderDeliveryPartners, deliveryupdates: renderDeliveryUpdates, helpdesk: renderHelpdesk, employees: renderEmployees, audit: renderAudit };
       renderers[view]?.(data);
     } catch (error) {
       qs(`[data-view-panel="${view}"]`).innerHTML = panel(titles[view], emptyState(error.message));
@@ -1903,6 +1948,14 @@
       }
       if (action === "employee-toggle") return patch(`/api/admin/employees/${id}`, { status: target.dataset.status });
       if (action === "employee-block") return patch(`/api/admin/employees/${id}`, { status: "blocked" });
+      if (action === "delivery-release-activate") {
+        try {
+          await api(`/api/admin/delivery-app/releases/${id}/activate`, { method: "PATCH", body: "{}" });
+          toast("Delivery app release activated.");
+          await loadView("deliveryupdates");
+        } catch (error) { toast(error.message, true); }
+        return;
+      }
       if (action === "delivery-assign") {
         const agentId = qs(`[data-delivery-agent="${CSS.escape(id)}"]`)?.value;
         if (!agentId) return toast("Choose a delivery partner.", true);
@@ -1980,6 +2033,26 @@
           partnerForm.reset();
           await loadView("deliverypartners");
         } catch (error) { toast(error.message, true); }
+        finally { button.disabled = false; }
+        return;
+      }
+      const updateForm = event.target.closest("[data-delivery-update-upload]");
+      if (updateForm) {
+        event.preventDefault();
+        const button = updateForm.querySelector('button[type="submit"]');
+        const message = updateForm.querySelector("[data-update-message]");
+        const file = updateForm.querySelector('input[name="update"]')?.files?.[0];
+        if (!file) return;
+        button.disabled = true;
+        message.textContent = "Validating and publishing update…";
+        try {
+          const body = new FormData(); body.append("update", file);
+          const response = await fetch("/api/admin/delivery-app/releases", { method: "POST", headers: { Authorization: `Bearer ${state.token}` }, body });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.message || "Unable to publish update.");
+          toast(`Delivery app ${result.release?.version || "update"} is live.`);
+          await loadView("deliveryupdates");
+        } catch (error) { message.textContent = error.message; }
         finally { button.disabled = false; }
         return;
       }

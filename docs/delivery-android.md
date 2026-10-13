@@ -41,3 +41,25 @@ device-tested before operations rely on OTP.
 
 The web version is available at `/delivery` and uses the same assigned-task API.
 
+## APK-free UI updates
+
+The installed app checks the Axzen API for an active, Superadmin-approved web
+release at startup. To prepare a package:
+
+```powershell
+npm run delivery:update-package -- --version=0.2.0 --notes=Route-screen-update
+```
+
+This creates `release-output/Axzen-Delivery-Update-0.2.0.zip`. In the Admin
+Panel open **Delivery App Updates**, select the ZIP, and choose **Validate and
+Publish**. The server accepts only `delivery-update.json`, `app.js`, and
+`app.css`, limits compressed and uncompressed sizes, records an audit entry,
+and publishes a SHA-256 digest. Devices verify that digest before running the
+release, cache the last verified release for offline startup, and fall back to
+the app bundled in the APK if an update cannot start. Previous versions remain
+available for immediate rollback from the same Superadmin screen.
+
+Native plugin changes, Android permissions, Firebase configuration, package
+name changes, and Capacitor dependency upgrades still require a new APK. The
+ZIP mechanism is for delivery UI and web-logic updates.
+

@@ -40,6 +40,7 @@ const {
 const { errorHandler, notFound } = require("./middleware/errorHandler");
 const { authenticate, authorize } = require("./middleware/auth");
 const { multipartForm } = require("./middleware/multipartUpload");
+const { currentRelease } = require("./controllers/deliveryAppReleaseController");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -69,6 +70,7 @@ app.use("/uploads", (req, res) => {
   res.status(403).json({ ok: false, message: "Uploads are private." });
 });
 app.use('/api', (req,res,next)=>{res.setHeader('Cache-Control','no-store');next();});
+app.get("/api/delivery-app/release", currentRelease);
 app.use('/assets', express.static(path.join(rootDir,'assets'), {maxAge:'1d'}));
 app.use((req,res,next)=>{
   // Publish only browser assets at the root; never serve server source, configuration or uploads.

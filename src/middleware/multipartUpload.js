@@ -31,6 +31,8 @@ function sanitizeFileName(name) {
 function multipartForm(options = {}) {
   const maxBytes = options.maxBytes || 12 * 1024 * 1024;
   const optional = Boolean(options.optional);
+  const acceptedMimeTypes = options.allowedMimeTypes ? new Set(options.allowedMimeTypes) : allowedMimeTypes;
+  const maxFileBytes = options.maxFileBytes || MAX_FILE_SIZE;
 
   return (req, res, next) => {
     const contentType = req.headers["content-type"] || "";
@@ -89,12 +91,12 @@ function multipartForm(options = {}) {
           const buffer = Buffer.from(rawValue, "binary");
           const filename = sanitizeFileName(disposition.filename);
 
-          if (!allowedMimeTypes.has(mimetype)) {
-            throw new Error("Only PDF, JPG, and PNG files are allowed.");
+          if (!acceptedMimeTypes.has(mimetype)) {
+            throw new Error(options.fileTypeMessage || "Only PDF, JPG, and PNG files are allowed.");
           }
 
-          if (buffer.length > MAX_FILE_SIZE) {
-            throw new Error("Each uploaded file must be 5MB or smaller.");
+          if (buffer.length > maxFileBytes) {
+            throw new Error(`Each uploaded file must be ${Math.ceil(maxFileBytes / 1024 / 1024)}MB or smaller.`);
           }
 
           const file = {

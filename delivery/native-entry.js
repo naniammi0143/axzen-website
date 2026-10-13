@@ -53,4 +53,4 @@ App.addListener("backButton", ({ canGoBack }) => {
   else App.minimizeApp();
 });
 
-await import("./app.js");
+await import("./update-loader.js");

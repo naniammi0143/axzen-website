@@ -557,6 +557,33 @@ test('superadmin creates delivery credentials and delivery partner can sign in w
   assert.equal((await request('/api/admin/employees', { ...input, phone: '+919000003013' }, rootToken)).status, 409);
 });
 
+test('superadmin publishes a validated delivery app ZIP and devices receive the verified release', async () => {
+  const AdmZip = require('adm-zip');
+  const root = await User.create({ role: 'superadmin', name: 'OTA Owner', phone: '+919000003021', status: 'active' });
+  const rootToken = jwt.sign({ id: String(root._id), role: 'superadmin' }, process.env.JWT_SECRET);
+  const zip = new AdmZip();
+  zip.addFile('delivery-update.json', Buffer.from(JSON.stringify({ version: '0.2.0', notes: 'Fixture UI update' })));
+  zip.addFile('app.js', Buffer.from('globalThis.__deliveryUpdateFixture = true;'));
+  zip.addFile('app.css', Buffer.from('.fixture{color:green}'));
+  const form = new FormData();
+  form.append('update', new Blob([zip.toBuffer()], { type: 'application/zip' }), 'delivery-update.zip');
+  const uploadedResponse = await fetch(base + '/api/admin/delivery-app/releases', { method: 'POST', headers: { Authorization: `Bearer ${rootToken}` }, body: form });
+  const uploaded = await uploadedResponse.json();
+  assert.equal(uploadedResponse.status, 201, JSON.stringify(uploaded));
+  assert.equal(uploaded.release.version, '0.2.0');
+  assert.match(uploaded.release.sha256, /^[a-f0-9]{64}$/);
+  const list = await request('/api/admin/delivery-app/releases', null, rootToken);
+  assert.equal(list.status, 200);
+  assert.equal(list.body.releases[0].javascript, undefined);
+  assert.equal(list.body.releases[0].active, true);
+  const currentResponse = await fetch(base + '/api/delivery-app/release');
+  const current = await currentResponse.json();
+  assert.equal(currentResponse.status, 200);
+  assert.equal(current.version, '0.2.0');
+  assert.equal(current.javascript, 'globalThis.__deliveryUpdateFixture = true;');
+  assert.equal(current.sha256, uploaded.release.sha256);
+});
+
 test('admin creates stores with OTP/password access without granting public or staff access', async () => {
   const admin = await User.create({role:'admin',name:'Store Admin',phone:'+919000001020',status:'active'});
   const adminToken = jwt.sign({id:String(admin._id),role:'admin'},process.env.JWT_SECRET);
