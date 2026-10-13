@@ -283,7 +283,9 @@ const shiprocketStatusWebhook = asyncHandler(async (req, res) => {
   const webhookSecret = process.env.SHIPROCKET_WEBHOOK_SECRET || "";
   if (!webhookSecret) return res.status(503).json({ok:false,message:"Shipment webhook is not configured."});
   if (webhookSecret) {
-    const providedSecret = req.headers["x-shiprocket-secret"] || req.headers["x-webhook-secret"] || req.body.secret;
+    const authorization = String(req.headers.authorization || "").trim();
+    const authorizationToken = authorization.replace(/^Bearer\s+/i, "");
+    const providedSecret = req.headers["x-shiprocket-secret"] || req.headers["x-webhook-secret"] || authorizationToken || req.body.secret;
     if (providedSecret !== webhookSecret) {
       res.status(401).json({ ok: false, message: "Invalid shipment webhook secret." });
       return;
