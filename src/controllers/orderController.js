@@ -291,15 +291,15 @@ const shiprocketStatusWebhook = asyncHandler(async (req, res) => {
       return;
     }
   }
-  const orderId = req.body.order_id || req.body.orderId;
-  const awb = req.body.awb || req.body.awb_code || req.body.awbNumber;
-  if ((orderId && typeof orderId !== "string") || (awb && typeof awb !== "string") || (!orderId && !awb)) return res.status(400).json({ok:false,message:"A valid order ID or AWB is required."});
+  const orderId = String(req.body.order_id || req.body.orderId || "").trim();
+  const awb = String(req.body.awb || req.body.awb_code || req.body.awbNumber || "").trim();
+  if ((!orderId && !awb) || orderId.length > 100 || awb.length > 100) return res.status(400).json({ok:false,message:"A valid order ID or AWB is required."});
   if (typeof (req.body.current_status || req.body.status) !== "string") return res.status(400).json({ok:false,message:"Shipment status is required."});
   const order = await Order.findOne({
     $or: [orderId ? { orderId: String(orderId) } : null, orderId ? { providerOrderId: String(orderId) } : null, awb ? { awbNumber: awb } : null].filter(Boolean),
   });
   if (!order) {
-    res.status(404).json({ ok: false, message: "Order not found for shipment update." });
+    success(res, { received: true, matched: false });
     return;
   }
   const updated = await applyShipmentStatus(order, req.body.current_status || req.body.status, typeof req.body.reason === "string" ? req.body.reason.slice(0,500) : "");
